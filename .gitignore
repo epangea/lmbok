@@ -1,0 +1,9 @@
+.env
+__pycache__/
+*.pyc
+venv/
+*.log
+node_modules/
+.DS_Store
+*.bak
+frontend/app.hermes

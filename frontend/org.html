@@ -1,0 +1,786 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ekklesia — Surfing the Frequencies</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🌊%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
+<style>
+:root{--bg:#0d1117;--sf:#161b22;--sf2:#1c2230;--bd:#30363d;--tx:#e6edf3;--mu:#8b949e;--gr:#1D9E75;--gd:rgba(29,158,117,.12);--gh:rgba(29,158,117,.25);--go:#c9a84c;--gol:rgba(201,168,76,.12);--re:#d9534f;--rel:rgba(217,83,79,.1);--ra:12px;--sh:0 4px 24px rgba(0,0,0,.4)}
+[data-theme=light]{--bg:#f5f2ee;--sf:#fff;--sf2:#f0ede8;--bd:#d6cfc5;--tx:#1a1a1a;--mu:#6b6560;--gd:rgba(29,158,117,.08);--gh:rgba(29,158,117,.16);--gol:rgba(201,168,76,.08);--rel:rgba(217,83,79,.07);--sh:0 4px 16px rgba(0,0,0,.1)}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'DM Sans',-apple-system,sans-serif;background:var(--bg);color:var(--tx);min-height:100vh;font-size:16px;line-height:1.6;-webkit-font-smoothing:antialiased}
+a{color:var(--gr)}
+.logo{font-family:'Syne',sans-serif;font-size:1.05rem;font-weight:800;background:linear-gradient(135deg,#00E5C8,#3D7BFF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;letter-spacing:-0.5px;text-decoration:none;flex-shrink:0}
+.org-modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center}
+.org-modal-box{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:26px 24px;max-width:360px;width:calc(100% - 32px)}
+/* Header */
+header{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:100}
+.brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}
+.bwave{width:34px;height:34px;background:var(--gr);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:19px}
+.bname{font-family:'Syne',sans-serif;font-size:15px;letter-spacing:.03em}
+.bsub{font-size:10px;text-transform:uppercase;letter-spacing:.1em;color:var(--mu)}
+.hr{display:flex;align-items:center;gap:10px}
+.pill{display:flex;align-items:center;gap:7px;background:var(--sf2);border:1px solid var(--bd);border-radius:24px;padding:5px 13px 5px 6px;font-size:13px}
+.av{width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:15px;background:var(--gd)}
+.ibtn{background:none;border:1px solid var(--bd);border-radius:8px;padding:6px 10px;cursor:pointer;color:var(--mu);font-size:15px;transition:all .15s;font-family:inherit}
+.ibtn:hover{color:var(--tx);border-color:var(--gr)}
+.blink{font-size:12px;color:var(--mu);text-decoration:none;transition:color .15s}
+.blink:hover{color:var(--gr)}
+/* Tabs */
+.tabs{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 24px;display:flex;gap:2px}
+.tab{padding:13px 18px;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--mu);cursor:pointer;border-bottom:2px solid transparent;display:flex;align-items:center;gap:6px;transition:all .15s;user-select:none}
+.tab:hover{color:var(--tx)}
+.tab.on{color:var(--gr);border-bottom-color:var(--gr)}
+.tbn{background:var(--gr);color:#fff;font-size:9px;padding:1px 5px;border-radius:10px}
+/* Main */
+main{max-width:980px;margin:0 auto;padding:32px 24px 64px}
+.sec{display:none}
+.sec.on{display:block;animation:fi .2s ease}
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.sh{margin-bottom:24px}
+.st{font-family:'Syne',sans-serif;font-size:22px;letter-spacing:.02em;margin-bottom:4px}
+.ss{font-size:14px;color:var(--mu);font-style:italic}
+/* Stats */
+.srow{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:28px}
+.sbox{background:var(--sf);border:1px solid var(--bd);border-radius:10px;padding:16px;text-align:center}
+.snum{font-size:30px;font-weight:700;color:var(--gr);line-height:1;margin-bottom:4px}
+.slbl{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu)}
+/* Cards */
+.card{background:var(--sf);border:1px solid var(--bd);border-radius:var(--ra);padding:20px 22px;margin-bottom:14px;transition:border-color .15s,box-shadow .15s}
+.card:hover{border-color:rgba(29,158,117,.5);box-shadow:var(--sh)}
+.crow{display:flex;align-items:flex-start;gap:14px;margin-bottom:10px}
+.cbody{flex:1;min-width:0}
+.ctitle{font-size:16px;font-weight:600;line-height:1.4;margin-bottom:4px}
+.corg{font-size:12px;color:var(--mu);margin-bottom:8px;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.ob{font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 7px;border-radius:10px;background:var(--gd);color:var(--gr);border:1px solid rgba(29,158,117,.25)}
+.vf{color:var(--gr);font-size:13px}
+.cdesc{font-size:14px;color:var(--mu);line-height:1.6;margin-bottom:12px}
+.cfoot{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+/* Hero */
+.hero{background:linear-gradient(135deg,var(--sf),var(--sf2));border:1px solid var(--gr);border-radius:16px;padding:26px;margin-bottom:28px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-60px;right:-60px;width:220px;height:220px;background:radial-gradient(circle,var(--gh) 0%,transparent 70%);pointer-events:none}
+.hlbl{font-size:9px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--gr);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.pulse{width:7px;height:7px;border-radius:50%;background:var(--gr);animation:p 2s ease-in-out infinite}
+@keyframes p{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.75)}}
+/* Badges */
+.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+.bt{background:var(--sf2);color:var(--mu);border:1px solid var(--bd)}
+.bm{background:var(--gd);color:var(--gr);border:1px solid rgba(29,158,117,.25)}
+.bg{background:var(--gol);color:var(--go);border:1px solid rgba(201,168,76,.25)}
+.sp{background:var(--gol);color:var(--go);border:1px solid rgba(201,168,76,.3)}
+.sr{background:var(--gd);color:var(--gr);border:1px solid rgba(29,158,117,.3)}
+.sc{background:var(--gr);color:#fff}
+.sd{background:var(--rel);color:var(--re);border:1px solid rgba(217,83,79,.3)}
+.ba{background:var(--gd);color:var(--gr);border:1px solid rgba(29,158,117,.3)}
+.bi{background:var(--sf2);color:var(--mu);border:1px solid var(--bd)}
+/* Ring */
+.ring{flex-shrink:0;position:relative}
+.ring svg{display:block;transform:rotate(-90deg)}
+.rc{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.rn{font-size:15px;font-weight:700;line-height:1}
+.rl{font-size:7px;text-transform:uppercase;letter-spacing:.08em;color:var(--mu);margin-top:1px}
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:5px;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;border:none;transition:all .15s;text-decoration:none;font-family:inherit;white-space:nowrap}
+.bp{background:var(--gr);color:#fff}
+.bp:hover{background:#179267;transform:translateY(-1px)}
+.bgh{background:transparent;color:var(--mu);border:1px solid var(--bd)}
+.bgh:hover{color:var(--tx);border-color:var(--gr)}
+.bd2{background:var(--rel);color:var(--re);border:1px solid rgba(217,83,79,.3)}
+.bd2:hover{background:rgba(217,83,79,.18)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important}
+.sm{padding:6px 12px;font-size:12px}
+/* Filters */
+.fbar{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.fp{padding:5px 13px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;border:1px solid var(--bd);background:var(--sf);color:var(--mu);transition:all .15s}
+.fp:hover{color:var(--tx)}
+.fp.on{background:var(--gd);border-color:var(--gr);color:var(--gr)}
+/* Pnyx */
+.pnyx{display:grid;grid-template-columns:260px 1fr;gap:14px;height:520px}
+@media(max-width:680px){.pnyx{grid-template-columns:1fr;height:auto}}
+.tcol{background:var(--sf);border:1px solid var(--bd);border-radius:var(--ra);overflow-y:auto;display:flex;flex-direction:column}
+.thdr{padding:12px 14px;border-bottom:1px solid var(--bd);font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);flex-shrink:0}
+.ti{padding:13px 14px;cursor:pointer;border-bottom:1px solid var(--bd);transition:background .1s}
+.ti:hover{background:var(--sf2)}
+.ti.on{background:var(--gd);border-left:3px solid var(--gr);padding-left:11px}
+.tn{font-size:13px;font-weight:600;margin-bottom:2px}
+.tp{font-size:12px;color:var(--mu);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ccol{background:var(--sf);border:1px solid var(--bd);border-radius:var(--ra);display:flex;flex-direction:column}
+.chdr{padding:13px 18px;border-bottom:1px solid var(--bd);flex-shrink:0}
+.cht{font-size:14px;font-weight:600}
+.chs{font-size:11px;color:var(--mu)}
+.ml{flex:1;overflow-y:auto;padding:18px;display:flex;flex-direction:column;gap:10px;min-height:280px}
+.msg{max-width:78%;padding:9px 13px;border-radius:12px;font-size:14px;line-height:1.5}
+.ms{align-self:flex-end;background:var(--gr);color:#fff;border-bottom-right-radius:3px}
+.mo{align-self:flex-start;background:var(--sf2);border:1px solid var(--bd);border-bottom-left-radius:3px}
+.mt{font-size:10px;opacity:.55;margin-top:3px}
+.mtr{text-align:right}
+.cbar{padding:12px 14px;border-top:1px solid var(--bd);display:flex;gap:8px;flex-shrink:0}
+.cta{flex:1;background:var(--sf2);border:1px solid var(--bd);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--tx);font-family:inherit;resize:none;transition:border-color .15s}
+.cta:focus{outline:none;border-color:var(--gr)}
+.cta::placeholder{color:var(--mu)}
+/* Form */
+.fw{background:var(--sf2);border:1px solid var(--bd);border-radius:var(--ra);padding:22px;margin-bottom:20px}
+.ftitle{font-size:15px;font-weight:700;margin-bottom:16px}
+.frow{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:600px){.frow{grid-template-columns:1fr}}
+.fg{display:flex;flex-direction:column;gap:5px}
+.fg.full{grid-column:1/-1}
+label{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--mu)}
+input[type=text],input[type=email],input[type=password],input[type=url],select,textarea{background:var(--sf);border:1px solid var(--bd);border-radius:8px;padding:9px 12px;font-size:14px;color:var(--tx);font-family:inherit;transition:border-color .15s;width:100%}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--gr)}
+select option{background:var(--sf)}
+.ag{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+@media(max-width:600px){.ag{grid-template-columns:repeat(2,1fr)}}
+.ac{display:flex;align-items:center;gap:6px;font-size:13px;padding:6px 8px;border-radius:6px;cursor:pointer;transition:background .1s}
+.ac:hover{background:var(--gd)}
+.ac input{width:14px;height:14px;accent-color:var(--gr)}
+.fa{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+/* Listing mgmt */
+.lmc{background:var(--sf);border:1px solid var(--bd);border-radius:var(--ra);padding:16px 20px;margin-bottom:12px}
+.lmh{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.lmt{font-size:15px;font-weight:600}
+/* Match row */
+.mrow{display:flex;align-items:center;gap:12px;padding:13px 18px;border-bottom:1px solid var(--bd)}
+.mrow:last-child{border-bottom:none}
+.mav{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;background:var(--gd);flex-shrink:0}
+/* Empty / Loading */
+.empty{text-align:center;padding:56px 20px;color:var(--mu)}
+.ei{font-size:44px;margin-bottom:14px}
+.empty h3{font-size:17px;color:var(--tx);margin-bottom:6px}
+.empty p{font-size:13px;max-width:340px;margin:0 auto}
+.spin{width:36px;height:36px;border:3px solid var(--bd);border-top-color:var(--gr);border-radius:50%;animation:sp .7s linear infinite;margin:48px auto}
+@keyframes sp{to{transform:rotate(360deg)}}
+/* Gate */
+#gate{display:flex;align-items:center;justify-content:center;min-height:80vh;padding:24px}
+.gw{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:760px;width:100%}
+@media(max-width:660px){.gw{grid-template-columns:1fr}}
+.gp{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:32px 28px}
+.gi{font-size:40px;margin-bottom:14px}
+.gtitle{font-family:'Syne',sans-serif;font-size:18px;margin-bottom:6px}
+.gsub{font-size:13px;color:var(--mu);margin-bottom:22px;line-height:1.6}
+.gerr{color:var(--re);font-size:13px;margin-top:8px;min-height:18px}
+.glink{display:block;text-align:center;font-size:13px;color:var(--mu);margin-top:12px;text-decoration:none;cursor:pointer}
+.glink:hover{color:var(--gr)}
+/* Toast */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--sf);border:1px solid var(--gr);border-radius:10px;padding:11px 22px;font-size:14px;box-shadow:var(--sh);transition:transform .3s ease;z-index:999;pointer-events:none}
+#toast.on{transform:translateX(-50%) translateY(0)}
+#toast.err{border-color:var(--re)}
+hr{border:none;border-top:1px solid var(--bd);margin:24px 0}
+@media(max-width:600px){main{padding:20px 14px 48px}header{padding:0 14px}.tabs{padding:0 14px}.srow{grid-template-columns:1fr 1fr}.bname{display:none}}
+</style>
+</head>
+<body>
+
+<!-- ORG LOGIN MODAL -->
+<div id="org-modal" class="org-modal" style="display:none" onclick="if(event.target===this)closeOrgModal()">
+  <div class="org-modal-box">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <div style="font-size:15px;font-weight:700">🏛️ Organization Login</div>
+      <button class="ibtn" onclick="closeOrgModal()" style="font-size:18px;line-height:1">×</button>
+    </div>
+    <div id="om-login">
+      <div class="fg" style="margin-bottom:10px"><label>Email</label><input type="email" id="om-e" placeholder="contact@org.org" autocomplete="email"></div>
+      <div class="fg" style="margin-bottom:14px"><label>Password</label><input type="password" id="om-p" placeholder="••••••••" onkeydown="if(event.key==='Enter')omLogin()"></div>
+      <button class="btn bp" style="width:100%;justify-content:center" onclick="omLogin()">Sign In</button>
+      <div class="gerr" id="om-err"></div>
+      <a class="glink" onclick="omMode('reg')">New organization? Register →</a>
+    </div>
+    <div id="om-reg" style="display:none">
+      <div class="fg" style="margin-bottom:8px"><label>Organization name</label><input type="text" id="om-rn" placeholder="Earth Builders Collective"></div>
+      <div class="fg" style="margin-bottom:8px"><label>Email</label><input type="email" id="om-re" placeholder="contact@org.org"></div>
+      <div class="fg" style="margin-bottom:8px"><label>Password (8+)</label><input type="password" id="om-rp" placeholder="••••••••"></div>
+      <div class="fg" style="margin-bottom:14px"><label>Type</label>
+        <select id="om-rt"><option value="ngo">NGO / Non-profit</option><option value="educational">Educational</option><option value="cooperative">Cooperative</option><option value="community">Community</option><option value="social_enterprise">Social enterprise</option><option value="other">Other</option></select>
+      </div>
+      <button class="btn bp" style="width:100%;justify-content:center" onclick="omRegister()">Create Account</button>
+      <div class="gerr" id="om-rerr"></div>
+      <a class="glink" onclick="omMode('login')">← Back to sign in</a>
+    </div>
+  </div>
+</div>
+<!-- GATE -->
+<div id="gate" style="display:none">
+  <div class="gw">
+    <div class="gp">
+      <div class="gi">🌊</div>
+      <div class="gtitle">I'm a Learner</div>
+      <p class="gsub">Sign in to browse opportunities matched to your arts and connect with organizations through the Pnyx.</p>
+      <div class="fg" style="margin-bottom:10px">
+        <label>Email</label>
+        <input type="email" id="le" placeholder="you@email.com" autocomplete="email">
+      </div>
+      <div class="fg" style="margin-bottom:14px">
+        <label>Password</label>
+        <input type="password" id="lp" placeholder="••••••••" autocomplete="current-password"
+               onkeydown="if(event.key==='Enter')lrnLogin()">
+      </div>
+      <button class="btn bp" style="width:100%;justify-content:center" onclick="lrnLogin()">Sign In →</button>
+      <div class="gerr" id="ll-err"></div>
+      <a href="/" class="glink">← Go to FreqLearn to create an account</a>
+    </div>
+    <div class="gp">
+      <div class="gi">🏛️</div>
+      <div class="gtitle">I'm an Organization</div>
+      <p class="gsub">Post listings, review matched learners, and message them through the Pnyx.</p>
+      <div id="g-login">
+        <div class="fg" style="margin-bottom:10px"><label>Email</label><input type="email" id="oe" placeholder="contact@org.org" autocomplete="email"></div>
+        <div class="fg" style="margin-bottom:14px"><label>Password</label><input type="password" id="op" placeholder="••••••••" autocomplete="current-password" onkeydown="if(event.key==='Enter')orgLogin()"></div>
+        <button class="btn bp" style="width:100%;justify-content:center" onclick="orgLogin()">Sign In</button>
+        <div class="gerr" id="ol-err"></div>
+        <a class="glink" onclick="gMode('reg')">New organization? Register →</a>
+      </div>
+      <div id="g-reg" style="display:none">
+        <div class="fg" style="margin-bottom:10px"><label>Organization name</label><input type="text" id="rn" placeholder="Earth Builders Collective"></div>
+        <div class="fg" style="margin-bottom:10px"><label>Email</label><input type="email" id="re2" placeholder="contact@org.org"></div>
+        <div class="fg" style="margin-bottom:10px"><label>Password (8+ chars)</label><input type="password" id="rp" placeholder="••••••••"></div>
+        <div class="fg" style="margin-bottom:14px"><label>Type</label>
+          <select id="rt"><option value="ngo">NGO / Non-profit</option><option value="educational">Educational</option><option value="cooperative">Cooperative</option><option value="community">Community group</option><option value="social_enterprise">Social enterprise</option><option value="other">Other</option></select>
+        </div>
+        <button class="btn bp" style="width:100%;justify-content:center" onclick="orgRegister()">Create Account</button>
+        <div class="gerr" id="re3"></div>
+        <a class="glink" onclick="gMode('login')">← Back to sign in</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LEARNER APP -->
+<div id="AL" style="display:none">
+  <header>
+    <a href="/" class="logo">Surfing the Frequencies</a>
+    <div class="hr">
+      <button class="ibtn" onclick="toggleTheme()">◐</button>
+      <button class="ibtn" onclick="showOrgLogin()" title="Manage listings as an organization" style="font-size:12px;padding:5px 10px;letter-spacing:.02em">🏛️ Org</button>
+      <a href="/" class="blink">← Agora</a>
+    </div>
+  </header>
+  <div class="tabs">
+    <div class="tab on" data-t="koinonia" onclick="ltab('koinonia')"><span>✦</span> Koinonia</div>
+    <div class="tab" data-t="stoa" onclick="ltab('stoa')"><span>🏛️</span> Stoa</div>
+    <div class="tab" data-t="lpnyx" onclick="ltab('lpnyx')"><span>✉</span> Pnyx<span class="tbn" id="lpb" style="display:none">0</span></div>
+  </div>
+  <main>
+    <div class="sec on" id="s-koinonia"><div id="ai"><div class="spin"></div></div></div>
+    <div class="sec" id="s-stoa">
+      <div class="sh"><div class="st">The Stoa</div><div class="ss">All active opportunities — matched to your arts</div></div>
+      <div class="fbar">
+        <button class="fp on" data-f="all"        onclick="sf('all',this)">All</button>
+        <button class="fp"    data-f="volunteer"  onclick="sf('volunteer',this)">Volunteer</button>
+        <button class="fp"    data-f="job"        onclick="sf('job',this)">Job</button>
+        <button class="fp"    data-f="project"    onclick="sf('project',this)">Project</button>
+        <button class="fp"    data-f="internship" onclick="sf('internship',this)">Internship</button>
+      </div>
+      <div id="si"><div class="spin"></div></div>
+    </div>
+    <div class="sec" id="s-lpnyx">
+      <div class="sh"><div class="st">The Pnyx</div><div class="ss">Your conversations with organizations</div></div>
+      <div id="lpi"><div class="spin"></div></div>
+    </div>
+  </main>
+</div>
+
+<!-- ORG APP -->
+<div id="AO" style="display:none">
+  <header>
+    <span class="logo">Surfing the Frequencies</span>
+    <div class="hr">
+      <button class="ibtn" onclick="toggleTheme()">◐</button>
+      <span id="odn" style="font-size:12px;color:var(--mu);padding:0 6px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">…</span>
+      <button class="ibtn" onclick="orgLogout()" style="font-size:12px">Sign out</button>
+    </div>
+  </header>
+  <div class="tabs">
+    <div class="tab on" data-t="odash"  onclick="otab('odash')"><span>⚡</span> Dashboard</div>
+    <div class="tab" data-t="olist"   onclick="otab('olist')"><span>🏛️</span> Ekklesia</div>
+    <div class="tab" data-t="opnyx"   onclick="otab('opnyx')"><span>✉</span> Pnyx</div>
+  </div>
+  <main>
+    <div class="sec on" id="s-odash"><div id="odi"><div class="spin"></div></div></div>
+    <div class="sec" id="s-olist"><div id="oli"><div class="spin"></div></div></div>
+    <div class="sec" id="s-opnyx">
+      <div class="sh"><div class="st">The Pnyx</div><div class="ss">Messages with matched learners</div></div>
+      <div id="opi"><div class="spin"></div></div>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+<script>
+// ── State ─────────────────────────────────────────────────
+const S={learner:null,streak:null,myMatches:[],topMatch:null,allListings:[],filter:'all',org:null,orgListings:[],orgMatches:[],lMid:null,oMid:null,msgs:{},editId:null};
+const ARTS=[{s:'move',n:'Move'},{s:'eat',n:'Eat'},{s:'feel',n:'Feel'},{s:'notice',n:'Notice'},{s:'express',n:'Express'},{s:'live',n:'Live'},{s:'listen',n:'Listen'},{s:'give',n:'Give'},{s:'receive',n:'Receive'},{s:'collaborate',n:'Collaborate'},{s:'understand',n:'Understand'},{s:'respect',n:'Respect'},{s:'build',n:'Build'},{s:'grow',n:'Grow'},{s:'consume',n:'Consume'}];
+
+// ── API ───────────────────────────────────────────────────
+const LA={
+  async c(m,p,b){
+    const t=localStorage.getItem('fl_access');
+    const o={method:m,headers:{'Content-Type':'application/json',...(t?{Authorization:`Bearer ${t}`}:{})}};
+    if(b!==undefined)o.body=JSON.stringify(b);
+    let r=await fetch('/api'+p,o);
+    if(r.status===401){const ok=await LA.ref();if(ok){o.headers.Authorization=`Bearer ${localStorage.getItem('fl_access')}`;r=await fetch('/api'+p,o);}else{showGate();return null;}}
+    return r.ok?r.json().catch(()=>null):null;
+  },
+  async ref(){const rt=localStorage.getItem('fl_refresh');if(!rt)return false;const r=await fetch('/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});if(r.ok){const d=await r.json();localStorage.setItem('fl_access',d.access_token);return true;}return false;},
+  get:p=>LA.c('GET',p),post:(p,b)=>LA.c('POST',p,b),del:p=>LA.c('DELETE',p)
+};
+const OA={
+  async c(m,p,b){
+    const t=localStorage.getItem('fl_org_token');if(!t){showGate();return null;}
+    const o={method:m,headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`}};
+    if(b!==undefined)o.body=JSON.stringify(b);
+    const r=await fetch('/api/orgs'+p,o);
+    if(r.status===401){localStorage.removeItem('fl_org_token');showGate();return null;}
+    return r.ok?r.json().catch(()=>null):null;
+  },
+  get:p=>OA.c('GET',p),post:(p,b)=>OA.c('POST',p,b),patch:(p,b)=>OA.c('PATCH',p,b),del:p=>OA.c('DELETE',p)
+};
+
+// ── Boot ──────────────────────────────────────────────────
+async function boot(){
+  document.documentElement.dataset.theme=localStorage.getItem('fl_theme')||'dark';
+  const ot=localStorage.getItem('fl_org_token');
+  if(ot){const o=await OA.get('/me');if(o){S.org=o;showOA();await loadOrg();return;}localStorage.removeItem('fl_org_token');}
+  // LA.call handles 401→refresh→retry internally; one call is enough
+  const me=await LA.get('/learners/me');
+  if(me){S.learner=me;showLA();await loadLearner();return;}
+  showGate();
+}
+function showGate(){document.getElementById('gate').style.display='flex';document.getElementById('AL').style.display='none';document.getElementById('AO').style.display='none';}
+function showLA(){document.getElementById('gate').style.display='none';document.getElementById('AL').style.display='block';document.getElementById('AO').style.display='none';}
+function showOA(){document.getElementById('gate').style.display='none';document.getElementById('AL').style.display='none';document.getElementById('AO').style.display='block';}
+
+// ── Learner load ──────────────────────────────────────────
+async function loadLearner(){
+  const[str,mm,tm,al]=await Promise.all([LA.get('/learners/me/streak'),LA.get('/matching/'),LA.get('/matching/listings/top'),LA.get('/matching/listings')]);
+  S.streak=str||{};S.myMatches=mm||[];S.topMatch=tm;S.allListings=al||[];
+  var _ln=document.getElementById('lnm'),_la=document.getElementById('lav');
+  if(_ln)_ln.textContent=S.learner.display_name||S.learner.username;
+  if(_la){_la.textContent=S.learner.avatar_emoji||'🌱';if(S.learner.avatar_color)_la.style.background=S.learner.avatar_color+'28';}
+  const b=document.getElementById('lpb');
+  if(S.myMatches.length){b.textContent=S.myMatches.length;b.style.display='inline';}else b.style.display='none';
+  drawKoinonia();drawStoa();
+  // Refresh pnyx if currently active
+  if(document.querySelector('#AL .tab.on')?.dataset.t==='lpnyx')drawLPnyx();
+}
+
+// ── AGORA ─────────────────────────────────────────────────
+function drawKoinonia(){
+  const el=document.getElementById('ai');
+  const xp=S.streak?.total_xp||0,str=S.streak?.current_streak||0,app=S.myMatches.length;
+  let h=`<div class="sh"><div class="st">The Koinonia</div><div class="ss">The commons — where your learning meets the world</div></div>
+  <div class="srow">
+    <div class="sbox"><div class="snum">${app}</div><div class="slbl">Interests</div></div>
+    <div class="sbox"><div class="snum">${xp}</div><div class="slbl">Total XP</div></div>
+    <div class="sbox"><div class="snum">${str}</div><div class="slbl">Day Streak</div></div>
+  </div>`;
+  if(S.topMatch){
+    const tm=S.topMatch,had=S.myMatches.some(m=>m.listing_id===tm.id),mx=S.myMatches.find(m=>m.listing_id===tm.id);
+    h+=`<div class="hero"><div class="hlbl"><div class="pulse"></div> Best match right now</div>
+      <div style="display:flex;gap:14px;align-items:flex-start">
+        <div style="flex:1;min-width:0">
+          <div class="corg">${orgLine(tm)}</div>
+          <div style="font-size:19px;font-weight:600;margin-bottom:8px">${e(tm.title)}</div>
+          <div style="font-size:14px;color:var(--mu);margin-bottom:14px;line-height:1.6">${e(tm.description||'')}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
+            <span class="badge bt">${tm.listing_type}</span>
+            ${(tm.arts_met||[]).map(a=>`<span class="badge bm">✓ ${a}</span>`).join('')}
+            ${(tm.arts_gap||[]).map(a=>`<span class="badge bg">→ ${a}</span>`).join('')}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${had?`<button class="btn bgh sm" disabled>✓ Expressed</button>${mx?`<button class="btn bgh sm" onclick="openLP(${mx.id})">Messages ✉</button>`:''}`:`<button class="btn bp sm" onclick="xInt(${tm.id})">Express Interest</button>`}
+            ${tm.source_url?`<a href="${tm.source_url}" target="_blank" class="btn bgh sm">View ↗</a>`:''}
+          </div>
+        </div>
+        ${ring(tm.match_score,68)}
+      </div></div>`;
+  }
+  h+='<hr>';
+  if(!S.myMatches.length){
+    h+=`<div class="empty" style="padding:32px 0"><div class="ei">🏺</div><h3>No interests yet</h3><p>Visit the <strong>Stoa</strong> to browse listings.</p></div>`;
+  }else{
+    h+=`<div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px">Interests Expressed (${S.myMatches.length})</div>`;
+    S.myMatches.forEach(m=>{const l=S.allListings.find(x=>x.id===m.listing_id);if(l)h+=lcard(l,m);});
+  }
+  el.innerHTML=h;
+}
+
+// ── STOA ──────────────────────────────────────────────────
+function drawStoa(){
+  const el=document.getElementById('si');
+  const ls=S.filter==='all'?S.allListings:S.allListings.filter(l=>l.listing_type===S.filter);
+  if(!ls.length){el.innerHTML=`<div class="empty"><div class="ei">🏛️</div><h3>No listings</h3><p>No ${S.filter==='all'?'':S.filter+' '}listings active.</p></div>`;return;}
+  el.innerHTML=ls.map(l=>lcard(l,S.myMatches.find(m=>m.listing_id===l.id)||null)).join('');
+}
+
+// ── LEARNER PNYX ──────────────────────────────────────────
+async function drawLPnyx(){
+  const el=document.getElementById('lpi');
+  const threads=S.myMatches.map(m=>({m,l:S.allListings.find(x=>x.id===m.listing_id)})).filter(t=>t.l);
+  if(!threads.length){el.innerHTML=`<div class="empty"><div class="ei">📜</div><h3>No conversations yet</h3><p>Express interest in a listing to start a conversation.</p></div>`;return;}
+  if(!S.lMid)S.lMid=threads[0].m.id;
+  const act=threads.find(t=>t.m.id===S.lMid);
+  // Render structure immediately — messages fill in async below
+  el.innerHTML=pnyxShell(
+    threads.map(t=>`<div class="ti ${t.m.id===S.lMid?'on':''}" onclick="selL(${t.m.id})"><div class="tn">${e(t.l.org_name||'Org')}</div><div class="tp">${e(t.l.title)}</div></div>`).join(''),
+    act?`<div class="cht">${e(act.l.title)}</div><div class="chs">${e(act.l.org_name||'')}</div>`:'',
+    S.msgs[S.lMid]?renderMsgs(S.msgs[S.lMid],'learner'):'<div class="spin"></div>',
+    'sendLMsg()'
+  );
+  if(!S.msgs[S.lMid]){
+    const ms=await LA.get(`/matching/${S.lMid}/messages`);
+    S.msgs[S.lMid]=ms||[];
+    const ml=document.getElementById('pml');
+    if(ml){ml.innerHTML=renderMsgs(S.msgs[S.lMid],'learner');ml.scrollTop=ml.scrollHeight;}
+  }else{const ml=document.getElementById('pml');if(ml)ml.scrollTop=ml.scrollHeight;}
+}
+async function selL(id){S.lMid=id;delete S.msgs[id];await drawLPnyx();}
+async function openLP(id){S.lMid=id;ltab('lpnyx');}
+async function sendLMsg(){
+  const ta=document.getElementById('pca');if(!ta||!ta.value.trim()||!S.lMid)return;
+  const body=ta.value.trim();ta.value='';
+  const r=await LA.post(`/matching/${S.lMid}/messages`,{body});
+  if(r){if(!S.msgs[S.lMid])S.msgs[S.lMid]=[];S.msgs[S.lMid].push({sender_type:'learner',body,created_at:new Date().toISOString()});
+    const ml=document.getElementById('pml');if(ml){ml.innerHTML=renderMsgs(S.msgs[S.lMid],'learner');ml.scrollTop=ml.scrollHeight;}}
+  else{toast('Message not sent',true);ta.value=body;}
+}
+
+// ── ORG LOAD ──────────────────────────────────────────────
+async function loadOrg(){
+  document.getElementById('onm').textContent=S.org.name;
+  document.getElementById('odn').textContent=S.org.name;
+  const ls=await OA.get('/me/listings');S.orgListings=ls||[];
+  const results=await Promise.all(S.orgListings.map(l=>OA.get(`/listings/${l.id}/matches`)));
+  const all=[];results.forEach((m,i)=>{if(m)m.forEach(x=>{x._ltitle=S.orgListings[i].title;x._lid=S.orgListings[i].id;all.push(x);});});
+  S.orgMatches=all;
+  drawODash();drawOList();
+}
+
+// ── ORG DASHBOARD ─────────────────────────────────────────
+function drawODash(){
+  const el=document.getElementById('odi');
+  const act=S.orgListings.filter(l=>l.is_active).length,tot=S.orgListings.length,mat=S.orgMatches.length,con=S.orgMatches.filter(m=>m.org_status==='connected').length;
+  let h=`<div class="sh"><div class="st">Dashboard</div><div class="ss">${e(S.org.name)} — ${S.org.org_type}</div></div>
+  <div class="srow" style="grid-template-columns:repeat(4,1fr)">
+    <div class="sbox"><div class="snum">${act}</div><div class="slbl">Active</div></div>
+    <div class="sbox"><div class="snum">${tot}</div><div class="slbl">Listings</div></div>
+    <div class="sbox"><div class="snum">${mat}</div><div class="slbl">Interests</div></div>
+    <div class="sbox"><div class="snum">${con}</div><div class="slbl">Connected</div></div>
+  </div><hr>
+  <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:14px">Recent Interests</div>`;
+  if(!S.orgMatches.length)h+=`<div class="empty" style="padding:32px 0"><div class="ei">🤝</div><h3>No interests yet</h3><p>Once learners express interest, they appear here.</p></div>`;
+  else h+=S.orgMatches.slice(0,5).map(m=>`
+    <div class="card" style="padding:13px 18px">
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="mav">${m.avatar_emoji||'🌱'}</div>
+        <div style="flex:1"><div style="font-size:14px;font-weight:600">${e(m.display_name||'Learner')}</div><div style="font-size:12px;color:var(--mu)">${e(m._ltitle)}</div></div>
+        <span class="badge ${stCls(m.org_status)}">${m.org_status}</span>
+      </div>
+    </div>`).join('');
+  el.innerHTML=h;
+}
+
+// ── ORG LISTINGS ──────────────────────────────────────────
+function drawOList(){
+  const el=document.getElementById('oli');
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+    <div><div class="st">Listings</div><div class="ss" style="margin:0">Create and manage your opportunity listings</div></div>
+    <button class="btn bp" onclick="toggleForm()">+ New Listing</button>
+  </div>
+  <div id="ofw" style="display:none"></div>`;
+  if(!S.orgListings.length)h+=`<div class="empty"><div class="ei">📋</div><h3>No listings yet</h3><p>Create your first listing to start matching with learners.</p></div>`;
+  else h+=S.orgListings.map(l=>`
+    <div class="lmc">
+      <div class="lmh"><div><div class="lmt">${e(l.title)}</div></div><span class="badge ${l.pending_approval?'bg':l.is_active?'ba':'bi'}">${l.pending_approval?'⏳ Pending approval':l.is_active?'Active':'Inactive'}</span></div>
+      <div class="cfoot" style="margin-bottom:10px">
+        <span class="badge bt">${l.listing_type}</span>
+        ${(l.required_arts||[]).map(a=>`<span class="badge bm">${a}</span>`).join('')}
+        <span style="font-size:12px;color:var(--mu);margin-left:4px">${l.match_count||0} interest${l.match_count!==1?'s':''}</span>
+      </div>
+      ${l.description?`<div style="font-size:13px;color:var(--mu);margin-bottom:10px;line-height:1.5">${e(l.description.substring(0,120))}${l.description.length>120?'…':''}</div>`:''}
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn bgh sm" onclick="editL(${l.id})">Edit</button>
+        <button class="btn bgh sm" onclick="togAct(${l.id},${l.is_active})">${l.is_active?'Deactivate':'Activate'}</button>
+        <button class="btn bgh sm" onclick="otab('olist')">Matches (${l.match_count||0})</button>
+        <button class="btn bd2 sm" onclick="delL(${l.id})">Delete</button>
+      </div>
+    </div>`).join('');
+  // Matches section inline below listings
+  h+='<hr><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px;margin-top:4px">Interests Received ('+S.orgMatches.length+')</div>';
+  if(!S.orgMatches.length){
+    h+='<div style="color:var(--mu);font-size:13px;padding:10px 0">No interests yet — learners will match as they complete sessions.</div>';
+  }else{
+    const _byL={};S.orgMatches.forEach(function(m){if(!_byL[m._lid])_byL[m._lid]={t:m._ltitle,ms:[]};_byL[m._lid].ms.push(m);});
+    Object.values(_byL).forEach(function(g){
+      h+='<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin-bottom:8px">'+e(g.t)+'</div>';
+      h+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">';
+      g.ms.forEach(function(m){h+='<div class="mrow"><div class="mav">'+(m.avatar_emoji||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span><button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';});
+      h+='</div>';
+    });
+  }
+  el.innerHTML=h;
+}
+
+function listingFormHtml(ex=null){
+  return `<div class="fw" id="lf">
+    <div class="ftitle">${ex?'Edit Listing':'New Listing'}</div>
+    <div class="frow">
+      <div class="fg full"><label>Title *</label><input type="text" id="lft" value="${ex?e(ex.title):''}" placeholder="Natural Building Workshop Facilitator"></div>
+    </div>
+    <div class="frow">
+      <div class="fg"><label>Type</label><select id="lfy">${['volunteer','job','project','internship'].map(t=>`<option value="${t}"${ex&&ex.listing_type===t?' selected':''}>${t}</option>`).join('')}</select></div>
+      <div class="fg"><label>Source URL</label><input type="url" id="lfu" value="${ex&&ex.source_url?e(ex.source_url):''}" placeholder="https://…"></div>
+    </div>
+    <div class="frow">
+      <div class="fg full"><label>Description</label><textarea id="lfd" rows="3" placeholder="What will the person do?">${ex&&ex.description?e(ex.description):''}</textarea></div>
+    </div>
+    <div class="fg" style="margin-bottom:16px">
+      <label style="margin-bottom:8px">Required Arts</label>
+      <div class="ag">${ARTS.map(a=>`<label class="ac"><input type="checkbox" name="art" value="${a.s}"${ex&&(ex.required_arts||[]).includes(a.s)?' checked':''}> ${a.n}</label>`).join('')}</div>
+    </div>
+    <div class="fa">
+      <button class="btn bp" onclick="saveL()">${ex?'Save Changes':'Create Listing'}</button>
+      <button class="btn bgh" onclick="cancelForm()">Cancel</button>
+    </div>
+  </div>`;
+}
+
+function toggleForm(){
+  S.editId=null;
+  const w=document.getElementById('ofw');if(!w)return;
+  if(w.style.display==='none'){w.innerHTML=listingFormHtml();w.style.display='block';w.scrollIntoView({behavior:'smooth'});}
+  else cancelForm();
+}
+function editL(id){
+  S.editId=id;
+  const l=S.orgListings.find(x=>x.id===id);if(!l)return;
+  const w=document.getElementById('ofw');if(!w)return;
+  w.innerHTML=listingFormHtml(l);w.style.display='block';w.scrollIntoView({behavior:'smooth'});
+}
+function cancelForm(){S.editId=null;const w=document.getElementById('ofw');if(w){w.style.display='none';w.innerHTML='';}}
+async function saveL(){
+  const title=document.getElementById('lft')?.value.trim();
+  if(!title){toast('Title required',true);return;}
+  const payload={title,listing_type:document.getElementById('lfy')?.value,description:document.getElementById('lfd')?.value.trim()||null,source_url:document.getElementById('lfu')?.value.trim()||null,required_arts:Array.from(document.querySelectorAll('[name="art"]:checked')).map(c=>c.value)};
+  const r=S.editId?await OA.patch(`/listings/${S.editId}`,payload):await OA.post('/listings',payload);
+  if(r){toast(S.editId?'Updated ✓':'Created ✓');cancelForm();await reloadOL();}else toast('Save failed',true);
+}
+async function togAct(id,cur){const r=await OA.patch(`/listings/${id}`,{is_active:!cur});if(r){toast(cur?'Deactivated':'Activated');await reloadOL();}}
+async function delL(id){if(!confirm('Delete this listing?'))return;const r=await OA.del(`/listings/${id}`);if(r){toast('Deleted');await reloadOL();}}
+async function reloadOL(){
+  const ls=await OA.get('/me/listings');S.orgListings=ls||[];
+  const results=await Promise.all(S.orgListings.map(l=>OA.get(`/listings/${l.id}/matches`)));
+  const all=[];results.forEach((m,i)=>{if(m)m.forEach(x=>{x._ltitle=S.orgListings[i].title;x._lid=S.orgListings[i].id;all.push(x);});});
+  S.orgMatches=all;drawOList();drawODash();
+}
+
+// ── ORG MATCHES ───────────────────────────────────────────
+function drawOMatch(){
+  const el=document.getElementById('omi');
+  if(!S.orgMatches.length){el.innerHTML=`<div class="empty"><div class="ei">🤝</div><h3>No interests yet</h3><p>When learners express interest in your listings they appear here.</p></div>`;return;}
+  const byL={};S.orgMatches.forEach(m=>{if(!byL[m._lid])byL[m._lid]={t:m._ltitle,ms:[]};byL[m._lid].ms.push(m);});
+  let h='';
+  Object.values(byL).forEach(g=>{
+    h+=`<div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px;margin-top:8px">${e(g.t)}</div>`;
+    h+=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">`;
+    g.ms.forEach(m=>{
+      h+=`<div class="mrow"><div class="mav">${m.avatar_emoji||'🌱'}</div>
+        <div style="flex:1"><div style="font-size:14px;font-weight:600">${e(m.display_name||'Learner')}</div><div style="font-size:12px;color:var(--mu)">Expressed ${fmt(m.matched_at)}</div></div>
+        <span class="badge ${stCls(m.org_status)}" style="cursor:pointer;margin-right:8px" onclick="cycSt(${m.match_id},${m._lid},'${m.org_status}')">${m.org_status}</span>
+        <button class="btn bgh sm" onclick="openOP(${m.match_id})">Message</button>
+      </div>`;
+    });
+    h+='</div>';
+  });
+  el.innerHTML=h;
+}
+
+const STC={pending:'reviewing',reviewing:'connected',connected:'declined',declined:'pending'};
+function cycStEl(el){ cycSt(+el.dataset.mid, +el.dataset.lid, el.dataset.st); }
+async function cycSt(mid,lid,cur){
+  const nx=STC[cur]||'pending';
+  const r=await OA.patch(`/listings/${lid}/matches/${mid}`,{org_status:nx});
+  if(r){const m=S.orgMatches.find(x=>x.match_id===mid);if(m)m.org_status=nx;drawOMatch();drawODash();}
+}
+
+// ── ORG PNYX ──────────────────────────────────────────────
+async function drawOPnyx(){
+  const el=document.getElementById('opi');
+  if(!S.orgMatches.length){el.innerHTML=`<div class="empty"><div class="ei">📜</div><h3>No conversations yet</h3><p>Once learners express interest you can message them here.</p></div>`;return;}
+  if(!S.oMid)S.oMid=S.orgMatches[0].match_id;
+  const act=S.orgMatches.find(m=>m.match_id===S.oMid);
+  el.innerHTML=pnyxShell(
+    S.orgMatches.map(m=>`<div class="ti ${m.match_id===S.oMid?'on':''}" onclick="selO(${m.match_id})"><div class="tn">${e(m.display_name||'Learner')}</div><div class="tp">${e(m._ltitle)}</div></div>`).join(''),
+    act?`<div class="cht">${e(act.display_name||'Learner')}</div><div class="chs">${e(act._ltitle)}</div>`:'',
+    S.msgs[`o${S.oMid}`]?renderMsgs(S.msgs[`o${S.oMid}`],'org'):'<div class="spin"></div>',
+    'sendOMsg()'
+  );
+  if(!S.msgs[`o${S.oMid}`]){
+    const ms=await OA.get(`/messages/${S.oMid}`);
+    S.msgs[`o${S.oMid}`]=ms||[];
+    const ml=document.getElementById('pml');if(ml){ml.innerHTML=renderMsgs(S.msgs[`o${S.oMid}`],'org');ml.scrollTop=ml.scrollHeight;}
+  }else{const ml=document.getElementById('pml');if(ml)ml.scrollTop=ml.scrollHeight;}
+}
+async function selO(id){S.oMid=id;delete S.msgs[`o${id}`];await drawOPnyx();}
+async function openOP(id){S.oMid=id;otab('opnyx');}
+async function sendOMsg(){
+  const ta=document.getElementById('pca');if(!ta||!ta.value.trim()||!S.oMid)return;
+  const body=ta.value.trim();ta.value='';
+  const r=await OA.post(`/messages/${S.oMid}`,{body});
+  if(r){const k=`o${S.oMid}`;if(!S.msgs[k])S.msgs[k]=[];S.msgs[k].push({sender_type:'org',body,created_at:new Date().toISOString()});
+    const ml=document.getElementById('pml');if(ml){ml.innerHTML=renderMsgs(S.msgs[k],'org');ml.scrollTop=ml.scrollHeight;}}
+  else{toast('Not sent',true);ta.value=body;}
+}
+
+// ── Auth gate ─────────────────────────────────────────────
+async function lrnLogin(){
+  var em=document.getElementById("le")?.value.trim(),
+      pw=document.getElementById("lp")?.value,
+      err=document.getElementById("ll-err");
+  if(err) err.textContent="";
+  if(!em||!pw){if(err)err.textContent="Email and password required.";return;}
+  var r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:em,password:pw})});
+  if(r.ok){
+    var d=await r.json();
+    localStorage.setItem("fl_access",d.access_token);
+    if(d.refresh_token)localStorage.setItem("fl_refresh",d.refresh_token);
+    await boot();
+  } else {
+    var d2=await r.json().catch(()=>({}));
+    if(err)err.textContent=d2.detail||"Invalid credentials.";
+  }
+}
+function showOrgLogin(){ document.getElementById('org-modal').style.display='flex'; }
+function closeOrgModal(){ document.getElementById('org-modal').style.display='none'; }
+function omMode(m){ document.getElementById('om-login').style.display=m==='login'?'block':'none'; document.getElementById('om-reg').style.display=m==='reg'?'block':'none'; }
+async function omLogin(){
+  var em=document.getElementById('om-e')?.value.trim(),pw=document.getElementById('om-p')?.value,err=document.getElementById('om-err');
+  if(err)err.textContent='';if(!em||!pw){if(err)err.textContent='Email and password required.';return;}
+  var r=await fetch('/api/orgs/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});
+  if(r.ok){var d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;closeOrgModal();showOA();await loadOrg();}
+  else{var d2=await r.json().catch(function(){return{};});if(err)err.textContent=d2.detail||'Invalid credentials.';}
+}
+async function omRegister(){
+  var nm=document.getElementById('om-rn')?.value.trim(),em=document.getElementById('om-re')?.value.trim(),pw=document.getElementById('om-rp')?.value,ty=document.getElementById('om-rt')?.value,err=document.getElementById('om-rerr');
+  if(err)err.textContent='';if(!nm||!em||!pw){if(err)err.textContent='All fields required.';return;}if(pw.length<8){if(err)err.textContent='Password must be 8+ characters.';return;}
+  var r=await fetch('/api/orgs/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,email:em,password:pw,org_type:ty})});
+  if(r.ok){var d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;closeOrgModal();showOA();await loadOrg();}
+  else{var d2=await r.json().catch(function(){return{};});if(err)err.textContent=d2.detail||'Registration failed.';}
+}
+function gMode(m){document.getElementById('g-login').style.display=m==='login'?'block':'none';document.getElementById('g-reg').style.display=m==='reg'?'block':'none';}
+async function orgLogin(){
+  const em=document.getElementById('oe')?.value.trim(),pw=document.getElementById('op')?.value,err=document.getElementById('ol-err');
+  if(err)err.textContent='';if(!em||!pw){if(err)err.textContent='Email and password required.';return;}
+  const r=await fetch('/api/orgs/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});
+  if(r.ok){const d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;showOA();await loadOrg();}
+  else err.textContent='Invalid credentials.';
+}
+async function orgRegister(){
+  const nm=document.getElementById('rn')?.value.trim(),em=document.getElementById('re2')?.value.trim(),pw=document.getElementById('rp')?.value,ty=document.getElementById('rt')?.value,err=document.getElementById('re3');
+  err.textContent='';if(!nm||!em||!pw){err.textContent='All fields required.';return;}if(pw.length<8){err.textContent='Password must be 8+ characters.';return;}
+  const r=await fetch('/api/orgs/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,email:em,password:pw,org_type:ty})});
+  if(r.ok){const d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;showOA();await loadOrg();}
+  else{const d=await r.json().catch(()=>({}));err.textContent=d.detail||'Registration failed.';}
+}
+function orgLogout(){localStorage.removeItem('fl_org_token');S.org=null;showGate();}
+
+// ── Components ────────────────────────────────────────────
+function ring(score,size=62){
+  const r=size/2-6,c=2*Math.PI*r,p=Math.round(score||0),d=(p/100)*c;
+  const col=p>=70?'var(--gr)':p>=40?'var(--go)':'var(--mu)';
+  return `<div class="ring" style="width:${size}px;height:${size}px;flex-shrink:0">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="var(--bd)" stroke-width="5"/>
+      <circle cx="${size/2}" cy="${size/2}" r="${r}" fill="none" stroke="${col}" stroke-width="5" stroke-dasharray="${d.toFixed(1)} ${c.toFixed(1)}" stroke-linecap="round"/>
+    </svg>
+    <div class="rc"><div class="rn" style="color:${col}">${p}</div><div class="rl">match</div></div>
+  </div>`;
+}
+
+function orgLine(l){
+  const nm=l.org_name||'Organization',vf=l.org_verified?'<span class="vf" title="Verified">✓</span>':'',ty=l.org_type?`<span class="ob">${l.org_type}</span>`:'';
+  return l.org_website?`<a href="${l.org_website}" target="_blank" style="color:inherit;text-decoration:none;">${e(nm)}</a> ${vf} ${ty}`:`${e(nm)} ${vf} ${ty}`;
+}
+
+function lcard(l,match=null){
+  const had=!!match,mid=match?.id;
+  return `<div class="card">
+    <div class="crow">
+      <div class="cbody">
+        <div class="corg">${orgLine(l)}</div>
+        <div class="ctitle">${e(l.title)}</div>
+      </div>
+      ${ring(l.match_score)}
+    </div>
+    ${l.description?`<div class="cdesc">${e(l.description)}</div>`:''}
+    <div class="cfoot" style="margin-bottom:12px">
+      <span class="badge bt">${l.listing_type}</span>
+      ${(l.arts_met||[]).map(a=>`<span class="badge bm">✓ ${a}</span>`).join('')}
+      ${(l.arts_gap||[]).map(a=>`<span class="badge bg">→ ${a}</span>`).join('')}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      ${had
+        ?`<button class="btn bd2 sm" onclick="wInt(${mid},${l.id})">Withdraw</button>
+          <button class="btn bgh sm" onclick="openLP(${mid})">Messages ✉</button>
+          <span class="badge ${stCls(match.org_status)}">${match.org_status}</span>`
+        :`<button class="btn bp sm" onclick="xInt(${l.id})">Express Interest</button>`}
+      ${l.source_url?`<a href="${l.source_url}" target="_blank" class="btn bgh sm">View ↗</a>`:''}
+    </div>
+  </div>`;
+}
+
+function pnyxShell(tl,chdr,msgs,send){
+  return `<div class="pnyx">
+    <div class="tcol"><div class="thdr">Conversations</div>${tl}</div>
+    <div class="ccol">
+      <div class="chdr">${chdr}</div>
+      <div class="ml" id="pml">${msgs}</div>
+      <div class="cbar">
+        <textarea class="cta" id="pca" rows="2" placeholder="Write a message…" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();${send}}"></textarea>
+        <button class="btn bp sm" onclick="${send}">Send</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderMsgs(ms,pov){
+  if(!ms||!ms.length)return`<div class="empty" style="padding:30px 20px"><div class="ei" style="font-size:30px">💬</div><p>No messages yet. Be the first to say hello.</p></div>`;
+  return ms.map(m=>{const self=(pov==='learner'&&m.sender_type==='learner')||(pov==='org'&&m.sender_type==='org');
+    return`<div><div class="msg ${self?'ms':'mo'}">${e(m.body)}</div><div class="mt ${self?'mtr':''}">${fmt(m.created_at)}</div></div>`;
+  }).join('');
+}
+
+function stCls(s){return{pending:'sp',reviewing:'sr',connected:'sc',declined:'sd'}[s]||'sp';}
+
+// ── Actions ───────────────────────────────────────────────
+async function xInt(id){const r=await LA.post('/matching/',{listing_id:id});if(r&&r.ok){toast('Interest expressed ✓');await loadLearner();}else toast('Could not express interest',true);}
+async function wInt(mid,id){if(!confirm('Withdraw interest?'))return;const r=await LA.del(`/matching/${mid}`);if(r&&r.ok){toast('Withdrawn');await loadLearner();}}
+
+// ── UI ────────────────────────────────────────────────────
+function ltab(t){
+  document.querySelectorAll('#AL .tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('#AL .sec').forEach(x=>x.classList.remove('on'));
+  document.querySelector(`#AL [data-t="${t}"]`).classList.add('on');
+  document.getElementById(`s-${t}`).classList.add('on');
+  if(t==='lpnyx')drawLPnyx();
+}
+function otab(t){
+  document.querySelectorAll('#AO .tab').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('#AO .sec').forEach(x=>x.classList.remove('on'));
+  document.querySelector(`#AO [data-t="${t}"]`).classList.add('on');
+  document.getElementById(`s-${t}`).classList.add('on');
+  if(t==='opnyx')drawOPnyx();
+}
+function sf(f,btn){S.filter=f;document.querySelectorAll('.fp').forEach(b=>b.classList.remove('on'));btn.classList.add('on');drawStoa();}
+function toggleTheme(){const n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;localStorage.setItem('fl_theme',n);}
+function toast(msg,err=false){const el=document.getElementById('toast');el.textContent=msg;el.className='on'+(err?' err':'');clearTimeout(toast._t);toast._t=setTimeout(()=>{el.className='';},3000);}
+function e(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function fmt(iso){if(!iso)return'';try{return new Date(iso).toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});}catch{return'';}}
+
+boot();
+</script>
+</body>
+</html>

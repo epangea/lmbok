@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>The Polis — Surfing the Frequencies</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
+<style>
+:root {
+  --bg:#080C14;--bg2:#0D1220;--bg3:#131929;--bg4:#1A2238;
+  --card:#0D1220;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
+  --wave:#00E5C8;--wave2:#00B8A2;--wave-dim:rgba(0,229,200,0.10);
+  --deep:#3D7BFF;--deep-dim:rgba(61,123,255,0.12);
+  --coral:#FF6B6B;--gold:#FFD166;
+  --text:#E8EDF8;--text2:#8B96B8;--text3:#4A5478;
+  --r:12px;--r-sm:8px;--r-lg:16px;
+  --font-display:'Syne',sans-serif;
+  --font-body:'DM Sans',-apple-system,sans-serif;
+  --polis:#7B5EA7;--polis-dim:rgba(123,94,167,0.15);
+  --earth:#4A7C59;--earth-dim:rgba(74,124,89,0.12);
+  --water:#2E86AB;--water-dim:rgba(46,134,171,0.12);
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-body);font-size:15px;line-height:1.6;min-height:100vh;}
+a{color:var(--wave);text-decoration:none;}
+
+/* Nav */
+.nav{position:sticky;top:0;z-index:100;background:rgba(8,12,20,0.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:16px;padding:0 24px;height:52px;}
+.logo{font-family:var(--font-display);font-size:17px;font-weight:700;background:linear-gradient(135deg,var(--wave),var(--polis));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;white-space:nowrap;flex-shrink:0;}
+.nav-back{font-size:13px;color:var(--text2);margin-left:auto;padding:6px 14px;border:1px solid var(--border2);border-radius:20px;transition:all .2s;}
+.nav-back:hover{color:var(--wave);border-color:var(--wave);text-decoration:none;}
+
+/* Hero */
+.hero{text-align:center;padding:56px 24px 40px;background:radial-gradient(ellipse 700px 280px at 50% 0%,rgba(123,94,167,0.1) 0%,transparent 70%);}
+.hero h1{font-family:var(--font-display);font-size:clamp(26px,5vw,44px);font-weight:700;line-height:1.2;margin-bottom:14px;background:linear-gradient(135deg,var(--text) 0%,var(--polis) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero p{font-size:15px;color:var(--text2);max-width:580px;margin:0 auto 10px;line-height:1.75;}
+.polis-badge{display:inline-block;font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--polis);border:1px solid rgba(123,94,167,0.35);background:var(--polis-dim);border-radius:20px;padding:4px 14px;margin-bottom:18px;}
+
+/* Gate */
+.gate{max-width:480px;margin:0 auto 40px;background:var(--bg2);border:1px solid rgba(123,94,167,0.3);border-radius:var(--r-lg);padding:32px;text-align:center;}
+.gate h2{font-family:var(--font-display);font-size:20px;margin-bottom:12px;}
+.gate p{color:var(--text2);font-size:14px;line-height:1.7;margin-bottom:20px;}
+
+/* Container */
+.container{max-width:860px;margin:0 auto;padding:0 20px 80px;}
+
+/* Tabs */
+.tabs{display:flex;gap:0;border-bottom:1px solid var(--border);margin-bottom:28px;}
+.tab{padding:11px 20px;font-size:13px;font-weight:600;color:var(--text3);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s;}
+.tab.active{color:var(--polis);border-color:var(--polis);}
+.tab:hover{color:var(--text2);}
+
+/* Cards */
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:22px;}
+.card+.card{margin-top:14px;}
+
+/* Referendum card */
+.ref-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:22px;margin-bottom:14px;transition:border-color .2s;}
+.ref-card:hover{border-color:var(--border2);}
+.ref-card h3{font-size:16px;font-weight:600;margin-bottom:10px;line-height:1.4;}
+.ref-card p{font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:16px;}
+
+/* Scope badge */
+.scope{display:inline-flex;align-items:center;font-size:10px;font-weight:700;letter-spacing:.5px;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+.scope-local{background:var(--earth-dim);color:var(--earth);}
+.scope-regional{background:var(--water-dim);color:var(--water);}
+.scope-global{background:var(--polis-dim);color:var(--polis);}
+
+/* Vote bar */
+.vote-bar{height:6px;border-radius:3px;background:var(--bg3);margin:12px 0;overflow:hidden;display:flex;}
+.vote-bar-s{background:var(--wave);height:100%;transition:width .4s;}
+.vote-bar-o{background:var(--coral);height:100%;transition:width .4s;}
+.vote-bar-a{background:var(--text3);height:100%;transition:width .4s;}
+.vote-counts{display:flex;gap:16px;font-size:12px;color:var(--text3);margin-bottom:14px;}
+.vote-counts span{display:flex;align-items:center;gap:4px;}
+
+/* Vote buttons */
+.vote-btns{display:flex;gap:8px;flex-wrap:wrap;}
+.vbtn{padding:7px 16px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text2);transition:all .2s;}
+.vbtn:hover{border-color:var(--border2);}
+.vbtn.voted-support,.vbtn[data-pos=support]:hover{background:var(--wave-dim);border-color:rgba(0,229,200,0.4);color:var(--wave);}
+.vbtn.voted-oppose,.vbtn[data-pos=oppose]:hover{background:rgba(255,107,107,0.1);border-color:rgba(255,107,107,0.4);color:var(--coral);}
+.vbtn.voted-abstain,.vbtn[data-pos=abstain]:hover{background:var(--bg4);border-color:var(--border2);color:var(--text2);}
+
+/* Proposal card */
+.prop-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:18px;margin-bottom:12px;display:flex;gap:14px;align-items:flex-start;}
+.prop-body{flex:1;}
+.prop-card h4{font-size:14px;font-weight:600;margin-bottom:5px;}
+.prop-card p{font-size:13px;color:var(--text2);line-height:1.6;}
+.support-btn{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text3);white-space:nowrap;transition:all .2s;text-align:center;}
+.support-btn.supported{background:var(--polis-dim);border-color:rgba(123,94,167,0.4);color:var(--polis);}
+.support-btn:hover{border-color:var(--border2);}
+
+/* Discussion */
+.comment{padding:12px 0;border-bottom:1px solid var(--border);}
+.comment:last-child{border-bottom:none;}
+.comment-meta{font-size:11px;color:var(--text3);margin-bottom:5px;display:flex;align-items:center;gap:8px;}
+.comment-body{font-size:13px;color:var(--text2);line-height:1.6;}
+.comment-reply{margin-left:28px;border-left:2px solid var(--border);padding-left:14px;}
+.comment-actions{display:flex;align-items:center;gap:10px;margin-top:6px;}
+.upvote-btn{background:none;border:none;cursor:pointer;font-size:11px;color:var(--text3);padding:2px 6px;border-radius:4px;transition:all .15s;display:flex;align-items:center;gap:3px;}
+.upvote-btn:hover{color:var(--wave);background:var(--wave-dim);}
+.upvote-btn.upvoted{color:var(--wave);}
+.reply-btn{background:none;border:none;cursor:pointer;font-size:11px;color:var(--text3);padding:2px 6px;border-radius:4px;transition:all .15s;}
+.reply-btn:hover{color:var(--polis);}
+.comment-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 13px;color:var(--text);font-size:13px;font-family:inherit;resize:vertical;min-height:72px;margin-top:16px;}
+.comment-input:focus{outline:none;border-color:var(--polis);}
+.reply-to-label{font-size:11px;color:var(--polis);margin-top:12px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between;}
+.reply-cancel{cursor:pointer;color:var(--text3);font-size:11px;}
+.reply-cancel:hover{color:var(--coral);}
+
+/* Form */
+.form-group{margin-bottom:16px;}
+label{display:block;font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:500;}
+input[type=text],textarea,select{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:var(--r-sm);padding:10px 13px;color:var(--text);font-size:14px;font-family:inherit;-webkit-appearance:none;}
+input:focus,textarea:focus,select:focus{outline:none;border-color:var(--polis);}
+textarea{resize:vertical;min-height:80px;}
+select option{background:var(--bg3);}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+@media(max-width:560px){.form-row{grid-template-columns:1fr;}}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 22px;border-radius:24px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:all .2s;}
+.btn-polis{background:var(--polis);color:#fff;box-shadow:0 0 20px rgba(123,94,167,0.3);}
+.btn-polis:hover{background:#6a4e96;}
+.btn-polis:disabled{opacity:.5;cursor:not-allowed;}
+.btn-ghost{background:transparent;color:var(--text2);border:1px solid var(--border2);}
+.btn-ghost:hover{color:var(--polis);border-color:var(--polis);}
+.btn-sm{padding:6px 14px;font-size:13px;}
+.btn-full{width:100%;}
+
+/* Empty / loading */
+.empty{text-align:center;padding:48px 24px;color:var(--text3);}
+.empty div{font-size:30px;margin-bottom:10px;}
+
+/* Discussion panel */
+.disc-panel{background:var(--bg3);border-radius:var(--r-sm);padding:16px;margin-top:14px;display:none;}
+.disc-panel.open{display:block;}
+
+/* Alert */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--polis);color:#fff;padding:10px 22px;border-radius:24px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:opacity .3s;pointer-events:none;}
+.toast.show{opacity:1;}
+
+@media(max-width:600px){
+  .hero{padding:40px 16px 28px;}
+  .vote-btns{flex-direction:column;}
+  .vbtn{text-align:center;}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">Surfing the Frequencies</div>
+  <span style="font-size:12px;color:var(--polis);font-weight:600;background:var(--polis-dim);padding:4px 12px;border-radius:20px;">The Polis</span>
+  <a href="/" class="nav-back">← Agora</a>
+</nav>
+
+<div class="hero">
+  <div class="polis-badge">CIVIC SPACE</div>
+  <h1>The Polis</h1>
+  <p>A space for reasoned civic participation — not social media, not a comment section. Every voice here has earned its place through learning.</p>
+  <p style="font-size:12px;color:var(--text3)">Inspired by the Athenian Ecclesia and the Stoic vision of a cosmopolis — one human community, nested inside local ones.</p>
+</div>
+
+<div class="container" id="main-container" style="display:none">
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('referenda')">🗳 Referenda</div>
+    <div class="tab"        onclick="switchTab('proposals')">💡 Proposals</div>
+    <div class="tab"        onclick="switchTab('propose')">✍ Submit a proposal</div>
+  </div>
+
+  <!-- Referenda tab -->
+  <div id="tab-referenda">
+    <div id="ref-list"><div class="empty"><div>🏛</div>Loading referenda…</div></div>
+  </div>
+
+  <!-- Proposals tab -->
+  <div id="tab-proposals" style="display:none">
+    <div id="prop-list"><div class="empty"><div>💡</div>Loading proposals…</div></div>
+  </div>
+
+  <!-- Submit proposal tab — rendered dynamically by renderProposeTab() -->
+  <div id="tab-propose" style="display:none">
+    <div id="propose-tab-body"></div>
+  </div>
+
+</div>
+
+<!-- Gate (shown only if no token — redirects to home in JS) -->
+<div id="gate-container" style="display:none">
+  <div style="max-width:480px;margin:0 auto 40px;background:var(--bg2);border:1px solid rgba(123,94,167,0.3);border-radius:var(--r-lg);padding:36px;text-align:center;">
+    <div style="font-size:40px;margin-bottom:16px">🌳</div>
+    <h2 style="font-family:var(--font-display);font-size:22px;margin-bottom:12px">The Polis opens with practice</h2>
+    <p id="gate-body" style="color:var(--text2);font-size:14px;line-height:1.8;margin-bottom:24px">
+      Sign in to read the Polis. Participation unlocks at 🌳 Grove stage — earned through broad learning across multiple arts.
+    </p>
+    <a href="/" class="btn btn-polis">Return to Agora →</a>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+var API = '/api';
+var token = localStorage.getItem('fl_token') || '';
+var currentRef = null;
+
+function hdr() {
+  return token ? {'Content-Type':'application/json','Authorization':'Bearer '+token} : {'Content-Type':'application/json'};
+}
+
+async function req(method, path, body) {
+  var opts = {method:method, headers:hdr()};
+  if (body) opts.body = JSON.stringify(body);
+  var r = await fetch(API + path, opts);
+  if (r.status === 401) { window.location.href = '/'; return null; }
+  if (!r.ok) { var e = await r.json().catch(()=>({detail:'Error'})); throw new Error(e.detail||'Request failed'); }
+  return r.json();
+}
+
+function showToast(msg, isErr) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.background = isErr ? 'var(--coral)' : 'var(--polis)';
+  t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2800);
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  var d = Math.floor((Date.now() - new Date(iso)) / 86400000);
+  if (d === 0) return 'Today';
+  if (d === 1) return 'Yesterday';
+  return d + ' days ago';
+}
+
+// ── Gate check ────────────────────────────────────────────────
+// All logged-in learners can VIEW. Grove+ can participate (vote/comment/propose).
+var _canParticipate = false;
+var _accessData = null;
+
+// Scopes the current learner can access based on Avatar stage
+function _accessibleScopes() {
+  if (!_accessData) return [];
+  var key = _accessData.key;
+  if (key === 'ecosystem')              return ['local','regional','global'];
+  if (key === 'forest')                 return ['local','regional'];
+  if (key === 'grove')                  return ['local'];
+  return []; // Seed/Sprout/Sapling — read-only, no scope
+}
+
+// Is a given item's scope within the learner's access?
+function _scopeAllowed(scope) {
+  return _accessibleScopes().indexOf(scope || 'local') !== -1;
+}
+
+async function checkGate() {
+  if (!token) { window.location.href = '/'; return; }
+  try {
+    var access = await req('GET', '/polis/my-access');
+    _accessData = access;
+    _canParticipate = !!(access && access.can_access_polis);
+  } catch(e) {
+    _canParticipate = false;
+  }
+  // Grab display_name for optimistic comment rendering
+  try {
+    var me = await req('GET', '/learners/me');
+    window._myName = me.display_name || me.name || 'You';
+  } catch(e) { window._myName = 'You'; }
+
+  // Always show content — reading is open to all logged-in learners
+  document.getElementById('main-container').style.display = '';
+  loadReferenda();
+
+  // Show participation nudge for pre-Grove; all tabs remain visible
+  if (!_canParticipate && _accessData) showParticipationNudge(_accessData);
+
+  // Pre-render propose tab so it's ready when user clicks it
+  renderProposeTab();
+}
+
+function showParticipationNudge(access) {
+  var icon       = access.icon       || '🫘';
+  var stage      = access.label      || 'Seed';
+  var xpNeeded   = Math.max(0, 100 - (access.xp || 0));
+  var artsNeeded = Math.max(0, 6   - (access.arts_count || 0));
+  var domNeeded  = (access.domains || 0) < 2;
+  var gaps = [];
+  if (xpNeeded  > 0) gaps.push(xpNeeded + ' XP');
+  if (artsNeeded > 0) gaps.push(artsNeeded + ' more arts');
+  if (domNeeded)      gaps.push('2 domains');
+  var gapText = gaps.length ? ' (' + gaps.join(', ') + ' still needed)' : '';
+
+  var nudge = document.createElement('div');
+  nudge.id  = 'participation-nudge';
+  nudge.style.cssText = 'background:var(--bg2);border:1px solid rgba(123,94,167,0.25);'
+    + 'border-radius:var(--r);padding:14px 18px;margin-bottom:22px;'
+    + 'display:flex;align-items:center;gap:14px;';
+  nudge.innerHTML =
+    '<div style="font-size:26px;flex-shrink:0">' + icon + '</div>'
+    + '<div style="flex:1">'
+    + '<div style="font-size:11px;font-weight:700;color:var(--polis);letter-spacing:.8px;margin-bottom:3px">OBSERVER MODE</div>'
+    + '<div style="font-size:13px;color:var(--text2);line-height:1.6">'
+    + 'You are <strong style="color:var(--text)">' + icon + ' ' + stage + '</strong>. '
+    + 'Read and reflect freely — participation unlocks at 🌳 Grove' + gapText + '.'
+    + '</div></div>';
+
+  var container = document.getElementById('main-container');
+  container.insertBefore(nudge, container.firstChild);
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+function switchTab(name) {
+  ['referenda','proposals','propose'].forEach(function(t) {
+    document.getElementById('tab-'+t).style.display = t===name ? '' : 'none';
+    document.querySelectorAll('.tab').forEach(function(el,i){
+      var names = ['referenda','proposals','propose'];
+      el.className = 'tab' + (names[i]===name?' active':'');
+    });
+  });
+  if (name === 'proposals') loadProposals();
+  if (name === 'propose')   renderProposeTab();
+}
+
+// ── Referenda ─────────────────────────────────────────────────
+async function loadReferenda() {
+  try {
+    var refs = await req('GET', '/polis/referenda');
+    renderReferenda(refs);
+  } catch(e) {
+    document.getElementById('ref-list').innerHTML = '<div class="empty"><div>🏛</div>Could not load referenda.</div>';
+  }
+}
+
+function renderReferenda(refs) {
+  if (!refs || !refs.length) {
+    document.getElementById('ref-list').innerHTML = '<div class="empty"><div>🏛</div>No open referenda yet.</div>';
+    return;
+  }
+  document.getElementById('ref-list').innerHTML = refs.map(function(r) {
+    var total = r.total_votes || 1;
+    var sp = Math.round((r.support_count/total)*100);
+    var op = Math.round((r.oppose_count/total)*100);
+    var ab = Math.round((r.abstain_count/total)*100);
+    var scopeClass = 'scope-'+(r.scope||'local');
+    return '<div class="ref-card" id="ref-'+r.id+'">'
+      + '<div class="scope '+scopeClass+'" data-refscope="'+r.id+'" data-scope="'+(r.scope||'local')+'">'+((r.scope||'local').toUpperCase())+(r.bioregion?' · '+esc(r.bioregion):'')+'</div>'
+      + '<h3>'+esc(r.title)+'</h3>'
+      + '<p>'+esc(r.description||'')+'</p>'
+      + '<div class="vote-bar"><div class="vote-bar-s" style="width:'+sp+'%"></div><div class="vote-bar-o" style="width:'+op+'%"></div><div class="vote-bar-a" style="width:'+ab+'%"></div></div>'
+      + '<div class="vote-counts">'
+      + '<span style="color:var(--wave)">✓ '+r.support_count+' support</span>'
+      + '<span style="color:var(--coral)">✗ '+r.oppose_count+' oppose</span>'
+      + '<span>~ '+r.abstain_count+' abstain</span>'
+      + '<span style="margin-left:auto">'+r.total_votes+' votes total</span>'
+      + '</div>'
+      + '<div class="vote-btns">'
+      + (_scopeAllowed(r.scope)
+          ? ['support','oppose','abstain'].map(function(pos) {
+              var labels = {support:'✓ Support',oppose:'✗ Oppose',abstain:'~ Abstain'};
+              var voted = r.my_vote === pos ? ' voted-'+pos : '';
+              return '<button class="vbtn'+voted+'" data-pos="'+pos+'" onclick="vote('+r.id+',\''+pos+'\')">'+labels[pos]+'</button>';
+            }).join('')
+          : '<span style="font-size:12px;color:var(--text3);font-style:italic">'
+            + (_canParticipate
+                ? '🌲 Forest stage unlocks regional voting'
+                : '🌳 Grove stage unlocks voting')
+            + '</span>'
+        )
+      + '<button class="vbtn" style="margin-left:auto" onclick="toggleDisc('+r.id+')">💬 Discuss</button>'
+      + '</div>'
+      + '<div class="disc-panel" id="disc-'+r.id+'"></div>'
+      + '</div>';
+  }).join('');
+}
+
+async function vote(refId, position) {
+  try {
+    var reasoning = null;
+    if (position !== 'abstain') {
+      var _raw = prompt('Optional: share your reasoning (leave blank to skip)');
+      if (_raw === null) return;   // Cancel = do not cast vote
+      reasoning = _raw || null;   // empty string → null (no reasoning stored)
+    }
+    await req('POST', '/polis/referenda/'+refId+'/vote', {position:position, reasoning:reasoning});
+    showToast('Vote recorded — thank you.');
+    loadReferenda();
+  } catch(e) { showToast(e.message, true); }
+}
+
+// Track reply state per referendum: { refId: {id, name} | null }
+var _replyTarget = {};
+
+async function toggleDisc(refId) {
+  var panel = document.getElementById('disc-'+refId);
+  if (panel.classList.contains('open')) { panel.classList.remove('open'); _replyTarget[refId] = null; return; }
+  panel.classList.add('open');
+  await loadDisc(refId);
+}
+
+async function loadDisc(refId) {
+  var panel = document.getElementById('disc-'+refId);
+  panel.innerHTML = '<div style="color:var(--text3);font-size:13px">Loading discussion…</div>';
+  try {
+    var comments = await req('GET', '/polis/referenda/'+refId+'/discussion');
+    var refScope  = document.querySelector('[data-refscope="'+refId+'"]');
+    var scope     = refScope ? refScope.dataset.scope : 'local';
+    var canComment = _scopeAllowed(scope);
+    renderDisc(refId, comments, canComment);
+  } catch(e) {
+    panel.innerHTML = '<div style="color:var(--coral);font-size:13px">'+e.message+'</div>';
+  }
+}
+
+function renderDisc(refId, comments, canComment) {
+  var panel = document.getElementById('disc-'+refId);
+
+  // Build parent→children map for threading
+  var roots = [], children = {};
+  (comments || []).forEach(function(c) {
+    if (c.parent_id) {
+      if (!children[c.parent_id]) children[c.parent_id] = [];
+      children[c.parent_id].push(c);
+    } else {
+      roots.push(c);
+    }
+  });
+
+  function renderComment(c, isReply) {
+    var upvoteHtml = canComment
+      ? '<button class="upvote-btn" id="uv-'+c.id+'" onclick="upvoteComment('+refId+','+c.id+')">▲ '+c.upvotes+'</button>'
+      : '<span style="font-size:11px;color:var(--text3)">▲ '+c.upvotes+'</span>';
+    var replyHtml = canComment && !isReply
+      ? '<button class="reply-btn" onclick="setReply('+refId+','+c.id+',\''+esc(c.display_name||'Learner')+'\')">↩ Reply</button>'
+      : '';
+    var html = '<div class="comment'+(isReply?' comment-reply':'')+'" id="cm-'+c.id+'">'
+      + '<div class="comment-meta">'+(c.avatar_emoji||'🌊')+' <strong style="color:var(--text2)">'+esc(c.display_name||'Learner')+'</strong> · '+timeAgo(c.created_at)+'</div>'
+      + '<div class="comment-body">'+esc(c.body)+'</div>'
+      + '<div class="comment-actions">'+upvoteHtml+replyHtml+'</div>'
+      + '</div>';
+    // Render children (one level deep)
+    if (children[c.id]) {
+      children[c.id].forEach(function(child){ html += renderComment(child, true); });
+    }
+    return html;
+  }
+
+  var html = '';
+  if (!comments || !comments.length) {
+    html = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No comments yet — be the first to share your reasoning.</div>';
+  } else {
+    roots.forEach(function(c){ html += renderComment(c, false); });
+  }
+
+  if (canComment) {
+    html += '<div id="reply-label-'+refId+'" class="reply-to-label" style="display:none">'
+      + '<span id="reply-label-text-'+refId+'"></span>'
+      + '<span class="reply-cancel" onclick="clearReply('+refId+')">✕ Cancel reply</span>'
+      + '</div>'
+      + '<textarea class="comment-input" id="ci-'+refId+'" placeholder="Share your reasoning…"></textarea>'
+      + '<div style="text-align:right;margin-top:8px">'
+      + '<button class="btn btn-polis btn-sm" onclick="postComment('+refId+')">Post</button>'
+      + '</div>';
+  } else {
+    html += '<div style="font-size:12px;color:var(--text3);font-style:italic;padding:10px 0">'
+      + (_canParticipate ? '🌲 Forest stage unlocks regional discussions' : '🌳 Grove stage unlocks commenting')
+      + '</div>';
+  }
+
+  panel.innerHTML = html;
+}
+
+function setReply(refId, commentId, displayName) {
+  _replyTarget[refId] = {id: commentId, name: displayName};
+  var label = document.getElementById('reply-label-'+refId);
+  var labelText = document.getElementById('reply-label-text-'+refId);
+  if (label) label.style.display = 'flex';
+  if (labelText) labelText.textContent = '↩ Replying to ' + displayName;
+  var ta = document.getElementById('ci-'+refId);
+  if (ta) { ta.focus(); ta.placeholder = 'Replying to ' + displayName + '…'; }
+}
+
+function clearReply(refId) {
+  _replyTarget[refId] = null;
+  var label = document.getElementById('reply-label-'+refId);
+  if (label) label.style.display = 'none';
+  var ta = document.getElementById('ci-'+refId);
+  if (ta) { ta.placeholder = 'Share your reasoning…'; }
+}
+
+async function postComment(refId) {
+  var ta   = document.getElementById('ci-'+refId);
+  var body = (ta||{}).value || '';
+  if (!body.trim()) return;
+
+  var reply   = _replyTarget[refId] || null;
+  var parentId = reply ? reply.id : null;
+
+  // Optimistic: append to DOM immediately
+  var panel    = document.getElementById('disc-'+refId);
+  var tempId   = 'tmp-'+Date.now();
+  var learnerName = (window._myName || 'You');
+  var tempHtml = '<div class="comment'+(parentId?' comment-reply':'')+'" id="'+tempId+'">'
+    + '<div class="comment-meta">🌊 <strong style="color:var(--text2)">'+esc(learnerName)+'</strong> · Just now</div>'
+    + '<div class="comment-body">'+esc(body.trim())+'</div>'
+    + '<div class="comment-actions"><span style="font-size:11px;color:var(--text3)">▲ 0</span></div>'
+    + '</div>';
+
+  // Insert before the reply label / textarea block
+  var replyLabel = document.getElementById('reply-label-'+refId);
+  if (replyLabel) {
+    replyLabel.insertAdjacentHTML('beforebegin', tempHtml);
+  } else {
+    panel.insertAdjacentHTML('beforeend', tempHtml);
+  }
+
+  // Clear input and reply state immediately
+  if (ta) { ta.value = ''; ta.placeholder = 'Share your reasoning…'; }
+  clearReply(refId);
+
+  try {
+    await req('POST', '/polis/referenda/'+refId+'/discussion', {body: body.trim(), parent_id: parentId});
+    // Replace temp with real data on next load — not critical, stays until panel reopened
+  } catch(e) {
+    showToast(e.message, true);
+    // Remove optimistic node on failure
+    var tmp = document.getElementById(tempId);
+    if (tmp) tmp.remove();
+  }
+}
+
+async function upvoteComment(refId, commentId) {
+  try {
+    var r = await req('POST', '/polis/referenda/'+refId+'/discussion/'+commentId+'/upvote');
+    var btn = document.getElementById('uv-'+commentId);
+    if (btn) { btn.textContent = '▲ '+r.upvotes; btn.classList.add('upvoted'); }
+  } catch(e) { showToast(e.message, true); }
+}
+
+// ── Proposals ─────────────────────────────────────────────────
+async function loadProposals() {
+  try {
+    var props = await req('GET', '/polis/proposals');
+    var list  = document.getElementById('prop-list');
+    if (!props || !props.length) {
+      list.innerHTML = '<div class="empty"><div>💡</div>No proposals yet — submit the first one.'
+        + '<br><a href="https://onehouse.top/index.php?title=THE_BLUEPRINT" target="_blank" rel="noopener" '
+        + 'style="font-size:12px;color:var(--wave);margin-top:8px;display:inline-block">📖 Read The Blueprint →</a></div>';
+      return;
+    }
+    list.innerHTML = props.map(function(p){
+      var scopeClass = 'scope-'+(p.scope||'local');
+      return '<div class="prop-card">'
+        + '<div class="prop-body">'
+        + '<div class="scope '+scopeClass+'" style="margin-bottom:6px">'+((p.scope||'').toUpperCase())+'</div>'
+        + '<h4>'+esc(p.title)+'</h4>'
+        + (p.description?'<p>'+esc(p.description.slice(0,140))+(p.description.length>140?'…':'')+'</p>':'')
+        + '<div style="font-size:11px;color:var(--text3);margin-top:7px">'+(p.avatar_emoji||'🌊')+' '+esc(p.display_name||'Learner')+'</div>'
+        + '</div>'
+        + '<div style="text-align:center;flex-shrink:0">'
+        + (_scopeAllowed(p.scope)
+            ? '<button class="support-btn'+(p.i_support?' supported':'')+'" onclick="supportProp('+p.id+',this)">'              + (p.i_support?'✓ ':'▲ ')+p.support_count+'</button>'
+            : '<div style="font-size:12px;color:var(--text3);text-align:center">▲ '+p.support_count              +'<div style="font-size:10px;margin-top:2px;font-style:italic">'              +(_canParticipate?'🌲 Forest+':'🌳 Grove+')+'</div></div>'
+          )
+        + '</div>'
+        + '</div>';
+    }).join('');
+  } catch(e) {
+    document.getElementById('prop-list').innerHTML = '<div class="empty"><div>💡</div>Could not load proposals.</div>';
+  }
+}
+
+async function supportProp(id, btn) {
+  try {
+    var r = await req('POST', '/polis/proposals/'+id+'/support');
+    btn.className = 'support-btn'+(r.supported?' supported':'');
+    loadProposals();
+  } catch(e) { showToast(e.message, true); }
+}
+
+function renderProposeTab() {
+  var body = document.getElementById('propose-tab-body');
+  if (!body) return;
+  var scopes = _accessibleScopes();
+
+  if (scopes.length === 0) {
+    // Pre-Grove: aspirational gate — show what's coming, not a wall
+    var a = _accessData || {};
+    var icon       = a.icon || '🫘';
+    var stage      = a.label || 'Seed';
+    var xpNeeded   = Math.max(0, 100 - (a.xp || 0));
+    var artsNeeded = Math.max(0, 6 - (a.arts_count || 0));
+    var domNeeded  = (a.domains || 0) < 2;
+    var gaps = [];
+    if (xpNeeded  > 0) gaps.push('<strong style="color:var(--wave)">' + xpNeeded + ' XP</strong>');
+    if (artsNeeded > 0) gaps.push('<strong style="color:var(--wave)">' + artsNeeded + ' more arts</strong>');
+    if (domNeeded)      gaps.push('<strong style="color:var(--wave)">2 domains</strong> (Being · Becoming · Connecting)');
+
+    body.innerHTML =
+      '<div class="card" style="text-align:center;padding:32px 24px">'
+      + '<div style="font-size:44px;margin-bottom:16px">🌳</div>'
+      + '<div style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:10px">Your voice is growing</div>'
+      + '<p style="color:var(--text2);font-size:14px;line-height:1.8;margin-bottom:20px">'
+      + 'You are <strong style="color:var(--text)">' + icon + ' ' + stage + '</strong>. '
+      + 'Proposal submission opens at 🌳 <strong>Grove</strong> — the first stage of civic maturity.<br><br>'
+      + 'Grove members can submit <strong>local</strong> proposals rooted in their bioregion.<br>'
+      + '🌲 Forest members unlock <strong>regional</strong> proposals spanning watersheds.<br>'
+      + '🌍 Ecosystem members contribute to <strong>global</strong> civic dialogue.'
+      + '</p>'
+      + (gaps.length
+          ? '<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:16px;margin-bottom:20px;text-align:left">'
+            + '<div style="font-size:11px;font-weight:700;color:var(--polis);letter-spacing:.8px;margin-bottom:10px">TO REACH GROVE</div>'
+            + gaps.map(function(g){ return '▲ ' + g; }).join('<br>')
+            + '</div>'
+          : '')
+      + '<a href="/" class="btn btn-polis">← Keep surfing</a>'
+      + '</div>';
+    return;
+  }
+
+  // Grove+: render form with scope options filtered to accessible scopes
+  var scopeLabels = {local:'🌳 Local',regional:'🌲 Regional',global:'🌍 Global'};
+  var scopeOptions = scopes.map(function(s) {
+    return '<option value="' + s + '">' + scopeLabels[s] + '</option>';
+  }).join('');
+
+  body.innerHTML =
+    '<div class="card">'
+    + '<div style="font-size:11px;font-weight:700;letter-spacing:1.5px;color:var(--polis);text-transform:uppercase;margin-bottom:16px">New proposal</div>'
+    + '<div class="form-group">'
+    + '<label>What are you proposing?</label>'
+    + '<input type="text" id="p-title" placeholder="A clear, actionable civic proposal…" maxlength="200"/>'
+    + '</div>'
+    + '<div class="form-group">'
+    + '<label>Why does this matter to the community?</label>'
+    + '<textarea id="p-desc" rows="4" placeholder="Explain the problem, the proposed solution, and the community benefit…"></textarea>'
+    + '</div>'
+    + '<div class="form-row">'
+    + '<div class="form-group"><label>Scope</label>'
+    + '<select id="p-scope">' + scopeOptions + '</select></div>'
+    + '<div class="form-group"><label>Bioregion (optional)</label>'
+    + '<input type="text" id="p-bio" placeholder="e.g. Hanoi, Mekong Delta…"/></div>'
+    + '</div>'
+    + '<button class="btn btn-polis btn-full" onclick="submitProposal()">Submit proposal</button>'
+    + '<p style="font-size:12px;color:var(--text3);margin-top:10px;text-align:center">Proposals with 10+ supporters are considered for conversion into referenda.</p>'
+    + '</div>';
+}
+
+async function submitProposal() {
+  var btn   = document.getElementById('prop-submit-btn');
+  var title = (document.getElementById('p-title')||{}).value || '';
+  if (!title.trim()) { showToast('Please add a title.', true); return; }
+  btn.disabled = true; btn.textContent = 'Submitting…';
+  try {
+    await req('POST', '/polis/proposals', {
+      title:       title.trim(),
+      description: document.getElementById('p-desc').value.trim() || null,
+      scope:       document.getElementById('p-scope').value,
+      bioregion:   document.getElementById('p-bio').value.trim() || null,
+    });
+    showToast('Proposal submitted — thank you!');
+    document.getElementById('p-title').value = '';
+    document.getElementById('p-desc').value  = '';
+    document.getElementById('p-bio').value   = '';
+    switchTab('proposals');
+  } catch(e) { showToast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = 'Submit proposal'; }
+}
+
+// Boot
+checkGate();
+</script>
+</body>
+</html>

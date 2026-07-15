@@ -1,0 +1,41 @@
+# ============================================================
+# FreqLearn — requirements.txt
+# Pinned for stability on Ubuntu 22.04/24.04
+# Install: pip install -r requirements.txt
+# ============================================================
+
+# Core framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+
+# Database
+sqlalchemy==2.0.30
+aiomysql==0.2.0
+pymysql==1.1.1
+
+# Auth
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.3
+
+# Validation
+pydantic==2.7.1
+pydantic[email]==2.7.1
+python-multipart==0.0.9
+email-validator==2.1.1
+
+# HTTP client (for scavenger agent)
+httpx==0.27.0
+
+# Environment
+python-dotenv==1.0.1
+
+# Scheduling (spaced repetition cron jobs)
+apscheduler==3.10.4
+
+# AI challenge generation (Claude API)
+anthropic==0.28.0
+
+# Utilities
+python-slugify==8.0.4
+Pillow==10.3.0

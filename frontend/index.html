@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="description" content="Surfing the Frequencies — a free lifelong learning platform for every human on earth"/>
+<meta name="theme-color" content="#080C14"/>
+<title>Surfing the Frequencies</title>
+
+<!-- Favicon — inline SVG wave, no separate file needed -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>"/>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+
+<!-- Styles -->
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<!-- ============================================================
+     Surfing the Frequencies — build.onehouse.top
+
+     Platform architecture:
+       index.html  — shell (this file)
+       app.css     — styles (external, cached separately)
+       app.js      — logic  (external, cached separately)
+
+     Portals:
+       /           — Learner portal (Agora, Academy, Mouseion, Peripatos)
+       /org        — Organization portal
+       /contribute — Community LECKO contribution
+       /admin      — Admin portal
+       /polis      — The Polis (referenda, bioregions, civic)
+
+     Backend:
+       FastAPI on port 8000 (proxied via nginx at /api/*)
+       MariaDB — schema in /var/www/freqlearn/schema.sql
+
+     To update: edit app.js or app.css and upload.
+     No build step required — nginx serves static files directly.
+============================================================ -->
+
+<div id="root"></div>
+
+<script src="app.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,2165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Surfing the Frequencies — Admin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="app.css"/>
+<style>
+/* ── Admin portal specific styles ────────────────── */
+.admin-layout{display:grid;grid-template-columns:200px 1fr;min-height:calc(100vh - 56px);margin-top:56px}
+.admin-sidebar{background:var(--bg2);border-right:1px solid var(--border);padding:20px 0}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:500;color:var(--text3);cursor:pointer;transition:all .15s;border-left:3px solid transparent}
+.sidebar-item:hover{color:var(--text);background:var(--bg3)}
+.sidebar-item.on{color:var(--wave);background:var(--wave-dim);border-left-color:var(--wave)}
+.sidebar-icon{font-size:16px;width:20px;text-align:center}
+.sidebar-section{padding:8px 20px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:12px}
+.admin-content{padding:28px;overflow-y:auto}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;text-align:center}
+.stat-card .sv{font-family:var(--font-display);font-size:28px;font-weight:800;margin-bottom:4px}
+.stat-card .sl{font-size:11px;color:var(--text3)}
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:10px 14px;font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.8px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.data-table td{padding:12px 14px;border-bottom:1px solid var(--border);color:var(--text2)}
+.data-table tr:hover td{background:var(--bg3)}
+.data-table tr:last-child td{border-bottom:none}
+.scav-result{background:var(--bg3);border:1px solid var(--border2);border-radius:var(--r-sm);padding:14px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.scav-result h4{font-size:13px;margin-bottom:4px}
+.scav-result p{font-size:12px;color:var(--text3);line-height:1.5}
+.bar-row{display:flex;align-items:center;gap:10px;margin-bottom:10px;font-size:12px}
+.bar-row span:first-child{width:120px;color:var(--text2);flex-shrink:0}
+.bar-row .bar-bg{flex:1;height:6px;background:var(--bg5);border-radius:3px;overflow:hidden}
+.bar-row .bar-f{height:6px;border-radius:3px;transition:width .6s}
+.badge{display:inline-block;font-size:11px;padding:2px 8px;border-radius:10px;font-weight:500}
+.badge-green{background:var(--wave-dim);color:var(--wave)}
+.badge-amber{background:var(--gold-dim);color:var(--gold)}
+.badge-red{background:var(--coral-dim);color:var(--coral)}
+.badge-blue{background:var(--deep-dim);color:var(--deep)}
+/* Responsive admin sidebar — hamburger on small screens */
+.admin-burger{
+  display:none;flex-direction:column;justify-content:center;align-items:center;
+  gap:5px;width:40px;height:40px;
+  background:transparent;border:1px solid var(--border2);
+  border-radius:var(--r-sm);cursor:pointer;flex-shrink:0;
+}
+.admin-burger span{
+  display:block;width:18px;height:2px;
+  background:var(--text2);border-radius:2px;
+  transition:all .2s;
+}
+.admin-burger.open span:nth-child(1){transform:translateY(7px) rotate(45deg)}
+.admin-burger.open span:nth-child(2){opacity:0}
+.admin-burger.open span:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
+
+.admin-sidebar-overlay{
+  display:none;position:fixed;inset:0;z-index:98;
+  background:rgba(0,0,0,.5);
+}
+.admin-sidebar-overlay.open{display:block}
+
+@media(max-width:960px){
+  .admin-layout{grid-template-columns:1fr;position:relative}
+  .admin-sidebar{
+    position:fixed;top:56px;left:0;bottom:0;z-index:99;
+    width:260px;max-width:80vw;
+    transform:translateX(-100%);
+    transition:transform .2s ease;
+    overflow-y:auto;
+  }
+  .admin-sidebar.admin-sidebar--open{transform:translateX(0)}
+  .stat-grid{grid-template-columns:1fr 1fr}
+  .admin-burger{display:flex}
+}
+</style>
+</head>
+<body>
+
+<!-- Auth wall — shown when no admin key is stored -->
+<div id="auth-wall" style="display:none;position:fixed;inset:0;background:var(--bg);z-index:9999;align-items:center;justify-content:center;flex-direction:column;gap:16px">
+  <div style="text-align:center;margin-bottom:8px">
+    <div class="logo" style="font-size:20px;margin-bottom:4px">Surfing the Frequencies</div>
+    <div style="font-size:13px;color:var(--text3)">Admin portal</div>
+  </div>
+  <div class="card" style="width:320px;padding:28px">
+    <h3 style="margin-bottom:16px;text-align:center">Enter admin key</h3>
+    <input id="auth-key-input" class="form-input" type="password" placeholder="ADMIN_KEY"
+      style="width:100%;margin-bottom:12px;box-sizing:border-box"
+      onkeydown="if(event.key==='Enter')submitAdminKey()"/>
+    <button class="btn btn-wave" style="width:100%" onclick="submitAdminKey()">Unlock</button>
+    <div id="auth-error" style="color:var(--coral);font-size:12px;margin-top:10px;text-align:center;min-height:16px"></div>
+  </div>
+</div>
+
+<!-- Admin Nav -->
+<nav class="nav">
+  <a href="/" style="text-decoration:none"><div class="logo">Surfing the Frequencies</div></a>
+  <button id="admin-burger" class="admin-burger" onclick="adminToggleSidebar()" aria-label="Menu">
+    <span></span><span></span><span></span>
+  </button>
+  <div style="flex:1"></div>
+  <span style="font-size:12px;color:var(--text3);margin-right:12px">Admin · Charbel Haddad</span>
+  <button class="btn btn-ghost btn-sm" onclick="doAdminLogout()">Sign out</button>
+</nav>
+
+<div id="admin-sidebar-overlay" class="admin-sidebar-overlay" onclick="adminCloseSidebar()"></div>
+
+<div class="admin-layout">
+
+  <!-- Sidebar -->
+  <div class="admin-sidebar">
+    <div class="sidebar-section">Overview</div>
+    <div class="sidebar-item on"  onclick="showAdmin('dashboard')" id="si-dashboard">
+      <span class="sidebar-icon">📊</span> Dashboard
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('learners')" id="si-learners">
+      <span class="sidebar-icon">👥</span> Learners
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('orgs')" id="si-orgs">
+      <span class="sidebar-icon">🏛️</span> Organizations
+    </div>
+
+    <div class="sidebar-section">Content</div>
+    <div class="sidebar-item" onclick="showAdmin('leckos')" id="si-leckos">
+      <span class="sidebar-icon">📚</span> LECKOs
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('sessions')" id="si-sessions">
+      <span class="sidebar-icon">🎓</span> Sessions
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('moderate')" id="si-moderate">
+      <span class="sidebar-icon">✏️</span> Moderate
+    </div>
+
+    <div class="sidebar-item" onclick="showAdmin('bioregions')" id="si-bioregions">
+      <span class="sidebar-icon">🌍</span> Bioregions
+    </div>
+
+    <div class="sidebar-section">Intelligence</div>
+    <div class="sidebar-item" onclick="showAdmin('scavenger')" id="si-scavenger">
+      <span class="sidebar-icon">🕷️</span> Scavenger
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('outreach')" id="si-outreach">
+      <span class="sidebar-icon">📨</span> Outreach
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('ai')" id="si-ai">
+      <span class="sidebar-icon">🤖</span> AI Engine
+    </div>
+
+    <div class="sidebar-section">System</div>
+    <div class="sidebar-item" onclick="showAdmin('settings')" id="si-settings">
+      <span class="sidebar-icon">⚙️</span> Settings
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('logs')" id="si-logs">
+      <span class="sidebar-icon">📋</span> Logs
+    </div>
+  </div>
+
+  <!-- Main content -->
+  <div class="admin-content" id="admin-main">
+    <!-- rendered by JS -->
+  </div>
+</div>
+
+<!-- Version history modal -->
+<div id="bio-ver-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);align-items:center;justify-content:center;flex-direction:column;gap:0">
+  <div class="card" style="width:560px;max-width:92vw;max-height:80vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <h3 style="font-size:15px;font-weight:700" id="bio-ver-modal-title">Version history</h3>
+      <button class="btn btn-ghost btn-sm" onclick="bioCloseVersionHistory()" aria-label="Close">✕</button>
+    </div>
+    <div id="bio-ver-modal-body" style="padding:16px 20px;overflow-y:auto;flex:1">
+      <div style="color:var(--text3);font-size:13px">Loading…</div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);text-align:right">
+      <button class="btn btn-ghost btn-sm" onclick="bioCloseVersionHistory()">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Admin modal (orgs / settings forms) -->
+<div id="admin-modal-overlay" style="display:none;position:fixed;inset:0;z-index:9998;background:rgba(0,0,0,.6);align-items:center;justify-content:center;flex-direction:column">
+  <div class="card" style="width:520px;max-width:92vw;max-height:85vh;display:flex;flex-direction:column">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
+      <h3 style="font-size:15px;font-weight:700" id="admin-modal-title"></h3>
+      <button class="btn btn-ghost btn-sm" onclick="adminCloseModal()" aria-label="Close">✕</button>
+    </div>
+    <div id="admin-modal-body" style="padding:16px 20px;overflow-y:auto;flex:1"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+
+var _LANG = {
+  en: { 'admin.dashboard':'Dashboard','admin.learners':'Learners','admin.orgs':'Organizations','admin.leckos':'LECKO library','admin.sessions':'Session library','admin.moderate':'Moderate','admin.bioregions':'Bioregions','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'AI Engine','admin.settings':'Settings','admin.logs':'Logs' },
+  de: { 'admin.dashboard':'Dashboard','admin.learners':'Lernende','admin.orgs':'Organisationen','admin.leckos':'LECKO Bibliothek','admin.sessions':'Session Bibliothek','admin.moderate':'Moderation','admin.bioregions':'Bioregionen','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'KI-Engine','admin.settings':'Einstellungen','admin.logs':'Logs' },
+  ru: { 'admin.dashboard':'Панель','admin.learners':'Ученики','admin.orgs':'Организации','admin.leckos':'Библиотека LECKO','admin.sessions':'Библиотека сессий','admin.moderate':'Модерация','admin.bioregions':'Биорегионы','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'AI движок','admin.settings':'Настройки','admin.logs':'Логи' }
+};
+function T(k){ var d = _LANG[localStorage.getItem('fl_lang')||'en'] || _LANG.en; return d[k] || _LANG.en[k] || k; }
+
+
+var AS = { section: 'dashboard', adminKey: localStorage.getItem('fl_admin_key') || '' };
+
+// ── Settings state (survives section switches) ────
+var SETTINGS = {
+  senderName:  localStorage.getItem('fl_admin_sender_name')  || 'Charbel Haddad',
+  senderEmail: localStorage.getItem('fl_admin_sender_email') || 'charbel@onehouse.top',
+};
+
+// ── Scavenger live state ──────────────────────────
+var scavState = { listings: null, running: false };
+
+// ── Learners live state ───────────────────────────
+var learnersState = { learners: null };
+
+// ── AI Engine live state ──────────────────────────
+var aiState  = { groq: null, library: null, coverage: null };
+
+// ── Seed job state ────────────────────────────────
+var seedState = { polling: null };
+
+// ── Dashboard live state ──────────────────────────
+var dashboardState = { data: null };
+
+// ── Logs live state ──────────────────────────────
+var logsState = { logs: null, polling: null };
+
+// ── Settings live state ──────────────────────────────
+var settingsState = { data: null, loading: false, error: null, lastSaved: null };
+
+// ── Sessions library live state ──────────────────────────────
+var sessionsState = { sessions: null, total: 0, loading: false, error: null, offset: 0, limit: 50, artFilter: null, searchQ: '' };
+
+// ── Lecko moderation live state ──────────────────────────────
+var moderateState = { pending: null, loading: false, error: null };
+
+// ── Auth wall ────────────────────────────────────
+function checkAuth() {
+  if (AS.adminKey) return true;
+  document.getElementById('admin-main').style.display = 'none';
+  var wall = document.getElementById('auth-wall');
+  if (wall) wall.style.display = 'flex';
+  return false;
+}
+
+function submitAdminKey() {
+  var val = (document.getElementById('auth-key-input') || {}).value || '';
+  if (!val.trim()) return;
+  AS.adminKey = val.trim();
+  localStorage.setItem('fl_admin_key', AS.adminKey);
+  var msg = document.getElementById('auth-error');
+  if (msg) { msg.style.color = 'var(--text3)'; msg.textContent = 'Checking key…'; }
+  // Verify key works before unlocking the UI
+  adminFetch('/admin/scavenger/listings').then(function() {
+    if (msg) msg.textContent = '';
+    document.getElementById('auth-wall').style.display = 'none';
+    document.getElementById('admin-main').style.display = '';
+    renderAdmin();
+  }).catch(function(err) {
+    AS.adminKey = '';
+    localStorage.removeItem('fl_admin_key');
+    if (!msg) return;
+    msg.style.color = 'var(--coral)';
+    if (err.message && err.message.indexOf('not configured') !== -1) {
+      msg.textContent = 'ADMIN_KEY is not set on the server yet. Add ADMIN_KEY=<your-secret> to backend/.env and restart uvicorn, then try again here.';
+    } else if (err.message === 'Forbidden') {
+      msg.textContent = 'Wrong key — try again.';
+    } else {
+      msg.textContent = 'Could not verify key: ' + (err.message || 'unknown error');
+    }
+  });
+}
+
+// ── Admin API helper ──────────────────────────────
+function adminFetch(path, methodOrOpts, body) {
+  // Supports two call styles:
+  //   adminFetch(path, optsObj)          — legacy style used by scav/seed
+  //   adminFetch(path, 'METHOD', body)   — bioregions style
+  var opts;
+  if (typeof methodOrOpts === 'string') {
+    opts = { method: methodOrOpts || 'GET' };
+    if (body) opts.body = JSON.stringify(body);
+  } else {
+    opts = methodOrOpts || {};
+  }
+  opts.headers = Object.assign({
+    'X-Admin-Key':  AS.adminKey,
+    'Content-Type': 'application/json',
+  }, opts.headers || {});
+  return fetch('/api' + path, opts).then(function(r) {
+    if (r.status === 403) throw new Error('Forbidden');
+    if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); });
+    return r.json();
+  });
+}
+
+// ── Section routing ───────────────────────────────
+function showAdmin(section) {
+  AS.section = section;
+  document.querySelectorAll('.sidebar-item').forEach(function(el) {
+    el.className = 'sidebar-item' + (el.id === 'si-' + section ? ' on' : '');
+  });
+  renderAdmin();
+  if (window.innerWidth <= 960) adminCloseSidebar();
+  if (section === 'dashboard') {
+    if (dashboardState.polling) clearInterval(dashboardState.polling);
+    dashboardState.polling = null;
+    dashboardState.data = null;
+    dashboardLoad();
+  }
+  if (section === 'orgs') {
+    if (orgsState.polling) clearInterval(orgsState.polling);
+    orgsState.polling = null;
+    orgsState.orgs = null;
+    orgsLoad();
+  }
+  if (section === 'leckos') {
+    if (lecsState.polling) clearInterval(lecsState.polling);
+    lecsState.polling = null;
+    lecsState.lecs = null;
+    lecsLoad();
+  }
+  if (section === 'logs') {
+    if (logsState.polling) clearInterval(logsState.polling);
+    logsState.polling = null;
+    logsState.logs = null;
+  }
+  if (section === 'logs') logsLoad();
+  if (section === 'learners')   learnersLoad();
+  if (section === 'scavenger') scavLoad();
+  if (section === 'ai') aiLoad();
+  if (section === 'bioregions') { bioLoadPending(); bioLoadPortraits(); bioLoadSeedProfiles(); }
+  if (section === 'settings') settingsLoad();
+  if (section === 'sessions') sessionsLoad();
+  if (section === 'moderate') moderateLoad();
+}
+
+// ── Admin sidebar toggle (mobile hamburger) ────────
+window.adminToggleSidebar = function() {
+  var sidebar = document.querySelector('.admin-sidebar');
+  var burger  = document.getElementById('admin-burger');
+  var overlay = document.getElementById('admin-sidebar-overlay');
+  if (!sidebar) return;
+  var open = sidebar.classList.toggle('admin-sidebar--open');
+  if (burger)  burger.classList.toggle('open', open);
+  if (overlay) overlay.classList.toggle('open', open);
+};
+
+window.adminCloseSidebar = function() {
+  var sidebar = document.querySelector('.admin-sidebar');
+  var burger  = document.getElementById('admin-burger');
+  var overlay = document.getElementById('admin-sidebar-overlay');
+  if (sidebar) sidebar.classList.remove('admin-sidebar--open');
+  if (burger)  burger.classList.remove('open');
+  if (overlay) overlay.classList.remove('open');
+};
+
+// ── Logs loader (live poll) ───────────────────────────
+function logsLoad(which) {
+  if (which) logsState.which = which;
+  which = logsState.which || 'main';
+  if (logsState.polling) clearInterval(logsState.polling);
+  var status = document.getElementById('logs-refresh-status');
+  if (status) status.textContent = 'Loading…';
+  adminFetch('/admin/logs?which=' + encodeURIComponent(which)).then(function(data) {
+    logsState.logs = data;
+    if (AS.section === 'logs') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = AdminLogs(which);
+    }
+    if (status) status.textContent = '';
+    logsState.polling = setInterval(function() {
+      adminFetch('/admin/logs?which=' + encodeURIComponent(which)).then(function(d) {
+        logsState.logs = d;
+        if (AS.section === 'logs') {
+          var el = document.getElementById('admin-main');
+          if (el) el.innerHTML = AdminLogs(which);
+        }
+      }).catch(function() {});
+    }, 8000);
+  }).catch(function(e) {
+    logsState.logs = {lines: ['Failed to load logs: ' + (e.message || 'unknown')], source: 'error'};
+    if (AS.section === 'logs') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = AdminLogs(which);
+    }
+    if (status) status.textContent = 'Error';
+  });
+}
+
+function saveAdminKey() {
+  var val = (document.getElementById('admin-key-input') || {}).value || '';
+  if (!val || val === '••••••••') return;
+  AS.adminKey = val.trim();
+  localStorage.setItem('fl_admin_key', AS.adminKey);
+  alert('Admin key saved.');
+  renderAdmin();
+}
+
+function saveScavengerSettings() {
+  var name  = (document.getElementById('scav-sender-name')  || {}).value || '';
+  var email = (document.getElementById('scav-sender-email') || {}).value || '';
+  if (name)  { SETTINGS.senderName  = name;  localStorage.setItem('fl_admin_sender_name',  name); }
+  if (email) { SETTINGS.senderEmail = email; localStorage.setItem('fl_admin_sender_email', email); }
+  alert('Scavenger settings saved.');
+}
+
+// ── DASHBOARD ─────────────────────────────────────
+function AdminDashboard() {
+  var d = dashboardState.data;
+  var body = '';
+  if (!d) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">Loading dashboard…</div>';
+  } else {
+    var stats = [
+      {v: (d.learners_total||0).toLocaleString(),        l:'Active learners',   c:'var(--wave)'},
+      {v: (d.orgs_total||0).toLocaleString(),            l:'Organizations',     c:'var(--deep)'},
+      {v: (d.matches_total||0).toLocaleString(),         l:'Matches made',      c:'var(--gold)'},
+      {v: (d.sessions_total||0).toLocaleString(),        l:'Sessions completed',c:'var(--coral)'},
+    ];
+    body = '<div class="stat-grid">'
+      + stats.map(function(s) {
+          return '<div class="stat-card"><div class="sv" style="color:'+s.c+'">'+s.v+'</div><div class="sl">'+s.l+'</div></div>';
+        }).join('')
+      + '</div>'
+
+    // Manual report trigger
+    body += '<div class="card" style="margin-top:16px;display:flex;align-items:center;justify-content:space-between">'
+      + '<div><h3 style="margin-bottom:4px">Weekly learner reports</h3>'
+      + '<div style="font-size:12px;color:var(--text3)">Send a personalized learning snapshot to every learner active in the last 7 days.</div></div>'
+      + '<button class="btn btn-wave" onclick="adminTriggerWeeklyReport()">Send weekly report now</button>'
+      + '</div>'
+
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px">';
+
+    // Art activity
+    var colorCycle = ['var(--gold)','var(--wave)','var(--deep)','var(--coral)'];
+    body += '<div class="card"><h3 style="margin-bottom:16px">Most active arts — last 7 days</h3>';
+    if (d.art_activity && d.art_activity.length) {
+      body += d.art_activity.map(function(a, idx) {
+        return '<div class="bar-row"><span>'+escH(a.name)+'</span>'
+          + '<div class="bar-bg"><div class="bar-f" style="width:'+a.pct+'%;background:'+colorCycle[idx%colorCycle.length]+'"></div></div>'
+          + '<span style="color:var(--text2);min-width:30px">'+a.pct+'%</span></div>';
+      }).join('');
+    } else {
+      body += '<div style="font-size:13px;color:var(--text3)">No activity yet.</div>';
+    }
+    body += '</div>';
+
+    // Recent activity
+    body += '<div class="card"><h3 style="margin-bottom:14px">Recent platform activity</h3>';
+    var recent = [];
+    (d.recent_learners||[]).forEach(function(l) {
+      recent.push({t:'New learner registered', s:l.display_name+' ('+l.username+')', time:timeAgo(l.created_at), b:'badge-green'});
+    });
+    (d.recent_matches||[]).forEach(function(m) {
+      recent.push({t:'Org match accepted', s:m.learner_name+' → '+m.listing_title, time:timeAgo(m.matched_at), b:'badge-blue'});
+    });
+    recent.sort(function(a,b){ return 0; }).splice(5); // cap at 5
+    if (!recent.length) {
+      body += '<div style="font-size:13px;color:var(--text3)">No activity yet.</div>';
+    } else {
+      body += recent.map(function(a) {
+        return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border)">'
+          + '<div><div style="font-size:13px;color:var(--text)">'+escH(a.t)+'</div>'
+          + '<div style="font-size:11px;color:var(--text3);margin-top:2px">'+escH(a.s)+'</div></div>'
+          + '<div><span class="badge '+a.b+'" style="white-space:nowrap">'+escH(a.time)+'</span></div>'
+          + '</div>';
+      }).join('');
+    }
+    body += '</div></div>';
+  }
+  return '<h2 style="margin-bottom:20px">Platform overview</h2>'+body;
+}
+
+function timeAgo(iso) {
+  if (!iso) return '—';
+  var then = new Date(iso);
+  var now  = new Date();
+  var diff = Math.max(1, Math.floor((now - then) / 60000));
+  if (diff < 60) return diff + ' min ago';
+  if (diff < 1440) return Math.floor(diff/60) + 'h ago';
+  return Math.floor(diff/1440) + 'd ago';
+}
+
+window.adminShowModal = function(title, html) {
+  document.getElementById('admin-modal-title').innerHTML = title;
+  document.getElementById('admin-modal-body').innerHTML  = html;
+  var overlay = document.getElementById('admin-modal-overlay');
+  overlay.style.display = 'flex';
+  // Close on overlay click
+  overlay.onclick = function(e) {
+    if (e.target === overlay) adminCloseModal();
+  };
+};
+
+window.adminCloseModal = function() {
+  document.getElementById('admin-modal-overlay').style.display = 'none';
+};
+
+window.adminTriggerWeeklyReport = function() {
+  if (!confirm('Send weekly learning snapshot emails to all active learners from the past 7 days? This cannot be undone.')) return;
+  var btn = document.querySelector('[onclick="adminTriggerWeeklyReport()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  adminFetch('/admin/reports/weekly', { method: 'POST' })
+    .then(function() {
+      alert('Weekly report sent successfully.');
+      if (btn) { btn.disabled = false; btn.textContent = 'Send weekly report now'; }
+    })
+    .catch(function(e) {
+      alert('Failed to send report: ' + (e.message || 'unknown'));
+      if (btn) { btn.disabled = false; btn.textContent = 'Send weekly report now'; }
+    });
+};
+
+function dashboardLoad() {
+  if (dashboardState.polling) clearInterval(dashboardState.polling);
+  adminFetch('/admin/stats').then(function(data) {
+    dashboardState.data = data;
+    if (AS.section === 'dashboard') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = AdminDashboard();
+    }
+    dashboardState.polling = setInterval(function() {
+      adminFetch('/admin/stats').then(function(d) {
+        dashboardState.data = d;
+        if (AS.section === 'dashboard') {
+          var el = document.getElementById('admin-main');
+          if (el) el.innerHTML = AdminDashboard();
+        }
+      }).catch(function(){});
+    }, 15000);
+  }).catch(function(e) {
+    dashboardState.data = null;
+    if (AS.section === 'dashboard') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = '<h2 style="margin-bottom:20px">Platform overview</h2>'
+        + '<div style="color:var(--coral);font-size:13px">Could not load dashboard: '+escH(e.message||'unknown')+'</div>';
+    }
+  });
+}
+
+function learnersLoad() {
+  adminFetch('/admin/learners').then(function(data) {
+    learnersState.learners = data.learners || [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'learners') el.innerHTML = AdminLearners();
+  }).catch(function(e) {
+    learnersState.learners = [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'learners')
+      el.innerHTML = '<h2 style="margin-bottom:12px">' + T('admin.learners') + '</h2>'
+        + '<div style="color:var(--coral);font-size:13px">Could not load: ' + escH(e.message) + '</div>';
+  });
+}
+
+function AdminLearners() {
+  var ll = learnersState.learners;
+  var countLabel = ll === null ? '' : '<div style="font-size:13px;color:var(--text2)">' + ll.length + ' registered</div>';
+  var body;
+  if (ll === null) {
+    body = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Loading…</td></tr>';
+  } else if (!ll.length) {
+    body = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">No learners yet.</td></tr>';
+  } else {
+    body = ll.map(function(l) {
+      var joined   = l.created_at ? l.created_at.slice(0, 10) : '—';
+      var topArt   = l.top_art
+        ? '<span class="badge badge-blue">' + escH(l.top_art) + '</span>'
+        : '<span style="color:var(--text3)">—</span>';
+      var streak   = l.current_streak
+        ? '<span style="color:var(--wave)">' + l.current_streak + '</span>'
+        : '0';
+      var detailId = 'learner-detail-' + l.id;
+      // Detail row: username, email, bioregion, XP, minutes, streaks, last seen
+      var detailHtml = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:12px;color:var(--text2);padding:4px 0">'
+        + '<div><span style="color:var(--text3)">Username:</span> ' + escH(l.username || '—') + '</div>'
+        + '<div><span style="color:var(--text3)">Email:</span> ' + escH(l.email || '—') + '</div>'
+        + '<div><span style="color:var(--text3)">Bioregion:</span> ' + escH(l.bioregion || '—') + '</div>'
+        + '<div><span style="color:var(--text3)">Status:</span> ' + (l.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>') + '</div>'
+        + '<div><span style="color:var(--text3)">Total XP:</span> ' + l.total_xp + '</div>'
+        + '<div><span style="color:var(--text3)">Total minutes:</span> ' + l.total_minutes + '</div>'
+        + '<div><span style="color:var(--text3)">Longest streak:</span> ' + l.longest_streak + ' days</div>'
+        + '<div><span style="color:var(--text3)">Last seen:</span> ' + (l.last_seen_at ? l.last_seen_at.slice(0,10) : '—') + '</div>'
+        + '</div>';
+      return '<tr id="learner-row-' + l.id + '" style="cursor:pointer" onclick="learnersToggleDetail(' + l.id + ')">'
+        + '<td style="font-weight:500;color:var(--text)">' + escH(l.name || '—') + '</td>'
+        + '<td>' + topArt + '</td>'
+        + '<td>' + l.total_sessions + '</td>'
+        + '<td>' + streak + '</td>'
+        + '<td>' + joined + '</td>'
+        + '<td style="font-size:18px;color:var(--text3);text-align:center" id="learner-toggle-' + l.id + '">›</td>'
+        + '</tr>'
+        + '<tr id="' + detailId + '" style="display:none">'
+        + '<td colspan="6" style="background:var(--bg3);padding:12px 14px 14px;border-bottom:1px solid var(--border)">'
+        + detailHtml + '</td></tr>';
+    }).join('');
+  }
+
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    + '<h2>' + T('admin.learners') + '</h2>' + countLabel + '</div>'
+    + '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+    + '<table class="data-table"><thead><tr>'
+    + '<th>Name</th><th>Top art</th><th>Sessions</th><th>Streak</th><th>Joined</th><th></th>'
+    + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+}
+
+function AdminOrgs() {
+  var body;
+  if (!orgsState.orgs) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">Loading organizations…</div>';
+  } else if (!orgsState.orgs.length) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">No organizations yet.</div>';
+  } else {
+    body = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+      + '<table class="data-table"><thead><tr>'
+      + '<th>Name</th><th>Email</th><th>Type</th><th>Bio.region</th><th>Verified</th><th>Active</th><th>Listings</th><th></th>'
+      + '</tr></thead><tbody>'
+      + orgsState.orgs.map(function(o) {
+          var listId = 'org-lists-' + o.id;
+          return '<tr>'
+            + '<td style="font-weight:500;color:var(--text)">' + escH(o.name) + '</td>'
+            + '<td>' + escH(o.contact_email) + '</td>'
+            + '<td>' + escH(o.org_type || '—') + '</td>'
+            + '<td>' + escH(o.bioregion || '—') + '</td>'
+            + '<td>' + (o.is_verified ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-amber">No</span>') + '</td>'
+            + '<td>' + (o.is_active ? '<span class="badge badge-green">Yes</span>' : '<span class="badge badge-red">No</span>') + '</td>'
+            + '<td style="text-align:center;cursor:pointer" onclick="orgsLoadListings(' + o.id + '); showAdmin(\'orgs\')">'
+              + '<span class="badge badge-blue">' + escH((o.listing_count||0).toLocaleString()) + '</span></td>'
+            + '<td style="text-align:center;white-space:nowrap">'
+              + '<button class="btn btn-ghost btn-sm" onclick="orgsEditDialog(' + o.id + ')">Edit</button> '
+              + (o.is_active
+                ? '<button class="btn btn-ghost btn-sm" onclick="orgsDeactivate(' + o.id + ')" style="color:var(--coral)">Deactivate</button>'
+                : '<button class="btn btn-ghost btn-sm" onclick="orgsReactivate(' + o.id + ')" style="color:var(--wave)">Reactivate</button>')
+            + '</td></tr>'
+            + '<tr id="' + listId + '" style="display:none">'
+            + '<td colspan="8" style="background:var(--bg3);padding:12px 14px;border-bottom:1px solid var(--border)">'
+            + '<div style="font-size:12px;color:var(--text3)">Loading listings…</div></td></tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    + '<h2>' + T('admin.orgs') + '</h2>'
+    + '<button class="btn" onclick="orgsNewDialog()">+ New organization</button>'
+    + '</div>' + body;
+}
+
+var orgsState = { orgs: null, listingsCache: {} };
+
+function orgsLoad() {
+  if (orgsState.polling) clearInterval(orgsState.polling);
+  adminFetch('/admin/orgs').then(function(data) {
+    orgsState.orgs = data;
+    if (AS.section === 'orgs') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = AdminOrgs();
+    }
+    orgsState.polling = setInterval(function() {
+      adminFetch('/admin/orgs').then(function(d) {
+        orgsState.orgs = d;
+        if (AS.section === 'orgs') {
+          var el = document.getElementById('admin-main');
+          if (el) el.innerHTML = AdminOrgs();
+        }
+      }).catch(function(){});
+    }, 30000);
+  }).catch(function(e) {
+    orgsState.orgs = [];
+    if (AS.section === 'orgs') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = '<h2>' + T('admin.orgs') + '</h2>'
+        + '<div style="color:var(--coral);font-size:13px">Could not load: ' + escH(e.message) + '</div>';
+    }
+  });
+}
+
+function orgsLoadListings(orgId) {
+  var container = document.getElementById('org-lists-' + orgId);
+  if (!container) return;
+  container.style.display = (container.style.display === 'none') ? 'table-row' : 'none';
+  if (container.style.display === 'none') return;
+  if (orgsState.listingsCache[orgId]) {
+    container.innerHTML = orgsState.listingsCache[orgId];
+    return;
+  }
+  container.innerHTML = '<td colspan="8" style="background:var(--bg3);padding:12px 14px;border-bottom:1px solid var(--border)">Loading listings…';
+  adminFetch('/admin/orgs/' + orgId + '/listings').then(function(data) {
+    if (!data.length) {
+      container.innerHTML = '<td colspan="8" style="background:var(--bg3);padding:12px 14px;border-bottom:1px solid var(--border)">No listings yet.</td>';
+      return;
+    }
+    var html = '<td colspan="8" style="background:var(--bg3);padding:12px 14px;border-bottom:1px solid var(--border)">'
+      + '<div style="display:grid;gap:6px">'
+      + data.map(function(l) {
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 8px;background:var(--bg2);border-radius:6px">'
+            + '<div><strong>' + escH(l.title) + '</strong>'
+            + ' <span style="font-size:11px;color:var(--text3)">' + escH(l.listing_type || '—') + '</span></div>'
+            + '<div>' + (l.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-amber">Inactive</span>')
+            + ' <span style="font-size:11px;color:var(--text3)">' + (l.created_at||'').slice(0,10) + '</span></div>'
+            + '</div>';
+        }).join('')
+      + '</div></td>';
+    container.innerHTML = html;
+    orgsState.listingsCache[orgId] = html;
+  }).catch(function() {
+    container.innerHTML = '<td colspan="8" style="background:var(--bg3);padding:12px 14px;border-bottom:1px solid var(--border)">Failed to load listings.</td>';
+  });
+}
+
+function orgsNewDialog() {
+  var html = '<h3 style="margin-bottom:12px">New organization</h3>'
+    + '<div style="display:grid;gap:8px">'
+    + '<div><label class="form-label">Name *</label><input class="form-input" id="org-new-name"></div>'
+    + '<div><label class="form-label">Contact email *</label><input class="form-input" id="org-new-email" type="email"></div>'
+    + '<div><label class="form-label">Org type</label><input class="form-input" id="org-new-type" value="other"></div>'
+    + '<div><label class="form-label">Bioregion</label><input class="form-input" id="org-new-bioregion"></div>'
+    + '<div><label class="form-label">Password (optional)</label><input class="form-input" id="org-new-pw" type="password"></div>'
+    + '<div><label class=\"form-label\">Website (optional)</label><input class="form-input" id="org-new-website"></div>'
+    + '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px">'
+    + '<button class="btn btn-ghost" onclick="adminCloseModal()">Cancel</button>'
+    + '<button class="btn" onclick="orgsCreate()">Create</button></div></div>';
+  adminShowModal('Create organization', html);
+}
+
+function orgsCreate() {
+  var name = (document.getElementById('org-new-name')||{}).value || '';
+  var email = (document.getElementById('org-new-email')||{}).value || '';
+  if (!name || !email) { alert('Name and email are required.'); return; }
+  adminFetch('/admin/orgs', {
+    method: 'POST',
+    body: {
+      name: name,
+      contact_email: email,
+      org_type: (document.getElementById('org-new-type')||{}).value || 'other',
+      bioregion: (document.getElementById('org-new-bioregion')||{}).value || '',
+      website: (document.getElementById('org-new-website')||{}).value || '',
+      password: (document.getElementById('org-new-pw')||{}).value || '',
+      is_verified: true,
+      is_active: true,
+    }
+  }).then(function(r) {
+    adminCloseModal();
+    orgsState.orgs = null; // refresh cache
+    orgsLoad();
+  }).catch(function(e) {
+    alert('Could not create org: ' + (e.message || 'unknown'));
+  });
+}
+
+function orgsEditDialog(orgId) {
+  var org = (orgsState.orgs || []).find(function(o) { return o.id === orgId; });
+  if (!org) return;
+  var html = '<h3 style="margin-bottom:12px">Edit organization</h3>'
+    + '<div style="display:grid;gap:8px">'
+    + '<div><label class="form-label">Name *</label><input class="form-input" id="org-edit-name" value="' + escH(org.name) + '"></div>'
+    + '<div><label class="form-label">Contact email</label><input class="form-input" id="org-edit-email" value="' + escH(org.contact_email||'') + '"></div>'
+    + '<div><label class="form-label">Org type</label><input class="form-input" id="org-edit-type" value="' + escH(org.org_type||'other') + '"></div>'
+    + '<div><label class="form-label">Bioregion</label><input class="form-input" id="org-edit-bioregion" value="' + escH(org.bioregion||'') + '"></div>'
+    + '<div><label class="form-label">Website</label><input class="form-input" id="org-edit-website" value="' + escH(org.website||'') + '"></div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<input type="checkbox" id="org-edit-verified" ' + (org.is_verified ? 'checked' : '') + '>'
+    + '<label class="form-label" for="org-edit-verified">Verified</label></div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<input type="checkbox" id="org-edit-active" ' + (org.is_active ? 'checked' : '') + '>'
+    + '<label class="form-label" for="org-edit-active">Active</label></div>'
+    + '<div style=\"display:flex;gap:8px;justify-content:flex-end;padding-top:4px\">'
+    + '<button class="btn btn-ghost" onclick="adminCloseModal()">Cancel</button>'
+    + '<button class="btn" onclick="orgsUpdate(' + orgId + ')">Save</button></div></div>';
+  adminShowModal('Edit organization', html);
+}
+
+function orgsUpdate(orgId) {
+  adminFetch('/admin/orgs/' + orgId, {
+    method: 'PATCH',
+    body: {
+      name: (document.getElementById('org-edit-name')||{}).value,
+      contact_email: (document.getElementById('org-edit-email')||{}).value,
+      org_type: (document.getElementById('org-edit-type')||{}).value,
+      bioregion: (document.getElementById('org-edit-bioregion')||{}).value,
+      website: (document.getElementById('org-edit-website')||{}).value,
+      is_verified: !!(document.getElementById('org-edit-verified')||{}).checked,
+      is_active:   !!(document.getElementById('org-edit-active')||{}).checked,
+    }
+  }).then(function() {
+    adminCloseModal();
+    orgsState.orgs = null;
+    orgsLoad();
+  }).catch(function(e) {
+    alert('Could not update org: ' + (e.message || 'unknown'));
+  });
+}
+
+function orgsDeactivate(orgId) {
+  if (!confirm('Deactivate this organization?')) return;
+  adminFetch('/admin/orgs/' + orgId, { method: 'DELETE' }).then(function() {
+    orgsState.orgs = null;
+    orgsLoad();
+  }).catch(function(e) {
+    alert('Could not deactivate: ' + (e.message || 'unknown'));
+  });
+}
+
+function orgsReactivate(orgId) {
+  adminFetch('/admin/orgs/' + orgId, {
+    method: 'PATCH',
+    body: { is_active: true }
+  }).then(function() {
+    orgsState.orgs = null;
+    orgsLoad();
+  }).catch(function(e) {
+    alert('Could not reactivate: ' + (e.message || 'unknown'));
+  });
+}
+
+var lecsState = { lecs: null };
+
+function AdminLecKos() {
+  var body;
+  if (!lecsState.lecs) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">Loading LECKO library…</div>';
+  } else if (!lecsState.lecs.length) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">No LECKOs found.</div>';
+  } else {
+    body = '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+      + '<table class="data-table"><thead><tr>'
+      + '<th>Title</th><th>Art / Phase</th><th>Type</th><th>Assessment</th><th>Active</th><th>Created</th><th></th>'
+      + '</tr></thead><tbody>'
+      + lecsState.lecs.map(function(l) {
+          return '<tr>'
+            + '<td style="font-weight:500;color:var(--text)">' + escH(l.title) + '</td>'
+            + '<td>' + escH(l.art_name || '—') + ' / ' + escH(l.phase_name || '—') + '</td>'
+            + '<td>' + escH(l.skill_type || '—') + '</td>'
+            + '<td>' + escH(l.assessment_type || '—') + '</td>'
+            + '<td style="text-align:center">' + (l.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-amber">Inactive</span>') + '</td>'
+            + '<td style="text-align:center">' + escH(l.created_at ? l.created_at.slice(0,10) : '—') + '</td>'
+            + '<td style="text-align:center;white-space:nowrap">'
+            + '<button class="btn btn-ghost btn-sm" onclick="lecsEdit(' + l.id + ')">✎ Edit</button> '
+            + '<button class="btn btn-ghost btn-sm" onclick="lecsToggle(' + l.id + ', ' + (l.is_active ? 'false' : 'true') + ')">'
+            + (l.is_active ? 'Deactivate' : 'Activate') + '</button>'
+            + '</td></tr>';
+        }).join('')
+      + '</tbody></table></div>';
+  }
+  return '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    + '<h2>' + T('admin.leckos') + '</h2>'
+    + '</div>' + body;
+}
+
+function lecsLoad() {
+  if (lecsState.polling) clearInterval(lecsState.polling);
+  adminFetch('/admin/leckos').then(function(data) {
+    lecsState.lecs = data || [];
+    if (AS.section === 'leckos') {
+      var el = document.getElementById('admin-main');
+      if (el) el.innerHTML = AdminLecKos();
+    }
+    lecsState.polling = setInterval(function() {
+      adminFetch('/admin/leckos').then(function(d) {
+        lecsState.lecs = d || [];
+        if (AS.section === 'leckos') {
+          var el2 = document.getElementById('admin-main');
+          if (el2) el2.innerHTML = AdminLecKos();
+        }
+      }).catch(function() {});
+    }, 30000);
+  }).catch(function(e) {
+    lecsState.lecs = [];
+    if (AS.section === 'leckos') {
+      var el3 = document.getElementById('admin-main');
+      if (el3) el3.innerHTML = '<h2>' + T('admin.leckos') + '</h2>'
+        + '<div style="color:var(--coral);font-size:13px">Could not load: ' + escH(e.message) + '</div>';
+    }
+  });
+}
+
+function lecsToggle(leckoId, newActive) {
+  adminFetch('/admin/leckos/' + leckoId, {
+    method: 'PATCH',
+    body: { is_active: newActive }
+  }).then(function() {
+    lecsState.lecs = null;
+    lecsLoad();
+  }).catch(function(e) {
+    alert('Could not update LECKO: ' + (e.message || 'unknown'));
+  });
+}
+
+function lecsEdit(leckoId) {
+  var l = (lecsState.lecs || []).find(function(x){ return x.id === leckoId; });
+  if (!l) return;
+
+  var html = '<div style="display:flex;flex-direction:column;gap:12px;max-width:520px;width:100%">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center">'
+    + '<span style="color:var(--text3);font-size:12px">LECKO #' + l.id + '</span>'
+    + '<button class="btn btn-ghost btn-sm" onclick="adminCloseModal()">Close</button>'
+    + '</div>'
+    + '<div><label class="form-label">Title</label>'
+    + '<input id="le-title" class="form-input" value="' + escH(l.title || '') + '"/></div>'
+    + '<div style="display:flex;gap:12px">'
+    + '<div style="flex:1"><label class="form-label">Art ID</label>'
+    + '<input id="le-art" class="form-input" type="number" value="' + escH(String(l.art_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.art_name || '') + '</span></div>'
+    + '<div style="flex:1"><label class="form-label">Phase ID</label>'
+    + '<input id="le-phase" class="form-input" type="number" value="' + escH(String(l.phase_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.phase_name || '') + '</span></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:12px">'
+    + '<div style="flex:1"><label class="form-label">Skill type</label>'
+    + '<input id="le-skill" class="form-input" value="' + escH(l.skill_type || '') + '"/></div>'
+    + '<div style="flex:1"><label class="form-label">Assessment type</label>'
+    + '<input id="le-assess" class="form-input" value="' + escH(l.assessment_type || '') + '"/></div>'
+    + '</div>'
+    + '<div><label class="form-label">Community need</label>'
+    + '<textarea id="le-comm" class="form-input" rows="2">' + escH(l.community_need || '') + '</textarea></div>'
+    + '<div><label class="form-label">Source credit</label>'
+    + '<input id="le-src" class="form-input" value="' + escH(l.source_credit || '') + '"/></div>'
+    + '<div><label class="form-label">Evidence URL</label>'
+    + '<input id="le-ev" class="form-input" value="' + escH(l.evidence_url || '') + '"/></div>'
+    + '<div style="display:flex;align-items:center;gap:8px">'
+    + '<input id="le-active" type="checkbox" ' + (l.is_active ? 'checked' : '') + '/>'
+    + '<label class="form-label" style="margin:0">Active</label>'
+    + '</div>'
+    + '<div><label class="form-label">Description</label>'
+    + '<textarea id="le-desc" class="form-input" rows="2">' + escH(l.description || '') + '</textarea></div>'
+    + '<div style="display:flex;gap:12px">'
+    + '<div style="flex:1"><label class="form-label">Learning domain</label>'
+    + '<input id="le-domain" class="form-input" value="' + escH(l.learning_domain || '') + '"/></div>'
+    + '<div style="flex:1"><label class="form-label">Assessment description</label>'
+    + '<textarea id="le-assess-desc" class="form-input" rows="2">' + escH(l.assessment_desc || '') + '</textarea></div>'
+    + '</div>'
+    + '<div style="display:flex;gap:12px">'
+    + '<div style="flex:1"><label class="form-label">Utility score</label>'
+    + '<input id="le-util" class="form-input" type="number" step="0.1" value="' + escH(String(l.utility_score ?? '')) + '"/></div>'
+    + '</div>'
+    + '</div>'
+    + '<button class="btn btn-wave btn-sm" onclick="lecsSave(' + l.id + ')">Save changes</button>'
+    + '</div>';
+
+  adminShowModal('Edit LECKO — ' + escH(l.title), html);
+}
+
+function lecsSave(leckoId) {
+  var body = {
+    title: (document.getElementById('le-title') || {}).value || undefined,
+    skill_type: (document.getElementById('le-skill') || {}).value || undefined,
+    assessment_type: (document.getElementById('le-assess') || {}).value || undefined,
+    community_need: (document.getElementById('le-comm') || {}).value || undefined,
+    source_credit: (document.getElementById('le-src') || {}).value || undefined,
+    evidence_url: (document.getElementById('le-ev') || {}).value || undefined,
+    is_active: !!(document.getElementById('le-active') || {}).checked,
+  };
+  var descVal = (document.getElementById('le-desc') || {}).value;
+  var domVal  = (document.getElementById('le-domain') || {}).value;
+  var aDesc   = (document.getElementById('le-assess-desc') || {}).value;
+  var utilVal = (document.getElementById('le-util') || {}).value;
+  var artVal  = (document.getElementById('le-art') || {}).value;
+  var phVal   = (document.getElementById('le-phase') || {}).value;
+  if (descVal) body.description = descVal;
+  if (domVal)  body.learning_domain = domVal;
+  if (aDesc)   body.assessment_desc = aDesc;
+  if (utilVal !== '') body.utility_score = parseFloat(utilVal) || 0;
+  if (artVal) body.art_id = parseInt(artVal, 10) || artVal;
+  if (phVal)  body.phase_id = parseInt(phVal, 10) || phVal;
+
+  adminFetch('/admin/leckos/' + leckoId, {
+    method: 'PATCH',
+    body: body
+  }).then(function() {
+    adminCloseModal();
+    lecsState.lecs = null;
+    lecsLoad();
+  }).catch(function(e) {
+    alert('Could not save LECKO: ' + (e.message || 'unknown'));
+  });
+}
+
+function learnersLoad() {
+  adminFetch('/admin/learners').then(function(data) {
+    learnersState.learners = data.learners || [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'learners') el.innerHTML = AdminLearners();
+  }).catch(function(e) {
+    learnersState.learners = [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'learners')
+      el.innerHTML = '<h2 style="margin-bottom:12px">' + T('admin.learners') + '</h2>'
+        + '<div style="color:var(--coral);font-size:13px">Could not load: ' + escH(e.message) + '</div>';
+  });
+}
+
+function learnersToggleDetail(id) {
+  var detail = document.getElementById('learner-detail-' + id);
+  var toggle = document.getElementById('learner-toggle-' + id);
+  if (!detail) return;
+  var open = detail.style.display !== 'none';
+  detail.style.display = open ? 'none' : 'table-row';
+  if (toggle) toggle.textContent = open ? '›' : '⌄';
+}
+
+// ── SCAVENGER AGENT (live) ────────────────────────
+function AdminScavenger() {
+  return '<h2 style="margin-bottom:6px">Web scavenger agent</h2>'
+    + '<p style="margin-bottom:20px">The scavenger uses AI to generate opportunity listings matched to the Arts of Living. Approve to make visible to learners, or reject to discard.</p>'
+    + '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">'
+    + '<button class="btn btn-wave btn-sm" id="scav-run-btn" onclick="scavRun()">&#9654; Run scavenger now</button>'
+    + '<button class="btn btn-ghost btn-sm" onclick="showAdmin(\'outreach\')">View outreach queue →</button>'
+    + '<div style="display:flex;align-items:center;gap:6px;margin-left:4px">'
+    + '<label style="font-size:12px;color:var(--text3)">Focus:</label>'
+    + '<input id="scav-focus" class="form-input" style="font-size:12px;padding:4px 8px;max-width:260px" placeholder="e.g. NGO roles in Southeast Asia" value="NGO, educational, and community opportunities globally"/>'
+    + '<label style="font-size:12px;color:var(--text3);margin-left:4px">Count:</label>'
+    + '<input id="scav-count" class="form-input" type="number" min="1" max="10" value="5" style="font-size:12px;padding:4px 8px;max-width:56px"/>'
+    + '</div></div>'
+    + '<div id="scav-results">'
+    + (scavState.listings === null
+        ? '<p style="color:var(--text3);font-size:13px">Loading listings…</p>'
+        : scavRenderListings(scavState.listings))
+    + '</div>'
+    + '<div class="card" style="margin-top:20px">'
+    + '<h3 style="margin-bottom:10px">Scavenger configuration</h3>'
+    + '<div class="form-group"><label class="form-label">Run frequency</label>'
+    + '<select class="form-input" style="max-width:200px"><option>Every 6 hours</option><option>Every 12 hours</option><option selected>Daily</option><option>Weekly</option></select></div>'
+    + '<p style="font-size:12px;color:var(--text3);margin-top:8px">Scheduled runs not yet wired — use the manual trigger above.</p>'
+    + '</div>';
+}
+
+function scavRenderListings(listings) {
+  if (!listings || listings.length === 0)
+    return '<div style="text-align:center;padding:40px;color:var(--text3);font-size:13px">No scavenged listings yet — run the agent to generate some.</div>';
+  var pending  = listings.filter(function(l) { return !l.is_active; });
+  var approved = listings.filter(function(l) { return  l.is_active; });
+  var html = '';
+  if (pending.length) {
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Pending review (' + pending.length + ')</div>';
+    html += pending.map(scavCard).join('');
+  }
+  if (approved.length) {
+    html += '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:18px 0 10px">Approved & live (' + approved.length + ')</div>';
+    html += approved.map(scavCard).join('');
+  }
+  return html;
+}
+
+function scavCard(r) {
+  var arts = (r.required_arts || []).map(function(s) {
+    return '<span class="badge badge-blue">' + s + '</span>';
+  }).join('');
+  var link = r.source_url
+    ? ' · <a href="' + r.source_url + '" target="_blank" style="font-size:11px;color:var(--wave)">source ↗</a>' : '';
+  var actions = r.is_active
+    ? '<span class="badge badge-green">✓ Live</span>'
+    : '<button class="btn btn-wave btn-sm" onclick="scavApprove(' + r.id + ')">✓ Approve</button>'
+      + ' <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="scavReject(' + r.id + ')">✕ Reject</button>';
+  return '<div class="scav-result">'
+    + '<div style="flex:1"><h4>' + r.title + '</h4>'
+    + '<p style="margin-bottom:6px">' + (r.description || '') + '</p>'
+    + '<p style="font-size:11px;color:var(--text3);margin-bottom:6px">' + r.listing_type + link + '</p>'
+    + '<div style="display:flex;flex-wrap:wrap;gap:4px">' + arts + '</div></div>'
+    + '<div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px">'
+    + actions + '</div></div>';
+}
+
+function scavLoad() {
+  adminFetch('/admin/scavenger/listings').then(function(listings) {
+    scavState.listings = listings;
+    var el = document.getElementById('scav-results');
+    if (el) el.innerHTML = scavRenderListings(listings);
+  }).catch(function() {
+    var el = document.getElementById('scav-results');
+    if (el) el.innerHTML = '<p style="color:var(--coral);font-size:13px">Could not load — check your admin key in Settings.</p>';
+  });
+}
+
+function scavRun() {
+  if (scavState.running) return;
+  var focus = (document.getElementById('scav-focus') || {}).value || '';
+  var count = parseInt((document.getElementById('scav-count') || {}).value || '5', 10);
+  var btn = document.getElementById('scav-run-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Running… (this takes ~10s)'; }
+  scavState.running = true;
+  adminFetch('/admin/scavenger/run', {
+    method: 'POST',
+    body: JSON.stringify({ count: count, focus: focus }),
+  }).then(function(res) {
+    scavState.running = false;
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Run scavenger now'; }
+    if (res && res.inserted != null) {
+      scavState.listings = null; // force reload
+      scavLoad();
+    }
+  }).catch(function(err) {
+    scavState.running = false;
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Run scavenger now'; }
+    alert('Scavenger failed: ' + (err.message || 'unknown error') + '. Check server logs.');
+  });
+}
+
+function scavApprove(id) {
+  adminFetch('/admin/scavenger/listings/' + id + '/approve', { method: 'PATCH' })
+    .then(function() { scavLoad(); })
+    .catch(function(e) { alert('Approve failed: ' + e.message); });
+}
+
+function scavReject(id) {
+  if (!confirm('Delete this listing? Cannot be undone.')) return;
+  adminFetch('/admin/scavenger/listings/' + id, { method: 'DELETE' })
+    .then(function() { scavLoad(); })
+    .catch(function(e) { alert('Reject failed: ' + e.message); });
+}
+
+// ── OUTREACH ──────────────────────────────────────
+function AdminOutreach() {
+  return '<h2 style="margin-bottom:6px">Outreach queue</h2>'
+    + '<p style="margin-bottom:20px">Emails drafted by the scavenger agent, ready for review and sending. Each email notifies an organization that we have learners who have proven the skills they need.</p>'
+    + '<div class="card" style="margin-bottom:14px">'
+    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+    + '<div><h3>UNESCO — Youth Arts Facilitator</h3>'
+    + '<p style="font-size:12px;color:var(--text3);margin-top:2px">careers@unesco.org · 4 learner matches</p></div>'
+    + '<span class="badge badge-amber">Pending review</span></div>'
+    + '<div style="background:var(--bg3);border-radius:var(--r-sm);padding:14px;font-size:13px;line-height:1.8;color:var(--text2);margin-bottom:12px">'
+    + '<strong style="color:var(--text)">Subject: Qualified learners for your Youth Arts Facilitator role</strong><br><br>'
+    + 'Dear UNESCO Recruitment Team,<br><br>'
+    + 'I am writing on behalf of Surfing the Frequencies, a free global learning platform where learners develop and demonstrate human arts through structured, assessed practice.<br><br>'
+    + 'We have identified 4 learners whose demonstrated skills closely match the requirements of your Youth Arts Facilitator listing. Each has completed verified sessions in creativity, cultural competence and communication, and has consented to be introduced to potential opportunities.<br><br>'
+    + 'If you would like to review their portfolios and connect directly, please reply to this email or visit our organization portal at build.onehouse.top/org.<br><br>'
+    + 'With respect,<br>Charbel Haddad<br>Surfing the Frequencies'
+    + '</div>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-wave btn-sm" onclick="alert(\'Email sent!\')">Send email ✓</button>'
+    + '<button class="btn btn-ghost btn-sm">Edit draft</button>'
+    + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)">Discard</button>'
+    + '</div></div>';
+}
+
+// ── AI ENGINE (live) ──────────────────────────────
+function AdminAI() {
+  var groq    = aiState.groq;
+  var library = aiState.library;
+
+  // ── Groq card ─────────────────────────────────
+  var groqCard;
+  if (!groq) {
+    groqCard = '<div class="card"><h3 style="margin-bottom:14px">Groq API <span style="font-size:11px;color:var(--text3);font-weight:400">(primary provider)</span></h3>'
+      + '<p style="font-size:13px;color:var(--text3)">Loading status…</p></div>';
+  } else if (groq.available) {
+    groqCard = '<div class="card"><h3 style="margin-bottom:14px">Groq API <span style="font-size:11px;color:var(--text3);font-weight:400">(primary provider)</span></h3>'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px"><span style="color:var(--text2)">Status</span><span class="badge badge-green">✓ Connected</span></div>'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px"><span style="color:var(--text2)">Model</span><span style="color:var(--text)">' + (groq.model || 'llama-3.1-8b-instant') + '</span></div>'
+      + '<div style="display:flex;justify-content:space-between;font-size:13px"><span style="color:var(--text2)">Free tier</span><span style="color:var(--text)">6,000 req/day · no cost</span></div>'
+      + '<p style="font-size:11px;color:var(--text3);margin-top:10px">Sign up / manage at <a href="https://console.groq.com" target="_blank" style="color:var(--wave)">console.groq.com</a></p>'
+      + '</div>';
+  } else {
+    groqCard = '<div class="card"><h3 style="margin-bottom:14px">Groq API <span style="font-size:11px;color:var(--text3);font-weight:400">(primary provider)</span></h3>'
+      + '<div style="display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px"><span style="color:var(--text2)">Status</span><span class="badge badge-red">✗ Unavailable</span></div>'
+      + '<p style="font-size:12px;color:var(--text3);margin-top:8px">' + (groq.error || 'Cannot reach Groq API') + '</p>'
+      + '<p style="font-size:11px;color:var(--text3);margin-top:6px">Check GROQ_API_KEY in .env and restart the service.</p>'
+      + '</div>';
+  }
+
+  // ── Ollama card ───────────────────────────────
+  var ollamaCard = '<div class="card"><h3 style="margin-bottom:14px">Ollama <span style="font-size:11px;color:var(--text3);font-weight:400">(local fallback)</span></h3>'
+    + '<div style="display:flex;justify-content:space-between;margin-bottom:10px;font-size:13px"><span style="color:var(--text2)">Status</span><span class="badge badge-amber">Not installed</span></div>'
+    + '<p style="font-size:12px;color:var(--text3);line-height:1.7;margin-bottom:10px">'
+    + 'Ollama was removed 2026-05-31 (1GB droplet — insufficient RAM for any model).<br>'
+    + 'The fallback code in <code style="font-size:11px;background:var(--bg4);padding:1px 5px;border-radius:3px">generate.py</code> is intact and will reactivate automatically when reinstalled.<br><br>'
+    + 'To reinstall (requires droplet upgrade to ≥2GB RAM):'
+    + '</p>'
+    + '<code style="display:block;font-size:11px;background:var(--bg4);padding:6px 10px;border-radius:4px;margin-bottom:6px;line-height:1.8">'
+    + 'curl -fsSL https://ollama.ai/install.sh | sh<br>'
+    + 'ollama pull llama3.2:1b<br>'
+    + 'sudo systemctl restart freqlearn'
+    + '</code>'
+    + '<p style="font-size:11px;color:var(--text3)">See Ops Reference → Ollama in the briefing for the full reinstall guide.</p>'
+    + '</div>';
+
+  // ── Library coverage ──────────────────────────
+  var arts = ['move','eat','feel','notice','express','live','listen','give',
+              'receive','collaborate','understand','respect','build','grow','consume'];
+  var artLabels = ['Move','Eat','Feel','Notice','Express','Live','Listen','Give',
+                   'Receive','Collaborate','Understand','Respect','Build','Grow','Consume'];
+
+  var coverageRows;
+  if (!library) {
+    coverageRows = '<p style="color:var(--text3);font-size:13px">Loading library data…</p>';
+  } else {
+    // Count sessions per art slug from library array
+    var counts = {};
+    arts.forEach(function(a) { counts[a] = 0; });
+    library.forEach(function(s) {
+      // library items have art_id — we map via index position (arts sorted by sort_order)
+      // Use art_slug if present, otherwise skip
+      if (s.art_slug) counts[s.art_slug] = (counts[s.art_slug] || 0) + 1;
+    });
+    var maxCount = Math.max(6, Math.max.apply(null, Object.values(counts)));
+    coverageRows = arts.map(function(slug, i) {
+      var count = counts[slug] || 0;
+      var col = count >= 3 ? 'var(--wave)' : count >= 1 ? 'var(--gold)' : 'var(--coral)';
+      return '<div class="bar-row"><span>' + artLabels[i] + '</span>'
+        + '<div class="bar-bg"><div class="bar-f" style="width:' + Math.min(count/maxCount*100,100) + '%;background:' + col + '"></div></div>'
+        + '<span style="color:' + col + ';min-width:24px">' + count + '</span></div>';
+    }).join('');
+  }
+
+  var matrixCard = window.renderCoverageMatrix ? window.renderCoverageMatrix(aiState.coverage) : '';
+
+  var libraryCard = '<div class="card" id="ai-library-card"><h3 style="margin-bottom:4px">Session library coverage</h3>'
+    + '<p style="font-size:12px;color:var(--text3);margin-bottom:14px">Stored sessions per art — green ≥ 3 means the engine serves locally with no API calls.</p>'
+    + coverageRows
+    + '<div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px">'
+    + '<div style="display:flex;gap:8px;margin-bottom:10px">'
+    + '<button class="btn btn-ghost btn-sm" id="seed-dry-btn" onclick="seedDryRun()">&#128269; Dry run</button>'
+    + '<button class="btn btn-wave btn-sm" id="seed-run-btn" onclick="seedRun()">&#9654; Generate missing sessions</button>'
+    + '</div>'
+    + '<div id="seed-progress" style="display:none;margin-bottom:8px">'
+    + '<div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3);margin-bottom:4px">'
+    + '<span id="seed-progress-label">Starting…</span>'
+    + '<span id="seed-progress-pct">0%</span>'
+    + '</div>'
+    + '<div style="background:var(--bg5);border-radius:3px;height:6px;overflow:hidden">'
+    + '<div id="seed-progress-bar" style="height:6px;background:var(--wave);border-radius:3px;width:0%;transition:width .4s"></div>'
+    + '</div></div>'
+    + '<div id="seed-output" style="display:none;background:var(--bg4);border-radius:var(--r-sm);padding:10px;font-size:11px;font-family:monospace;max-height:200px;overflow-y:auto;line-height:1.7;white-space:pre-wrap"></div>'
+    + '<p style="font-size:11px;color:var(--text3);margin-top:8px">Dry run previews without writing to DB. Real run uses GROQ_API_KEY — ~3s per session. Runs in background.</p>'
+    + '</div></div>';
+
+  return '<h2 style="margin-bottom:6px">AI engine status</h2>'
+    + '<p style="margin-bottom:20px">Live provider status, session library coverage, and generation configuration.</p>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">'
+    + groqCard
+    + ollamaCard
+    + '</div>'
+    + libraryCard
+    + matrixCard;
+}
+
+// ── Phase × Art matrix (P24) ──────────────────────
+
+(function buildMatrix() {
+  var arts = ['move','eat','feel','notice','express','live','listen','give',
+              'receive','collaborate','understand','respect','build','grow','consume'];
+  var artLabels = ['Move','Eat','Feel','Notice','Express','Live','Listen','Give',
+                   'Receive','Collaborate','Understand','Respect','Build','Grow','Consume'];
+  var phases    = ['prenascent','nascent','child','adolescent','adult','elder'];
+  var phaseLabels = ['Prenascent','Nascent','Child','Adolescent','Adult','Elder'];
+
+  window.renderCoverageMatrix = function(coverage) {
+    if (!coverage) {
+      return '<div class="card" id="coverage-matrix-card">'
+        + '<h3 style="margin-bottom:8px">Phase \u00d7 Art coverage</h3>'
+        + '<p style="color:var(--text3);font-size:13px">Loading coverage data\u2026</p></div>';
+    }
+
+    // Build count matrix from pre-aggregated [{art_slug, phase, count}]
+    var mx = {};
+    arts.forEach(function(a) {
+      mx[a] = {};
+      phases.forEach(function(p) { mx[a][p] = 0; });
+    });
+    coverage.forEach(function(row) {
+      if (!row.art_slug || !row.phase) return;
+      var ph = row.phase.toLowerCase();
+      if (mx[row.art_slug] && mx[row.art_slug][ph] !== undefined) {
+        mx[row.art_slug][ph] = row.count || 0;
+      }
+    });
+
+    function cellStyle(n) {
+      if (n === 0) return 'color:var(--coral);background:rgba(232,100,100,0.08)';
+      if (n === 1) return 'color:var(--amber,#E8A87C);background:rgba(232,168,124,0.1)';
+      if (n === 2) return 'color:var(--gold,#E8C87C);background:rgba(232,200,124,0.1)';
+      return 'color:var(--wave);background:rgba(0,229,200,0.1)';
+    }
+
+    var header = '<tr>'
+      + '<th style="padding:8px 12px;text-align:left;font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.06em;white-space:nowrap">Art</th>'
+      + phaseLabels.map(function(pl) {
+          return '<th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.06em;min-width:72px">'+pl+'</th>';
+        }).join('')
+      + '<th style="padding:8px 12px;text-align:center;font-size:11px;color:var(--text3);font-weight:700;letter-spacing:.06em">Total</th>'
+      + '</tr>';
+
+    var rows = arts.map(function(slug, i) {
+      var total = 0;
+      var cells = phases.map(function(ph) {
+        var n = mx[slug][ph] || 0; total += n;
+        return '<td style="padding:7px 12px;text-align:center;font-size:13px;font-weight:700;'+cellStyle(n)+'">'+n+'</td>';
+      }).join('');
+      var totalStyle = total > 0 ? 'color:var(--text2)' : 'color:var(--coral)';
+      return '<tr>'
+        + '<td style="padding:7px 12px;font-size:12px;color:var(--text2);white-space:nowrap;border-right:1px solid var(--border)">'+artLabels[i]+'</td>'
+        + cells
+        + '<td style="padding:7px 12px;text-align:center;font-size:12px;font-weight:600;'+totalStyle+'">'+total+'</td>'
+        + '</tr>';
+    }).join('');
+
+    // Summary counts
+    var gaps = 0, total = 0;
+    arts.forEach(function(a) { phases.forEach(function(p) { total++; if (!mx[a][p]) gaps++; }); });
+    var pct = Math.round((total - gaps) / total * 100);
+    var summaryCol = pct >= 80 ? 'var(--wave)' : pct >= 50 ? 'var(--gold,#E8C87C)' : 'var(--coral)';
+
+    return '<div class="card" id="coverage-matrix-card">'
+      + '<div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">'
+      + '<h3>Phase \u00d7 Art coverage</h3>'
+      + '<span style="font-size:13px;font-weight:700;color:'+summaryCol+'">'+pct+'% filled</span>'
+      + '</div>'
+      + '<p style="font-size:12px;color:var(--text3);margin-bottom:14px">Session counts per art per life phase. '
+      + '<span style="color:var(--wave)">\u25a0</span> \u22653 &nbsp;'
+      + '<span style="color:var(--gold,#E8C87C)">\u25a0</span> 2 &nbsp;'
+      + '<span style="color:var(--amber,#E8A87C)">\u25a0</span> 1 &nbsp;'
+      + '<span style="color:var(--coral)">\u25a0</span> 0 gap</p>'
+      + '<div style="overflow-x:auto">'
+      + '<table style="width:100%;border-collapse:collapse">'
+      + '<thead>' + header + '</thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '</table>'
+      + '</div>'
+      + '<p style="font-size:11px;color:var(--text3);margin-top:12px">'+gaps+' gap'+(gaps!==1?'s':'')+' across '+total+' cells ('+arts.length+' arts \u00d7 '+phases.length+' phases). Use <em>Generate missing sessions</em> above to fill them.</p>'
+      + '</div>';
+  };
+})();
+
+function seedDryRun() {
+  var btn = document.getElementById('seed-dry-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Running dry run…'; }
+  var out = document.getElementById('seed-output');
+  if (out) { out.style.display = 'block'; out.textContent = 'Running dry run…\n'; }
+
+  adminFetch('/admin/seed/dry-run', {
+    method: 'POST',
+    body: JSON.stringify({ per_art: 1 }),
+  }).then(function(res) {
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Dry run'; }
+    if (out && res.lines) {
+      out.textContent = res.lines.join('\n');
+      out.scrollTop = out.scrollHeight;
+    }
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '🔍 Dry run'; }
+    if (out) out.textContent = 'Dry run failed: ' + e.message;
+  });
+}
+
+function seedRun() {
+  if (!confirm('Generate sessions for all arts and phases?\nThis will call the Groq API and write to the DB.\nEstimated time: 5–15 minutes.')) return;
+  var btn = document.getElementById('seed-run-btn');
+  var prog = document.getElementById('seed-progress');
+  var out  = document.getElementById('seed-output');
+  if (btn)  { btn.disabled = true; btn.textContent = '⏳ Running…'; }
+  if (prog) prog.style.display = 'block';
+  if (out)  { out.style.display = 'block'; out.textContent = ''; }
+
+  adminFetch('/admin/seed/run', {
+    method: 'POST',
+    body: JSON.stringify({ per_art: 2 }),
+  }).then(function() {
+    seedPoll();
+  }).catch(function(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '▶ Generate missing sessions'; }
+    alert('Failed to start seed job: ' + e.message);
+  });
+}
+
+function seedPoll() {
+  if (seedState.polling) clearInterval(seedState.polling);
+  seedState.polling = setInterval(function() {
+    adminFetch('/admin/seed/status').then(function(s) {
+      var pct   = s.pct || 0;
+      var label = s.total
+        ? (s.progress + ' / ' + s.total + ' sessions')
+        : 'Starting…';
+      var bar   = document.getElementById('seed-progress-bar');
+      var pctEl = document.getElementById('seed-progress-pct');
+      var lblEl = document.getElementById('seed-progress-label');
+      var out   = document.getElementById('seed-output');
+      var btn   = document.getElementById('seed-run-btn');
+
+      if (bar)   bar.style.width   = pct + '%';
+      if (pctEl) pctEl.textContent = pct + '%';
+      if (lblEl) lblEl.textContent = label;
+      if (out && s.log) {
+        out.textContent = s.log.join('\n');
+        out.scrollTop   = out.scrollHeight;
+      }
+
+      if (s.done || !s.running) {
+        clearInterval(seedState.polling);
+        seedState.polling = null;
+        if (btn) { btn.disabled = false; btn.textContent = '▶ Generate missing sessions'; }
+        if (pctEl && s.done) pctEl.textContent = s.error ? '✗ Error' : '✓ Done';
+        if (s.error) alert('Seed job error: ' + s.error);
+        else aiLoad(); // refresh library coverage bars
+      }
+    }).catch(function() {
+      clearInterval(seedState.polling);
+      seedState.polling = null;
+    });
+  }, 3000);
+}
+
+function aiLoad() {
+  // Fetch Groq status
+  adminFetch('/groq/status').then(function(data) {
+    aiState.groq = data;
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'ai') el.innerHTML = AdminAI();
+  }).catch(function() {
+    aiState.groq = { available: false, error: 'Could not reach status endpoint' };
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'ai') el.innerHTML = AdminAI();
+  });
+
+  // Fetch arts map then library — library returns art_id, need to map to slug
+  fetch('/api/arts').then(function(r) { return r.json(); }).then(function(artsData) {
+    var artIdToSlug = {};
+    (artsData || []).forEach(function(a) { artIdToSlug[a.id] = a.slug; });
+    return fetch('/api/generate/library?limit=2000').then(function(r) { return r.json(); }).then(function(data) {
+      // Attach slug to each session before storing
+      (data || []).forEach(function(s) { s.art_slug = artIdToSlug[s.art_id] || null; });
+      return data;
+    });
+  }).then(function(data) {
+    // library endpoint doesn't require admin key — use plain fetch
+    aiState.library = data;
+    var el = document.getElementById('ai-library-card');
+    if (el) {
+      // re-render just the library card rows
+      var el2 = document.getElementById('admin-main');
+      if (el2 && AS.section === 'ai') el2.innerHTML = AdminAI();
+    }
+  }).catch(function() {
+    aiState.library = [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'ai') el.innerHTML = AdminAI();
+  });
+
+  // Fetch phase × art coverage matrix
+  adminFetch('/admin/coverage').then(function(data) {
+    aiState.coverage = data.coverage || [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'ai') el.innerHTML = AdminAI();
+  }).catch(function() {
+    aiState.coverage = [];
+    var el = document.getElementById('admin-main');
+    if (el && AS.section === 'ai') el.innerHTML = AdminAI();
+  });
+}
+
+// ── MODERATE — LECKO review queue ─────────────────
+function AdminModerate() {
+  var s = moderateState;
+  var body = "";
+
+  // Header
+  body += '<h2 style="margin-bottom:6px">' + T('admin.moderate') + '</h2>'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">'
+    + '<p style="font-size:13px;color:var(--text3);margin:0">LECKOs submitted by the community, awaiting review. Approve to add to the live library, or reject to remove.</p>'
+    + '<button class="btn btn-ghost btn-sm" onclick="moderateLoad()">&#8635; Refresh</button>'
+    + '</div>';
+
+  if (s.error) {
+    body += '<div style="padding:14px;background:var(--bg3);border-radius:var(--r-sm);color:var(--coral);font-size:13px;margin-bottom:14px">' + escH(s.error) + '</div>';
+  }
+
+  if (s.loading && !s.pending) {
+    body += '<div style="padding:24px;color:var(--text3);font-size:13px">Loading pending submissions...</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  if (!s.pending) {
+    body += '<div style="padding:24px;color:var(--text3);font-size:13px">No data yet.</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  if (s.pending.length === 0) {
+    body += '<div style="text-align:center;padding:60px;color:var(--text3);font-size:13px;background:var(--bg2);border-radius:var(--r);border:1px solid var(--border)">'
+      + '&#10003; No pending submissions &mdash; the queue is clear.</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  body += '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">' + s.pending.length + ' pending</div>';
+
+  body += s.pending.map(function(l) {
+    var createdDate = l.created_at ? l.created_at.slice(0, 10) : 'unknown';
+    return '<div class="card" style="margin-bottom:14px;padding:18px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;gap:12px">'
+      + '<div style="flex:1;min-width:0">'
+      + '<h3 style="margin-bottom:4px">' + escH(l.title || '(untitled)') + '</h3>'
+      + '<p style="font-size:12px;color:var(--text3);margin:0">' + escH(l.art_name || '') + ' &middot; ' + escH(l.phase_name || '') + ' &middot; submitted ' + escH(createdDate) + '</p>'
+      + '</div>'
+      + '<span class="badge badge-amber">Pending</span>'
+      + '</div>'
+      + (l.description ? '<p style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:10px">' + escH(l.description) + '</p>' : '')
+      + (l.community_need ? '<div style="background:var(--bg3);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Community need</div><p style="font-size:12px;color:var(--text2);margin:0">' + escH(l.community_need) + '</p></div>' : '')
+      + (l.assessment_desc ? '<div style="background:var(--bg3);border-radius:var(--r-sm);padding:10px 12px;margin-bottom:10px"><div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">Assessment</div><p style="font-size:12px;color:var(--text2);margin:0">' + escH(l.assessment_desc) + '</p></div>' : '')
+      + (l.source_credit ? '<div style="font-size:11px;color:var(--text3);margin-bottom:8px">Source: ' + escH(l.source_credit) + '</div>' : '')
+      + '<div style="display:flex;gap:8px;padding-top:4px">'
+      + '<button class="btn btn-wave btn-sm" onclick="moderateReview(' + l.id + ', true)" style="background:var(--wave);border-color:var(--wave);color:#fff">&#10003; Approve</button> '
+      + '<button class="btn btn-ghost btn-sm" onclick="moderateReview(' + l.id + ', false)" style="color:var(--coral)">&#10007; Reject</button> '
+      + '<a href="' + escH(l.evidence_url || '#') + '" target="_blank" rel="noopener" class="btn btn-ghost btn-sm" style="text-decoration:none">View source</a>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<div class="page">' + body + '</div>';
+}
+
+function moderateLoad() {
+  moderateState.loading = true;
+  moderateState.error = null;
+  adminFetch('/contribute/leckos/pending').then(function(data) {
+    moderateState.pending = data || [];
+    moderateState.loading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    moderateState.loading = false;
+    moderateState.error = e.message || 'Failed to load pending LECKOs';
+    moderateState.pending = moderateState.pending || [];
+    renderAdmin();
+  });
+}
+
+function moderateReview(leckoId, approved) {
+  var verb = approved ? 'Approve' : 'Reject';
+  if (!confirm(verb + ' LECKO #' + leckoId + '?')) return;
+  adminFetch('/contribute/leckos/' + leckoId, 'PATCH', { approved: approved }).then(function(r) {
+    moderateLoad();
+  }).catch(function(e) {
+    alert(verb + ' failed: ' + (e.message || 'unknown'));
+  });
+}
+
+// ── SETTINGS ──────────────────────────────────────
+function AdminSettings() {
+  var s = settingsState;
+  var body = "";
+
+  // Header with refresh button
+  body += '<h2 style="margin-bottom:20px">Platform settings</h2>'
+    + '<div style="margin-bottom:14px;display:flex;gap:8px;align-items:center">'
+    + '<button class="btn btn-ghost btn-sm" onclick="settingsLoad()">&#8635; Refresh</button>'
+    + (s.lastSaved ? '<span style="font-size:11px;color:var(--wave)">&#10003; Saved ' + escH(s.lastSaved) + '</span>' : '')
+    + (s.error ? '<span style="font-size:11px;color:var(--coral)">&#10007; ' + escH(s.error) + '</span>' : '')
+    + '</div>';
+
+  if (s.loading && !s.data) {
+    body += '<div style="color:var(--text3);font-size:13px">Loading settings...</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  // Group by category
+  var byCat = { general: [], ai: [], scavenger: [], privacy: [] };
+  Object.keys(s.data || {}).forEach(function(k) {
+    var item = s.data[k];
+    var cat = item.category || 'general';
+    if (!byCat[cat]) byCat[cat] = [];
+    byCat[cat].push({ key: k, value: item.value, desc: item.description });
+  });
+
+  // Category labels and icons
+  var catMeta = [
+    { id: 'general',   label: 'General',    icon: 'General platform settings' },
+    { id: 'ai',        label: 'AI generation', icon: 'AI provider and budget' },
+    { id: 'scavenger', label: 'Scavenger agent', icon: 'Outreach sender settings' },
+    { id: 'privacy',   label: 'Privacy & access', icon: 'Privacy controls' },
+  ];
+
+  body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+
+  catMeta.forEach(function(cm) {
+    var items = byCat[cm.id] || [];
+    body += '<div class="card"><h3 style="margin-bottom:14px">' + cm.label + '</h3>';
+    items.forEach(function(it) {
+      body += '<div class="form-group">';
+      body += '<label class="form-label">' + escH(it.key) + '</label>';
+      if (it.desc) {
+        body += '<p style="font-size:11px;color:var(--text3);margin:0 0 4px 0">' + escH(it.desc) + '</p>';
+      }
+      // Special widget types
+      if (it.key === 'default_language') {
+        var langs = [['en','English'],['fr','French'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ar','Arabic'],['de','German'],['ru','Russian'],['hi','Hindi'],['bn','Bengali'],['pt','Portuguese']];
+        body += '<select class="form-input" data-setting="' + escH(it.key) + '">';
+        langs.forEach(function(l) {
+          body += '<option value="' + l[0] + '"' + (l[0] === it.value ? ' selected' : '') + '>' + l[1] + '</option>';
+        });
+        body += '</select>';
+      } else if (it.key === 'ai_provider') {
+        body += '<select class="form-input" data-setting="' + escH(it.key) + '">';
+        [['groq','Groq (free)'],['anthropic','Anthropic'],['ollama','Ollama (local)'],['library','Library only']].forEach(function(p) {
+          body += '<option value="' + p[0] + '"' + (p[0] === it.value ? ' selected' : '') + '>' + p[1] + '</option>';
+        });
+        body += '</select>';
+      } else if (it.key.indexOf('_verification') !== -1 || it.key.indexOf('allow_') !== -1 || it.key.indexOf('show_') !== -1 || it.key.indexOf('auto_send') !== -1 || it.key.indexOf('_enabled') !== -1) {
+        // Boolean
+        var isTrue = it.value === 'true' || it.value === true || it.value === '1';
+        body += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">';
+        body += '<input type="checkbox" data-setting="' + escH(it.key) + '" data-type="bool"' + (isTrue ? ' checked' : '') + '/>';
+        body += ' Enabled</label>';
+      } else if (it.key.indexOf('budget') !== -1 || it.key.indexOf('min_library') !== -1 || it.key.indexOf('_limit') !== -1 || it.key.indexOf('_threshold') !== -1 || it.key.indexOf('_ttl') !== -1) {
+        // Numeric
+        body += '<input class="form-input" type="number" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '" style="max-width:120px"/>';
+      } else if (it.key === 'admin_email' || it.key.indexOf('_email') !== -1) {
+        // Email
+        body += '<input class="form-input" type="email" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
+      } else if (it.key === 'admin_key' || it.key.indexOf('_key') !== -1) {
+        // Password
+        body += '<input class="form-input" type="password" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
+      } else {
+        // Text
+        body += '<input class="form-input" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
+      }
+      body += '</div>';
+    });
+    body += '<button class="btn btn-wave btn-sm" onclick="settingsSaveCategory(\'' + cm.id + '\')">Save ' + cm.label + '</button>';
+    body += '</div>';
+  });
+
+  body += '</div>';
+
+  // Admin key field -- handled separately for security
+  body += '<div class="card" style="margin-top:16px"><h3 style="margin-bottom:14px">Admin key</h3>'
+    + '<p style="font-size:11px;color:var(--text3);margin-bottom:8px">Stored client-side in localStorage. Must match ADMIN_KEY env var on server.</p>'
+    + '<div style="display:flex;gap:8px">'
+    + '<input class="form-input" id="admin-key-input" type="password" placeholder="Enter ADMIN_KEY" style="max-width:300px"/>'
+    + '<button class="btn btn-wave btn-sm" onclick="saveAdminKey()">Save key</button>'
+    + '</div>'
+    + '<p style="font-size:11px;color:var(--text3);margin-top:6px">' + (AS.adminKey ? '&#10003; Key is set' : '&#9888; Key not set') + '</p>'
+    + '</div>';
+
+  return '<div class="page">' + body + '</div>';
+}
+
+function settingsLoad() {
+  settingsState.loading = true;
+  settingsState.error = null;
+  adminFetch('/admin/settings').then(function(data) {
+    var byKey = {};
+    // Backend returns {settings: {key_name: {value, category, description}, ...}}
+    // (a dict, not a list). Map it directly into settingsState.data.
+    var settingsObj = (data && data.settings) || {};
+    Object.keys(settingsObj).forEach(function(k) {
+      byKey[k] = settingsObj[k];
+    });
+    settingsState.data = byKey;
+    settingsState.loading = false;
+    settingsState.lastSaved = null;
+    renderAdmin();
+  }).catch(function(e) {
+    settingsState.loading = false;
+    settingsState.error = e.message || 'Failed to load';
+    renderAdmin();
+  });
+}
+
+function settingsSaveCategory(category) {
+  var updates = {};
+  // Find all inputs in cards with this category
+  var inputs = document.querySelectorAll('[data-setting]');
+  inputs.forEach(function(inp) {
+    var key = inp.getAttribute('data-setting');
+    var value;
+    if (inp.getAttribute('data-type') === 'bool') {
+      value = inp.checked ? 'true' : 'false';
+    } else {
+      value = inp.value;
+    }
+    updates[key] = value;
+  });
+  settingsState.loading = true;
+  settingsState.error = null;
+  adminFetch('/admin/settings', 'PATCH', { settings: updates }).then(function(resp) {
+    settingsState.loading = false;
+    settingsState.lastSaved = 'just now (' + (resp.updated || 0) + ' keys)';
+    // Reload to get fresh data
+    settingsLoad();
+  }).catch(function(e) {
+    settingsState.loading = false;
+    settingsState.error = e.message || 'Save failed';
+    renderAdmin();
+  });
+}
+
+function AdminSessions() {
+  var s = sessionsState;
+  var body = "";
+
+  // Header
+  body += '<h2 style="margin-bottom:6px">Sessions library</h2>'
+    + '<p style="font-size:13px;color:var(--text3);margin-bottom:20px">AI-generated session templates. These power new sessions for learners — edit prompts or delete unused ones.</p>';
+
+  // Filters bar
+  body += '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">'
+    + '<input class="form-input" id="sessions-search" placeholder="Search title or warmup..." value="' + escH(s.searchQ || '') + '" style="max-width:300px" onkeydown="if(event.key===\'Enter\'){sessionsSearch()}"/>'
+    + '<button class="btn btn-ghost btn-sm" onclick="sessionsSearch()">Search</button>'
+    + '<div style="flex:1"></div>'
+    + (s.loading ? '<span style="font-size:11px;color:var(--text3)">Loading...</span>' : '')
+    + (s.error ? '<span style="font-size:11px;color:var(--coral)">' + escH(s.error) + '</span>' : '')
+    + '</div>';
+
+  if (!s.sessions) {
+    body += '<div style="color:var(--text3);font-size:13px">Loading sessions...</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  if (!s.sessions.length) {
+    body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No sessions match your filters.</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  // Table
+  body += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden;margin-bottom:14px">'
+    + '<table class="data-table"><thead><tr>'
+    + '<th>ID</th><th>Title</th><th>Art / Phase</th><th>Language</th><th>Created</th><th>Warmup preview</th><th></th>'
+    + '</tr></thead><tbody>'
+    + s.sessions.map(function(sess) {
+        var langBadge = '<span class="badge ' + (sess.language === 'en' ? 'badge-green' : (sess.language === 'und' ? 'badge-amber' : 'badge-blue')) + '">' + escH(sess.language || 'en') + '</span>';
+        return '<tr>'
+          + '<td style="font-family:var(--font-mono);font-size:11px;color:var(--text3)">#' + sess.id + '</td>'
+          + '<td style="font-weight:500;color:var(--text)">' + escH(sess.title || '(untitled)') + '</td>'
+          + '<td>' + escH(sess.art_name || '—') + ' / ' + escH(sess.dev_phase_name || '—') + '</td>'
+          + '<td style="text-align:center">' + langBadge + '</td>'
+          + '<td style="font-size:11px;color:var(--text3)">' + escH(sess.created_at ? sess.created_at.slice(0, 10) : '—') + '</td>'
+          + '<td style="font-size:11px;color:var(--text2);max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escH(sess.warmup_preview || '') + '</td>'
+          + '<td style="text-align:center;white-space:nowrap">'
+          + '<button class="btn btn-ghost btn-sm" onclick="sessionsView(' + sess.id + ')">View</button> '
+          + '<button class="btn btn-ghost btn-sm" onclick="sessionsDelete(' + sess.id + ')" style="color:var(--coral)">Delete</button>'
+          + '</td></tr>';
+      }).join('')
+    + '</tbody></table></div>';
+
+  // Pagination
+  var total = s.total || 0;
+  var offset = s.offset || 0;
+  var limit = s.limit || 50;
+  var hasMore = offset + limit < total;
+  var hasPrev = offset > 0;
+  body += '<div style="display:flex;justify-content:space-between;align-items:center">'
+    + '<span style="font-size:12px;color:var(--text3)">Showing ' + (offset + 1) + '–' + Math.min(offset + limit, total) + ' of ' + total.toLocaleString() + '</span>'
+    + '<div style="display:flex;gap:8px">'
+    + '<button class="btn btn-ghost btn-sm" ' + (hasPrev ? '' : 'disabled') + ' onclick="sessionsPage(' + (offset - limit) + ')">← Previous</button>'
+    + '<button class="btn btn-ghost btn-sm" ' + (hasMore ? '' : 'disabled') + ' onclick="sessionsPage(' + (offset + limit) + ')">Next →</button>'
+    + '</div></div>';
+
+  return '<div class="page">' + body + '</div>';
+}
+
+function sessionsLoad() {
+  sessionsState.loading = true;
+  sessionsState.error = null;
+  var url = '/admin/sessions?offset=' + (sessionsState.offset || 0) + '&limit=' + (sessionsState.limit || 50);
+  if (sessionsState.searchQ) url += '&q=' + encodeURIComponent(sessionsState.searchQ);
+  if (sessionsState.artFilter) url += '&art_id=' + sessionsState.artFilter;
+  adminFetch(url).then(function(data) {
+    sessionsState.sessions = data.sessions;
+    sessionsState.total = data.total;
+    sessionsState.loading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    sessionsState.loading = false;
+    sessionsState.error = e.message || 'Failed to load';
+    renderAdmin();
+  });
+}
+
+function sessionsSearch() {
+  sessionsState.offset = 0;
+  var input = document.getElementById('sessions-search');
+  if (input) sessionsState.searchQ = input.value;
+  sessionsLoad();
+}
+
+function sessionsPage(newOffset) {
+  sessionsState.offset = Math.max(0, newOffset);
+  sessionsLoad();
+}
+
+function sessionsView(sessionId) {
+  adminFetch('/admin/sessions/' + sessionId).then(function(sess) {
+    var html = '<h3 style="margin-bottom:14px">' + escH(sess.title || '(untitled)') + '</h3>'
+      + '<div style="display:grid;gap:10px;max-height:60vh;overflow-y:auto">'
+      + '<div><label class="form-label">Title</label>'
+      + '<input class="form-input" id="sess-edit-title" value="' + escH(sess.title || '') + '"/></div>'
+      + '<div><label class="form-label">Language</label>'
+      + '<input class="form-input" id="sess-edit-lang" value="' + escH(sess.language || 'en') + '"/></div>'
+      + '<div><label class="form-label">Warmup prompt</label>'
+      + '<textarea class="form-input" id="sess-edit-warmup" rows="4">' + escH(sess.warmup_prompt || '') + '</textarea></div>'
+      + '<div><label class="form-label">Explore content</label>'
+      + '<textarea class="form-input" id="sess-edit-explore" rows="4">' + escH(sess.explore_content || '') + '</textarea></div>'
+      + '<div><label class="form-label">Challenge prompt</label>'
+      + '<textarea class="form-input" id="sess-edit-challenge" rows="4">' + escH(sess.challenge_prompt || '') + '</textarea></div>'
+      + '<div><label class="form-label">Reflect prompt</label>'
+      + '<textarea class="form-input" id="sess-edit-reflect" rows="4">' + escH(sess.reflect_prompt || '') + '</textarea></div>'
+      + '</div>'
+      + '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">'
+      + '<button class="btn btn-ghost" onclick="adminCloseModal()">Cancel</button>'
+      + '<button class="btn btn-wave" onclick="sessionsSave(' + sess.id + ')">Save changes</button>'
+      + '</div>';
+    adminShowModal('Session #' + sess.id, html);
+  }).catch(function(e) {
+    alert('Failed to load session: ' + (e.message || 'unknown'));
+  });
+}
+
+function sessionsSave(sessionId) {
+  var data = {
+    title: (document.getElementById('sess-edit-title') || {}).value || '',
+    language: (document.getElementById('sess-edit-lang') || {}).value || 'en',
+    warmup_prompt: (document.getElementById('sess-edit-warmup') || {}).value || '',
+    explore_content: (document.getElementById('sess-edit-explore') || {}).value || '',
+    challenge_prompt: (document.getElementById('sess-edit-challenge') || {}).value || '',
+    reflect_prompt: (document.getElementById('sess-edit-reflect') || {}).value || '',
+  };
+  adminFetch('/admin/sessions/' + sessionId, 'PATCH', data).then(function(r) {
+    adminCloseModal();
+    sessionsLoad();
+  }).catch(function(e) {
+    alert('Save failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function sessionsDelete(sessionId) {
+  if (!confirm('Delete session #' + sessionId + '? This cannot be undone.')) return;
+  adminFetch('/admin/sessions/' + sessionId, 'DELETE').then(function(r) {
+    sessionsLoad();
+  }).catch(function(e) {
+    alert('Delete failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function AdminLogs(activeWhich) {
+  activeWhich = activeWhich || 'main';
+  var data = logsState.logs;
+  var body;
+  if (data === null) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">Loading logs…</div>';
+  } else if (!data.lines || !data.lines.length) {
+    body = '<div style="padding:24px;color:var(--text3);font-size:13px">No log entries found.</div>';
+  } else {
+    body = data.lines.map(function(l) {
+      return '<div style="padding:6px 14px;border-bottom:1px solid var(--border);font-size:12px;font-family:var(--font-mono, monospace);color:var(--text2);white-space:pre-wrap;word-break:break-all">' + escH(l) + '</div>';
+    }).join('');
+  }
+  var sourceLabel = data ? (data.source || 'logs') : '…';
+  var statusEl = '<span style="font-size:11px;color:var(--text3)" id="logs-refresh-status"></span>';
+  var mainCls  = 'btn btn-sm' + (activeWhich === 'main'  ? ' btn-wave' : ' btn-ghost');
+  var errorCls = 'btn btn-sm' + (activeWhich === 'error' ? ' btn-wave' : ' btn-ghost');
+  var toggles  = '<button class="' + mainCls  + '" onclick="logsLoad(\'main\')">Main</button>'
+               + '<button class="' + errorCls + '" onclick="logsLoad(\'error\')">Error</button>';
+  return '<h2 style="margin-bottom:16px">' + T('admin.logs') + '</h2>'
+    + '<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
+    + '<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;background:var(--bg2);gap:10px;flex-wrap:wrap">'
+    + '<span style="font-size:11px;color:var(--text3)">freqlearn · ' + escH(sourceLabel) + '</span>'
+    + '<div style="display:flex;gap:8px;align-items:center">'
+    + toggles
+    + statusEl
+    + '<button class="btn btn-ghost btn-sm" style="font-size:11px" onclick="logsLoad()">&#8635; Refresh</button>'
+    + '</div></div>'
+    + body
+    + '</div>';
+}
+
+
+// ── Admin Bioregions ──────────────────────────────
+function AdminBioregions() {
+  return '<h2 style="margin-bottom:16px">🌍 Bioregion Moderation</h2>'
+    + '<div style="margin-bottom:20px">'
+    + '<button class="btn btn-ghost btn-sm" onclick="bioLoadPending();bioLoadPortraits();bioLoadSeedProfiles()">↺ Refresh</button>'
+    + '</div>'
+    + '<div id="bio-pending" style="margin-bottom:24px"></div>'
+    + '<div id="bio-portraits" style="margin-bottom:24px"></div>'
+    + '<div id="bio-seed-profiles"></div>';
+}
+
+function bioLoadPending() {
+  var el = document.getElementById('bio-pending');
+  if (el) el.innerHTML = '<div style="color:var(--text3);font-size:13px">Loading…</div>';
+  adminFetch('/bioregions/admin/pending').then(function(data) {
+    if (!el) return;
+    if (!data.pending || !data.pending.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px 0">No pending contributions.</div>';
+      return;
+    }
+    var rows = data.pending.map(function(c) {
+      return '<tr>'
+        + '<td>'+escH(c.learner_name)+'</td>'
+        + '<td><strong>'+escH(c.bioregion_name)+'</strong></td>'
+        + '<td style="max-width:320px;font-size:12px;line-height:1.5">'+escH(c.statement)+'</td>'
+        + '<td style="font-size:11px;color:var(--text3)">'+c.created_at.slice(0,10)+'</td>'
+        + '<td style="white-space:nowrap">'
+        + '<button class="btn btn-wave btn-sm" onclick="bioModerate('+c.id+',\'approve\')">✓ Approve</button> '
+        + '<button class="btn btn-ghost btn-sm" onclick="bioModerate('+c.id+',\'reject\')" style="color:var(--coral)">✗ Reject</button>'
+        + '</td>'
+        + '</tr>';
+    }).join('');
+    el.innerHTML = '<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">Pending contributions ('+data.pending.length+')</h3>'
+      + '<table class="data-table"><thead><tr><th>Learner</th><th>Bioregion</th><th>Statement</th><th>Submitted</th><th>Action</th></tr></thead>'
+      + '<tbody>'+rows+'</tbody></table>';
+  }).catch(function(e) {
+    if (el) el.innerHTML = '<div style="color:var(--coral);font-size:13px">Error: '+e.message+'</div>';
+  });
+}
+
+function bioModerate(id, action) {
+  adminFetch('/bioregions/admin/contributions/'+id, 'PATCH', {action:action}).then(function() {
+    bioLoadPending();
+    bioLoadPortraits();
+  }).catch(function(e) { alert('Error: '+e.message); });
+}
+
+function bioLoadPortraits() {
+  var el = document.getElementById('bio-portraits');
+  if (el) el.innerHTML = '<div style="color:var(--text3);font-size:13px">Loading…</div>';
+  adminFetch('/bioregions/admin/portraits').then(function(data) {
+    if (!el) return;
+    if (!data.portraits || !data.portraits.length) {
+      el.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:12px 0">No portraits yet.</div>';
+      return;
+    }
+    var rows = data.portraits.map(function(p) {
+      var summaryCell;
+      if (p.summary) {
+        var preview = p.summary.length > 120 ? p.summary.slice(0, 120) + '…' : p.summary;
+        summaryCell = '<span style="color:var(--wave);cursor:pointer;font-size:12px" onclick="bioToggleSummary('+p.id+')" title="Click to expand">✓ '+escH(preview)+'</span>'
+          + '<div id="bio-sum-'+p.id+'" style="display:none;margin-top:8px;font-size:12px;color:var(--text2);line-height:1.7;white-space:pre-wrap;background:var(--bg2);padding:10px;border-radius:6px">'+escH(p.summary)+'</div>';
+      } else {
+        summaryCell = '<span style="color:var(--text3)">—</span>';
+      }
+      var vNum = p.version_number || 1;
+      return '<tr id="bio-row-'+p.id+'">'
+        + '<td style="font-weight:600">'+escH(p.cluster_label)+'</td>'
+        + '<td>'+p.contributor_count+'</td>'
+        + '<td><span class="badge badge-blue" style="cursor:pointer" onclick="bioShowVersionHistory('+p.id+')" title="View version history">v'+vNum+'</span>'
+        + (p.vitality_snapshot ? ' <span style="font-size:11px;color:var(--text3)">'+escH(p.vitality_snapshot)+'</span>' : '')
+        + '</td>'
+        + '<td>'+summaryCell+'</td>'
+        + '<td style="font-size:11px;color:var(--text3)">'+(p.last_generated_at ? p.last_generated_at.slice(0,10) : '—')+'</td>'
+        + '<td><button class="btn btn-wave btn-sm" onclick="bioGeneratePortrait('+p.id+',this)">✦ Generate summary</button></td>'
+        + '</tr>';
+    }).join('');
+    el.innerHTML = '<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">Portraits</h3>'
+      + '<table class="data-table"><thead><tr><th>Cluster</th><th>Voices</th><th>Ver</th><th>Summary</th><th>Last generated</th><th>Action</th></tr></thead>'
+      + '<tbody>'+rows+'</tbody></table>';
+  }).catch(function(e) {
+    if (el) el.innerHTML = '<div style="color:var(--coral);font-size:13px">Error: '+e.message+'</div>';
+  });
+}
+
+function bioToggleSummary(id) {
+  var el = document.getElementById('bio-sum-'+id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function bioGeneratePortrait(id, btn) {
+  btn.disabled = true;
+  btn.textContent = 'Generating…';
+  adminFetch('/bioregions/admin/portraits/'+id+'/generate', 'POST', {}).then(function(data) {
+    btn.textContent = '✓ Done';
+    btn.style.background = 'rgba(0,229,200,0.2)';
+    // Update the summary cell inline without a full reload.
+    // Column order is: Cluster(1) Voices(2) Ver(3) Summary(4) Last generated(5) Action(6)
+    var summaryEl = document.querySelector('#bio-row-'+id+' td:nth-child(4)');
+    if (summaryEl && data.summary) {
+      var preview = data.summary.length > 120 ? data.summary.slice(0, 120) + '…' : data.summary;
+      summaryEl.innerHTML = '<span style="color:var(--wave);cursor:pointer;font-size:12px" onclick="bioToggleSummary('+id+')" title="Click to expand">✓ '+escH(preview)+'</span>'
+        + '<div id="bio-sum-'+id+'" style="display:block;margin-top:8px;font-size:12px;color:var(--text2);line-height:1.7;white-space:pre-wrap;background:var(--bg2);padding:10px;border-radius:6px">'+escH(data.summary)+'</div>';
+    }
+    // Defensive: only updates if the backend response includes version_number
+    if (data.version_number) {
+      var verEl = document.querySelector('#bio-row-'+id+' td:nth-child(3)');
+      if (verEl) {
+        verEl.innerHTML = '<span class="badge badge-blue">v'+data.version_number+'</span>'
+          + (data.vitality_snapshot ? ' <span style="font-size:11px;color:var(--text3)">'+escH(data.vitality_snapshot)+'</span>' : '');
+      }
+    }
+  }).catch(function(e) {
+    btn.disabled = false;
+    btn.textContent = '✦ Generate summary';
+    alert('Error: '+e.message);
+  });
+}
+
+// ── Bioregion version history modal ──────────────────────────────────────────
+// For admin — click any version badge in the portraits table to open.
+
+function bioShowVersionHistory(portraitId) {
+  var modal = document.getElementById('bio-ver-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  document.getElementById('bio-ver-modal-title').textContent = 'Version history — portrait #' + portraitId;
+  var body = document.getElementById('bio-ver-modal-body');
+  body.innerHTML = '<div style="color:var(--text3);font-size:13px">Loading…</div>';
+  adminFetch('/bioregions/admin/portraits/' + portraitId + '/versions').then(function(data) {
+    if (!data || !data.length) {
+      body.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No version history yet.</div>';
+      return;
+    }
+    var rows = data.map(function(v, i) {
+      var isCurrent = (i === 0);
+      var cls = isCurrent ? ' style="background:rgba(0,229,200,.07);font-weight:600"' : '';
+      return '<tr'+cls+'>'
+        + '<td style="padding:8px 10px;font-size:12px;white-space:nowrap"><span class="badge'+(isCurrent?' badge-blue':' badge-blue" style="opacity:.7')+'">'+(isCurrent?'✦ ':'')+'v'+v.version_number+'</span></td>'
+        + '<td style="padding:8px 10px;font-size:12px;color:var(--text3)">' + (v.generated_at ? v.generated_at.slice(0,10) : '—') + '</td>'
+        + '<td style="padding:8px 10px;font-size:12px;text-align:center">' + (v.contributor_count || 0) + '</td>'
+        + '<td style="padding:8px 10px;font-size:12px;color:var(--text3);max-width:220px" title="' + escH(v.change_notes||'') + '">' + (v.change_notes ? escH(_trunc(v.change_notes, 80)) : '<span style="opacity:.5">—</span>') + '</td>'
+        + '<td style="padding:8px 10px;font-size:11px;white-space:nowrap">' + (isCurrent ? '✦ Live' : 'Archived') + '</td>'
+        + '</tr>';
+    }).join('');
+    body.innerHTML = '<div style="overflow-x:auto">'
+      + '<table class="data-table" style="font-size:12px">'
+      + '<thead><tr><th style="padding:8px 10px">Version</th><th style="padding:8px 10px">Date</th><th style="padding:8px 10px;text-align:center">Contributors</th><th style="padding:8px 10px">Change notes</th><th style="padding:8px 10px">Status</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody>'
+      + '</table></div>';
+  }).catch(function(e) {
+    body.innerHTML = '<div style="color:var(--coral);font-size:13px">Error: ' + e.message + '</div>';
+  });
+}
+
+function bioCloseVersionHistory() {
+  var modal = document.getElementById('bio-ver-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function _trunc(s, n) {
+  return s && s.length > n ? s.slice(0, n) + '…' : s || '';
+}
+
+document.addEventListener('click', function(e) {
+  var m = document.getElementById('bio-ver-modal');
+  if (m && e.target === m) bioCloseVersionHistory();
+});
+
+// ── Seed profiles (Layer 1 — read-only, P_FIELDGUIDE) ─────────────────────
+// Calls /api/admin/seed-profiles (lives in admin.py, not bioregions.py — see
+// MAINTENANCE). Renders known fields as columns; anything else returned by
+// the backend's SELECT * shows up under "Other fields" so nothing is hidden
+// even if the schema turns out to have columns this UI doesn't know about.
+
+function bioLoadSeedProfiles() {
+  var el = document.getElementById('bio-seed-profiles');
+  if (el) el.innerHTML = '<div style="color:var(--text3);font-size:13px">Loading…</div>';
+  adminFetch('/admin/seed-profiles').then(function(data) {
+    if (!el) return;
+    var profiles = data.profiles || [];
+    var heading = '<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:6px">🧭 Seed Profiles (Field Guide)</h3>'
+      + '<p style="font-size:11px;color:var(--text3);margin-bottom:10px;line-height:1.5">Author-curated point-form bioregion data — powers the &quot;Where I Stand&quot; dashboard card and the public Field Guide tab. Read-only here; write endpoints pending column-name confirmation — see MAINTENANCE.</p>';
+    if (!profiles.length) {
+      el.innerHTML = heading + '<div style="color:var(--text3);font-size:13px;padding:12px 0">No seed profiles found.</div>';
+      return;
+    }
+    var KNOWN = ['id','name','colonial','archaic','climate','watershed','tectonic','species','soil','resources','vitality','connections','min_lat','max_lat','min_lng','max_lng'];
+    var rows = profiles.map(function(p) {
+      var vit      = p.vitality || '';
+      var vitColor = vit.indexOf('Critical') === 0 ? 'var(--coral)'
+                   : vit.indexOf('Stressed') === 0 ? 'var(--gold)'
+                   : vit.indexOf('At risk')  === 0 ? 'var(--gold)'
+                   : 'var(--wave)';
+      var bounds = (p.min_lat != null && p.max_lat != null && p.min_lng != null && p.max_lng != null)
+        ? Math.abs(p.min_lat).toFixed(1)+'–'+Math.abs(p.max_lat).toFixed(1)+'° '+(p.min_lat>=0?'N':'S')+', '+Math.abs(p.min_lng).toFixed(1)+'–'+Math.abs(p.max_lng).toFixed(1)+'° '+(p.min_lng>=0?'E':'W')
+        : '—';
+      var extraKeys = Object.keys(p).filter(function(k){ return KNOWN.indexOf(k) === -1; });
+      var extraCell = '<span style="color:var(--text3)">—</span>';
+      if (extraKeys.length) {
+        var extraHtml = extraKeys.map(function(k) {
+          return '<div><strong>'+escH(k)+':</strong> '+escH(String(p[k]))+'</div>';
+        }).join('');
+        extraCell = '<span style="color:var(--wave);cursor:pointer;font-size:12px" onclick="bioToggleSeedProfile('+p.id+')">+'+extraKeys.length+' more</span>'
+          + '<div id="bio-sp-extra-'+p.id+'" style="display:none;margin-top:6px;font-size:11px;color:var(--text2);line-height:1.6">'+extraHtml+'</div>';
+      }
+      return '<tr id="bio-sp-row-'+p.id+'">'
+        + '<td style="font-weight:600">'+escH(p.name||'—')+'</td>'
+        + '<td style="font-size:12px;max-width:160px">'+escH(p.climate||'—')+'</td>'
+        + '<td style="font-size:12px;max-width:160px">'+escH(p.watershed||'—')+'</td>'
+        + '<td style="font-size:12px;color:'+vitColor+'">'+escH(p.vitality||'—')+'</td>'
+        + '<td style="font-size:11px;color:var(--text3);white-space:nowrap">'+bounds+'</td>'
+        + '<td>'+extraCell+'</td>'
+        + '</tr>';
+    }).join('');
+    el.innerHTML = heading
+      + '<table class="data-table"><thead><tr><th>Name</th><th>Climate</th><th>Watershed</th><th>Vitality</th><th>Bounding box</th><th>Other fields</th></tr></thead>'
+      + '<tbody>'+rows+'</tbody></table>';
+  }).catch(function(e) {
+    if (el) el.innerHTML = '<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text3);margin-bottom:10px">🧭 Seed Profiles (Field Guide)</h3>'
+      + '<div style="color:var(--coral);font-size:13px">Error: '+e.message+'</div>';
+  });
+}
+
+function bioToggleSeedProfile(id) {
+  var el = document.getElementById('bio-sp-extra-'+id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function escH(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// helper — admin API fetch supporting arbitrary method + body
+// ── Render ────────────────────────────────────────
+function renderAdmin() {
+  var views = {
+    dashboard: AdminDashboard,
+    learners:  AdminLearners,
+    orgs:      AdminOrgs,
+    leckos:    AdminLecKos,
+    sessions:  function() { return '<h2>' + T('admin.sessions') + '</h2>' + '<p style="margin-top:8px;color:var(--text2)">Full session browser coming soon.</p>'; },
+    moderate:  AdminModerate,
+    scavenger: AdminScavenger,
+    outreach:  AdminOutreach,
+    ai:        AdminAI,
+    bioregions: AdminBioregions,
+    settings:  AdminSettings,
+    logs:      AdminLogs,
+  };
+  document.getElementById('admin-main').innerHTML = (views[AS.section] || AdminDashboard)();
+}
+
+window.showAdmin             = showAdmin;
+window.learnersLoad          = learnersLoad;
+window.learnersToggleDetail  = learnersToggleDetail;
+window.saveAdminKey          = saveAdminKey;
+window.saveScavengerSettings = saveScavengerSettings;
+window.submitAdminKey        = submitAdminKey;
+window.scavRun               = scavRun;
+window.scavApprove           = scavApprove;
+window.scavReject            = scavReject;
+window.aiLoad                = aiLoad;
+window.seedDryRun            = seedDryRun;
+window.seedRun               = seedRun;
+window.bioLoadPending    = bioLoadPending;
+window.bioLoadPortraits  = bioLoadPortraits;
+window.bioModerate       = bioModerate;
+window.bioGeneratePortrait = bioGeneratePortrait;
+window.bioLoadSeedProfiles = bioLoadSeedProfiles;
+window.bioToggleSeedProfile = bioToggleSeedProfile;
+window.bioShowVersionHistory = bioShowVersionHistory;
+window.bioCloseVersionHistory = bioCloseVersionHistory;
+window.logsLoad            = logsLoad;
+window.orgsLoad            = orgsLoad;
+window.orgsEditDialog      = orgsEditDialog;
+window.orgsDeactivate      = orgsDeactivate;
+window.orgsReactivate      = orgsReactivate;
+window.orgsNewDialog       = orgsNewDialog;
+window.orgsCreate          = orgsCreate;
+window.orgsUpdate          = orgsUpdate;
+window.orgsLoadListings    = orgsLoadListings;
+window.lecsLoad            = lecsLoad;
+window.lecsToggle          = lecsToggle;
+window.doAdminLogout = function() {
+  AS.adminKey = '';
+  localStorage.removeItem('fl_admin_key');
+  window.location.reload();
+};
+
+// Boot — deferred so all DOM elements exist
+document.addEventListener('DOMContentLoaded', function() {
+  if (!checkAuth()) {
+    var inp = document.getElementById('auth-key-input');
+    if (inp) inp.focus();
+  } else {
+    renderAdmin();
+    showAdmin(AS.section);
+  }
+});
+</script>
+
+</body>
+</html>

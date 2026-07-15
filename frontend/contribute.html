@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Contribute — Surfing the Frequencies</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>"/>
+<meta name="description" content="Help build the universal library of human learning. Submit a LECKO — a Learning Experience Knowledge Chunk Object."/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
+<style>
+:root {
+  --bg:    #080C14; --bg2: #0D1220; --bg3: #131929; --bg4: #1A2238;
+  --card:  #0D1220; --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
+  --wave:  #00E5C8; --wave2: #00B8A2; --wave-dim: rgba(0,229,200,0.10);
+  --deep:  #3D7BFF; --deep-dim: rgba(61,123,255,0.12);
+  --coral: #FF6B6B; --gold: #FFD166;
+  --text:  #E8EDF8; --text2: #8B96B8; --text3: #4A5478;
+  --r: 12px; --r-sm: 8px; --r-lg: 16px;
+  --font-display: 'Syne', sans-serif;
+  --font-body: 'DM Sans', -apple-system, sans-serif;
+  --glow-wave: 0 0 24px rgba(0,229,200,0.18);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: var(--font-body);
+  font-size: 15px; line-height: 1.6; min-height: 100vh;
+}
+a { color: var(--wave); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Nav ── */
+.nav {
+  position: sticky; top: 0; z-index: 100;
+  background: rgba(8,12,20,0.92); backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 24px; height: 52px;
+}
+.logo {
+  font-family: var(--font-display); font-size: 17px; font-weight: 700;
+  background: linear-gradient(135deg, var(--wave), var(--deep));
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  background-clip: text; white-space: nowrap; flex-shrink: 0;
+}
+.nav-back {
+  font-size: 13px; color: var(--text2); margin-left: auto;
+  padding: 6px 14px; border: 1px solid var(--border2);
+  border-radius: 20px; transition: all .2s;
+}
+.nav-back:hover { color: var(--wave); border-color: var(--wave); text-decoration: none; }
+
+/* ── Hero ── */
+.hero {
+  text-align: center; padding: 64px 24px 48px;
+  background: radial-gradient(ellipse 800px 300px at 50% 0%, rgba(0,229,200,0.06) 0%, transparent 70%);
+}
+.hero h1 {
+  font-family: var(--font-display); font-size: clamp(28px,5vw,48px);
+  font-weight: 700; line-height: 1.2; margin-bottom: 16px;
+  background: linear-gradient(135deg, var(--text) 0%, var(--wave) 100%);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+}
+.hero p { font-size: 16px; color: var(--text2); max-width: 560px; margin: 0 auto 12px; line-height: 1.7; }
+.lecko-pill {
+  display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 1.5px;
+  color: var(--wave); border: 1px solid rgba(0,229,200,0.3);
+  background: var(--wave-dim); border-radius: 20px; padding: 4px 12px; margin-bottom: 20px;
+}
+
+/* ── Layout ── */
+.container { max-width: 900px; margin: 0 auto; padding: 0 20px 80px; }
+
+/* ── Card ── */
+.card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 24px;
+}
+.card + .card { margin-top: 20px; }
+.card-wave { box-shadow: var(--glow-wave); border-color: rgba(0,229,200,0.2); }
+
+/* ── Section title ── */
+.section-title {
+  font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+  color: var(--wave); text-transform: uppercase; margin-bottom: 20px;
+}
+
+/* ── Form ── */
+.form-group { margin-bottom: 18px; }
+label { display: block; font-size: 12px; color: var(--text2); margin-bottom: 6px; font-weight: 500; }
+label span { color: var(--coral); }
+input[type=text], input[type=url], input[type=email], textarea, select {
+  width: 100%; background: var(--bg3); border: 1px solid var(--border);
+  border-radius: var(--r-sm); padding: 10px 13px; color: var(--text);
+  font-size: 14px; font-family: inherit; transition: border-color .2s;
+  -webkit-appearance: none;
+}
+input:focus, textarea:focus, select:focus {
+  outline: none; border-color: var(--wave);
+}
+textarea { resize: vertical; min-height: 80px; }
+select option { background: var(--bg3); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 600px) { .form-row { grid-template-columns: 1fr; } }
+.form-hint { font-size: 12px; color: var(--text3); margin-top: 5px; line-height: 1.5; }
+
+/* ── Buttons ── */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 6px; padding: 10px 22px; border-radius: 24px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  border: none; transition: all .2s; white-space: nowrap;
+}
+.btn-wave {
+  background: var(--wave); color: #031210;
+  box-shadow: 0 0 20px rgba(0,229,200,0.25);
+}
+.btn-wave:hover { background: var(--wave2); box-shadow: 0 0 30px rgba(0,229,200,0.4); }
+.btn-wave:disabled { opacity: 0.5; cursor: not-allowed; }
+.btn-full { width: 100%; }
+.btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border2); }
+.btn-ghost:hover { color: var(--wave); border-color: var(--wave); }
+
+/* ── LECKO cards ── */
+.lecko-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px;
+}
+.lecko-card {
+  background: var(--bg2); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 16px; cursor: default;
+  transition: border-color .2s;
+}
+.lecko-card:hover { border-color: var(--border2); }
+.lecko-art-badge {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  color: var(--wave); background: var(--wave-dim);
+  border-radius: 20px; padding: 2px 10px; margin-bottom: 8px; letter-spacing: 0.5px;
+}
+.lecko-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 6px; line-height: 1.4; }
+.lecko-card p { font-size: 13px; color: var(--text2); line-height: 1.6; }
+.lecko-meta { font-size: 11px; color: var(--text3); margin-top: 10px; }
+
+/* ── Filter pills ── */
+.filter-bar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.filter-pill {
+  padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  cursor: pointer; border: 1px solid var(--border); background: var(--bg3);
+  color: var(--text2); transition: all .15s;
+}
+.filter-pill.active, .filter-pill:hover {
+  background: var(--wave-dim); border-color: rgba(0,229,200,0.4); color: var(--wave);
+}
+
+/* ── Success / error ── */
+.alert {
+  padding: 14px 18px; border-radius: var(--r-sm); font-size: 14px; margin-bottom: 20px;
+  display: none;
+}
+.alert.show { display: block; }
+.alert-success { background: rgba(0,229,200,0.1); border: 1px solid rgba(0,229,200,0.3); color: var(--wave); }
+.alert-error   { background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.3); color: var(--coral); }
+
+/* ── Steps indicator ── */
+.steps { display: flex; gap: 0; margin-bottom: 28px; }
+.step {
+  flex: 1; padding: 10px 8px; text-align: center; font-size: 11px; font-weight: 600;
+  color: var(--text3); border-bottom: 2px solid var(--border); transition: all .2s;
+}
+.step.active { color: var(--wave); border-color: var(--wave); }
+.step.done   { color: var(--wave2); border-color: var(--wave2); }
+
+/* ── Spinner ── */
+.spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(3,18,16,0.3);
+  border-top-color: #031210; border-radius: 50%; animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Empty state ── */
+.empty { text-align: center; padding: 48px 24px; color: var(--text3); }
+.empty div { font-size: 32px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<nav class="nav">
+  <div class="logo">Surfing the Frequencies</div>
+  <a href="/" class="nav-back">← Agora</a>
+</nav>
+
+<!-- Hero -->
+<div class="hero">
+  <div class="lecko-pill">LECKO</div>
+  <h1>Help build the universal<br>learning library</h1>
+  <p>A LECKO — <em>Learning Experience Knowledge Chunk Object</em> — is a unit of real human knowledge. Submit one from your own practice, culture, or field of expertise.</p>
+  <p style="font-size:13px;color:var(--text3);margin-top:8px">Every LECKO goes through a review before it enters the library. Quality over quantity.</p>
+</div>
+
+<div class="container">
+
+  <!-- Submission Form -->
+  <div class="card card-wave" style="margin-bottom:28px">
+    <div class="section-title">Submit a LECKO</div>
+
+    <div class="alert alert-success" id="success-msg"></div>
+    <div class="alert alert-error"   id="error-msg"></div>
+
+    <div class="steps">
+      <div class="step active" id="step-1-ind">1 · The knowledge</div>
+      <div class="step"        id="step-2-ind">2 · The context</div>
+      <div class="step"        id="step-3-ind">3 · The evidence</div>
+    </div>
+
+    <form id="lecko-form" onsubmit="return false">
+
+      <!-- Step 1: Core knowledge -->
+      <div id="step-1">
+        <div class="form-group">
+          <label>LECKO title <span>*</span></label>
+          <input type="text" id="f-title" placeholder="e.g. How to read the wind before planting" maxlength="200"/>
+          <div class="form-hint">A clear, concrete title. Not a topic — a piece of knowledge you can actually use.</div>
+        </div>
+        <div class="form-group">
+          <label>What does this teach? <span>*</span></label>
+          <textarea id="f-description" rows="4" placeholder="Describe the knowledge itself. What would someone learn? What would they be able to do or understand?"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Why does the community need this?</label>
+          <textarea id="f-need" rows="3" placeholder="What gap does this fill? What problem does knowing this help solve?"></textarea>
+        </div>
+        <div style="text-align:right">
+          <button class="btn btn-wave" onclick="goStep(2)">Continue →</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Context -->
+      <div id="step-2" style="display:none">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Which art does it develop? <span>*</span></label>
+            <select id="f-art">
+              <option value="">Select an art…</option>
+              <option value="move">Moving — inner-connectedness</option>
+              <option value="eat">Eating — bodily nourishment</option>
+              <option value="feel">Feeling — emotional growth</option>
+              <option value="notice">Noticing — outward awareness</option>
+              <option value="express">Expressing — creative growth</option>
+              <option value="live">Living — civil duties</option>
+              <option value="listen">Listening — empathy</option>
+              <option value="give">Giving — compassion</option>
+              <option value="receive">Receiving — humility</option>
+              <option value="collaborate">Collaborating — shared vision</option>
+              <option value="understand">Understanding — first principles</option>
+              <option value="respect">Respecting — the golden rule</option>
+              <option value="build">Building — green design</option>
+              <option value="grow">Growing — food sovereignty</option>
+              <option value="consume">Consuming — stewardship</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Who is it for? <span>*</span></label>
+            <select id="f-phase">
+              <option value="">Select a phase…</option>
+              <option value="prenascent">Prenascent (0–2, caregiver-led)</option>
+              <option value="child">Child (3–11)</option>
+              <option value="adolescent">Adolescent (12–17)</option>
+              <option value="adult">Adult (18–60)</option>
+              <option value="elder">Elder (61+)</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Domain / field of knowledge</label>
+          <input type="text" id="f-domain" placeholder="e.g. Traditional ecology, Music theory, Conflict resolution…"/>
+          <div class="form-hint">The broader field this knowledge comes from.</div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:space-between">
+          <button class="btn btn-ghost" onclick="goStep(1)">← Back</button>
+          <button class="btn btn-wave" onclick="goStep(3)">Continue →</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Evidence & submit -->
+      <div id="step-3" style="display:none">
+        <div class="form-group">
+          <label>How would you know someone learned it?</label>
+          <textarea id="f-assess" rows="3" placeholder="Describe a task, observation, or conversation that would show real understanding — not a quiz."></textarea>
+          <div class="form-hint">The best assessment is something real: a thing made, a conversation had, a decision taken.</div>
+        </div>
+        <div class="form-group">
+          <label>Source credit</label>
+          <input type="text" id="f-source" placeholder="Where does this knowledge come from? A tradition, a book, a person, a practice…"/>
+        </div>
+        <div class="form-group">
+          <label>Evidence link (optional)</label>
+          <input type="url" id="f-url" placeholder="https://…"/>
+        </div>
+        <div class="form-group">
+          <label>Your name (optional)</label>
+          <input type="text" id="f-name" placeholder="How should we credit you if this is approved?"/>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:space-between">
+          <button class="btn btn-ghost" onclick="goStep(2)">← Back</button>
+          <button class="btn btn-wave" id="submit-btn" onclick="submitLecko()">
+            Submit for review
+          </button>
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- Browse approved LECKOs -->
+  <div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2 style="font-family:var(--font-display);font-size:22px">The library so far</h2>
+      <span id="lecko-count" style="font-size:13px;color:var(--text3)"></span>
+    </div>
+
+    <div class="filter-bar" id="art-filters">
+      <div class="filter-pill active" onclick="filterBy('')">All</div>
+      <div class="filter-pill" onclick="filterBy('move')">Moving</div>
+      <div class="filter-pill" onclick="filterBy('feel')">Feeling</div>
+      <div class="filter-pill" onclick="filterBy('listen')">Listening</div>
+      <div class="filter-pill" onclick="filterBy('grow')">Growing</div>
+      <div class="filter-pill" onclick="filterBy('understand')">Understanding</div>
+      <div class="filter-pill" onclick="filterBy('express')">Expressing</div>
+    </div>
+
+    <div class="lecko-grid" id="lecko-grid">
+      <div class="empty"><div>🌊</div>Loading the library…</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+var API_BASE = '/api';
+var currentArtFilter = '';
+var allLeckos = [];
+
+// ── Step navigation ──────────────────────────────────────────
+function goStep(n) {
+  var title = document.getElementById('f-title');
+  var art   = document.getElementById('f-art');
+  var phase = document.getElementById('f-phase');
+
+  if (n === 2 && !title.value.trim()) {
+    title.focus(); alert('Please add a title first.'); return;
+  }
+  if (n === 3 && (!art.value || !phase.value)) {
+    alert('Please select an art and a phase.'); return;
+  }
+
+  [1,2,3].forEach(function(i) {
+    document.getElementById('step-'+i).style.display = i===n ? '' : 'none';
+    var ind = document.getElementById('step-'+i+'-ind');
+    ind.className = 'step' + (i < n ? ' done' : i === n ? ' active' : '');
+  });
+  window.scrollTo({top: document.querySelector('.card-wave').offsetTop - 70, behavior:'smooth'});
+}
+
+// ── Submit ───────────────────────────────────────────────────
+async function submitLecko() {
+  var btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<div class="spinner"></div>';
+  document.getElementById('success-msg').classList.remove('show');
+  document.getElementById('error-msg').classList.remove('show');
+
+  var payload = {
+    title:           document.getElementById('f-title').value.trim(),
+    art_slug:        document.getElementById('f-art').value,
+    phase_slug:      document.getElementById('f-phase').value,
+    description:     document.getElementById('f-description').value.trim() || null,
+    community_need:  document.getElementById('f-need').value.trim()   || null,
+    assessment_desc: document.getElementById('f-assess').value.trim() || null,
+    learning_domain: document.getElementById('f-domain').value.trim() || null,
+    source_credit:   document.getElementById('f-source').value.trim() || null,
+    evidence_url:    document.getElementById('f-url').value.trim()    || null,
+    submitter_name:  document.getElementById('f-name').value.trim()   || null,
+  };
+
+  try {
+    var resp = await fetch(API_BASE + '/contribute/leckos', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(payload),
+    });
+    var data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Submission failed');
+
+    var msg = document.getElementById('success-msg');
+    msg.textContent = '✓ ' + data.message;
+    msg.classList.add('show');
+
+    // Reset form
+    document.getElementById('lecko-form').reset();
+    goStep(1);
+    window.scrollTo({top: 0, behavior: 'smooth'});
+
+  } catch(e) {
+    var err = document.getElementById('error-msg');
+    err.textContent = '✗ ' + e.message;
+    err.classList.add('show');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Submit for review';
+  }
+}
+
+// ── Browse ───────────────────────────────────────────────────
+async function loadLeckos(artSlug) {
+  var url = API_BASE + '/contribute/leckos?limit=100';
+  if (artSlug) url += '&art_slug=' + artSlug;
+  try {
+    var resp = await fetch(url);
+    allLeckos = await resp.json();
+    renderLeckos(allLeckos);
+    document.getElementById('lecko-count').textContent = allLeckos.length + ' entries';
+  } catch(e) {
+    document.getElementById('lecko-grid').innerHTML =
+      '<div class="empty"><div>🌊</div>Could not load the library — please try again.</div>';
+  }
+}
+
+function renderLeckos(leckos) {
+  var grid = document.getElementById('lecko-grid');
+  if (!leckos.length) {
+    grid.innerHTML = '<div class="empty"><div>🌊</div>No LECKOs here yet — be the first to contribute one.</div>';
+    return;
+  }
+  grid.innerHTML = leckos.map(function(l) {
+    return '<div class="lecko-card">'
+      + '<div class="lecko-art-badge">' + (l.art_name || l.art_id) + ' · ' + (l.phase_name || '') + '</div>'
+      + '<h3>' + esc(l.title) + '</h3>'
+      + (l.description ? '<p>' + esc(l.description.slice(0,160)) + (l.description.length>160?'…':'') + '</p>' : '')
+      + (l.source_credit ? '<div class="lecko-meta">Source: ' + esc(l.source_credit) + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+function filterBy(slug) {
+  currentArtFilter = slug;
+  document.querySelectorAll('.filter-pill').forEach(function(el){
+    el.classList.toggle('active', el.getAttribute('onclick') === "filterBy('"+slug+"')" || (slug==='' && el.getAttribute('onclick')==="filterBy('')"));
+  });
+  loadLeckos(slug);
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Boot
+loadLeckos('');
+</script>
+</body>
+</html>
