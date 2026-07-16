@@ -2,9 +2,25 @@
 
 **A free, lifelong learning platform for making a quality life accessible to everyone.**
 
-LMBoK (Life Management Body of Knowledge) is the technical home for **FreqLearn**, a learning platform built around a simple bet: that intrinsic motivation, autonomous thinking, and self-defined satisfaction can be nurtured at scale, for free, for anyone.
+LMBoK (Life Management Body of Knowledge, also known by its working name **ePangea**) is a forever-free, human-centered, open-source lifelong-learning framework. **FreqLearn** is its technical home — a learning platform built around a simple bet: that intrinsic motivation, autonomous thinking, and self-defined satisfaction can be nurtured at scale, for free, for anyone.
 
 Live at [build.onehouse.top](https://build.onehouse.top).
+
+## Two projects, one vision
+
+**Learning & Growth — LMBoK (ePangea)**
+Built around **15 human arts**, **48 learning domains**, and **6 developmental phases**, shaped by the learner's own bioregion. Two features carry this beyond individual study:
+1. A **community matching tool** connecting real local challenges with learner progress — putting theory into practice, with real impact and meaning.
+2. **Polis** — an Avaaz-like referenda, discussion, and voting section that can shape One 'Ouse's Blueprint.
+
+→ [build.onehouse.top](https://build.onehouse.top)
+
+**Collective & Civic — One 'Ouse (The Blueprint)**
+A MediaWiki-like open dialogue where we design a blueprint for how we — all of us — want humanity to live together. Your own voice becomes your vote; nobody speaks on your behalf unless you choose that. Open to everyone, everywhere. If you — or someone you know — feels inadequate expressing yourself constructively in that kind of space, LMBoK was designed with exactly that struggle in mind: build the capacity there, bring your voice here.
+
+→ [onehouse.top](https://onehouse.top)
+
+**These are not two unrelated products.** LMBoK is where you grow the capacity to participate; One 'Ouse is where that participation actually shapes something. Polis is the intended bridge between the two — a learner's civic voice, earned through real learning, feeding directly into the Blueprint. This integration is a core piece of unfinished vision, not a someday nice-to-have — see Roadmap below.
 
 ## Philosophy
 
@@ -16,14 +32,12 @@ FreqLearn is built on **["The Arts to Be Human"](https://docs.google.com/documen
 
 Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-reliance, and civic agency. The goal isn't credentials — it's a self-directed, AI-assisted path through your own development, at your own pace, in your own language.
 
-A sibling project, **OneHouse** ([onehouse.top](https://onehouse.top)), is a MediaWiki-based civic blueprint platform where communities redesign how they live together — sharing the same 15-pillar structure as FreqLearn's 15 arts.
-
 ## How it works
 
 - Learners move through a **Socratic AI companion** (Warmup → Explore → Challenge → Reflect → Assess) across each art
 - Progress is tracked through **avatar stages** (Seed → Sprout → Sapling → Grove → Forest → Ecosystem) based on XP and breadth of arts explored — no leaderboards, no streaks (this is intentional)
-- Reaching **Grove** stage or higher unlocks **Polis**, a civic participation layer (referenda, proposals, threaded discussion) scoped by community, regional, or global reach
-- **Orgs / Ekklesia** — organization accounts and assembly-level structures sit alongside individual learner accounts
+- Reaching **Grove** stage or higher unlocks **Polis**, the civic participation layer described above (referenda, proposals, threaded discussion), scoped by community, regional, or global reach
+- **Orgs / Ekklesia** — organization accounts post real local challenges; learner progress is matched against them
 - A **bioregion** feature roots each learner's experience in the actual ecological place they live, not a nation-state abstraction
 - Learners can **contribute** bioregion portraits and other content back into the platform, subject to moderation
 
@@ -56,10 +70,10 @@ A sibling project, **OneHouse** ([onehouse.top](https://onehouse.top)), is a Med
         groq_generate.py       Groq provider integration
         ollama_generate.py     Ollama provider integration
         learners.py            Learner profile + progress endpoints
-        matching.py            Learner/content matching algorithm
+        matching.py            Learner/org challenge matching algorithm
         orgs.py                Organization accounts
         peripatos.py           Save-to-Peripatos feature
-        polis.py               Civic participation (Polis)
+        polis.py               Civic participation (Polis) -- see One 'Ouse integration in Roadmap
         progress.py            Progress tracking
         radar.py                Skill radar chart data
         reflections.py          Reflect-phase content
@@ -78,7 +92,14 @@ A sibling project, **OneHouse** ([onehouse.top](https://onehouse.top)), is a Med
       favicon.ico
 
     scripts/        DB migrations, seed data, diagnostics, and one-off fixes
-                    (kept for history — see commit log for context on each)
+                    (kept for history -- see commit log for context on each)
+
+## Roadmap (high level -- see PROJECT_MASTER.md for the working backlog)
+
+- **Polis ↔ One 'Ouse integration** -- the core unfinished piece of the vision above: Polis referenda/votes feeding directly into the One 'Ouse Blueprint, so civic participation earned through learning has a real destination. Not yet scoped.
+- Security hardening ahead of wider public traffic (see PROJECT_MASTER.md)
+- Bioregion page: map view alongside the existing portrait list
+- Org-verified skills, email verification infrastructure, and other items tracked in PROJECT_MASTER.md
 
 ## Status
 
