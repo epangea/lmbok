@@ -7,10 +7,15 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from db import engine, Base
+from cookie_auth import (
+    ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER,
+    ORG_ACCESS_COOKIE, ORG_CSRF_COOKIE,
+)
 
 # ── Route imports ─────────────────────────────────────────
 from routes.auth            import router as auth_router
@@ -70,6 +75,49 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── CSRF (double-submit cookie check) ─────────────────────
+# Added 2026-07-16 as part of P-SEC1: now that auth tokens live in httpOnly
+# cookies, browsers attach them automatically to *any* request to this origin
+# — including ones triggered by a malicious cross-site page. A JS-readable
+# csrf cookie + a required matching header closes that gap: a cross-site
+# attacker can make the browser send the auth cookies, but can't read the
+# csrf cookie's value to also put it in the header, so the request 403s.
+# GET/HEAD/OPTIONS are left alone (safe methods, no state change). The
+# session-establishing endpoints are exempt because no csrf cookie exists
+# until after they succeed.
+_CSRF_EXEMPT_PATHS = {
+    "/api/auth/register", "/api/auth/login", "/api/auth/refresh",
+    "/api/orgs/register", "/api/orgs/login",
+}
+
+@app.middleware("http")
+async def csrf_protect(request: Request, call_next):
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return await call_next(request)
+    if request.url.path in _CSRF_EXEMPT_PATHS:
+        return await call_next(request)
+
+    if request.url.path.startswith("/api/orgs"):
+        cookie_name = ORG_CSRF_COOKIE
+        session_cookie = ORG_ACCESS_COOKIE
+    else:
+        cookie_name = CSRF_COOKIE
+        session_cookie = ACCESS_COOKIE
+
+    # Requests with no session cookie at all aren't riding on cookie auth
+    # (e.g. admin panel's X-Admin-Key header) — let them through; they'll
+    # 401/403 on their own merits if they needed auth.
+    if not request.cookies.get(session_cookie):
+        return await call_next(request)
+
+    cookie_val  = request.cookies.get(cookie_name)
+    header_val  = request.headers.get(CSRF_HEADER)
+    if not cookie_val or not header_val or cookie_val != header_val:
+        return JSONResponse({"detail": "CSRF check failed"}, status_code=403)
+
+    return await call_next(request)
+
 
 # ── Routers ───────────────────────────────────────────────
 app.include_router(auth_router,        prefix="/api/auth",        tags=["auth"])

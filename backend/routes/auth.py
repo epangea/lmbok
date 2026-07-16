@@ -9,8 +9,7 @@ import secrets
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from jose import jwt, JWTError
@@ -19,9 +18,12 @@ from pydantic import BaseModel, EmailStr
 from db import get_db
 from models import Learner, LearnerPreferences, LearnerStreak, RefreshToken
 from mail import send_mail
+from cookie_auth import (
+    ACCESS_COOKIE, REFRESH_COOKIE,
+    set_learner_cookies, clear_learner_cookies,
+)
 
 router = APIRouter()
-security = HTTPBearer()
 
 JWT_SECRET  = os.getenv("JWT_SECRET", "change-this-in-production-please")
 JWT_ALG     = "HS256"
@@ -42,18 +44,13 @@ class LoginRequest(BaseModel):
     email:    EmailStr
     password: str
 
-class TokenResponse(BaseModel):
-    access_token:        str
-    refresh_token:       str
+class AuthResponse(BaseModel):
+    """Tokens no longer travel in the body (P-SEC1, 2026-07-16) — they're set
+    as httpOnly cookies by the route handler instead. Kept minimal for the
+    frontend to update its own state."""
     learner_id:          int
     display_name:        str | None
     onboarding_complete: bool = False
-
-class RefreshRequest(BaseModel):
-    token: str
-
-class LogoutRequest(BaseModel):
-    token: str
 
 class PatchMeRequest(BaseModel):
     bioregion:           str  | None = None
@@ -107,14 +104,17 @@ def _send_verification_email(to_addr: str, display_name: str, token: str) -> Non
         logger.warning(f"Failed to send verification email to {to_addr}: {e}")
 
 
-# ── Dependency: get current learner from Bearer token ─────────
+# ── Dependency: get current learner from the fl_access cookie ─
 
 async def get_current_learner(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ) -> Learner:
+    token = request.cookies.get(ACCESS_COOKIE)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALG])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
         learner_id = int(payload["sub"])
     except (JWTError, KeyError, ValueError):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -131,10 +131,11 @@ async def get_current_learner(
 
 # ── Routes ────────────────────────────────────────────────────
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=AuthResponse)
 async def register(
     req: RegisterRequest,
     background_tasks: BackgroundTasks,
+    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     try:
@@ -183,9 +184,8 @@ async def register(
         ))
         await db.commit()
 
-        return TokenResponse(
-            access_token=make_access_token(learner.id),
-            refresh_token=refresh_raw,
+        set_learner_cookies(response, make_access_token(learner.id), refresh_raw)
+        return AuthResponse(
             learner_id=learner.id,
             display_name=learner.display_name,
             onboarding_complete=False,
@@ -252,8 +252,8 @@ async def resend_verification(
     return {"ok": True, "message": "Verification email sent."}
 
 
-@router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+@router.post("/login", response_model=AuthResponse)
+async def login(req: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(Learner).where(Learner.email == req.email))
     learner = result.scalar_one_or_none()
 
@@ -274,18 +274,21 @@ async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
     ))
     await db.commit()
 
-    return TokenResponse(
-        access_token=make_access_token(learner.id),
-        refresh_token=refresh_raw,
+    set_learner_cookies(response, make_access_token(learner.id), refresh_raw)
+    return AuthResponse(
         learner_id=learner.id,
         display_name=learner.display_name,
         onboarding_complete=bool(learner.onboarding_complete),
     )
 
 
-@router.post("/refresh")
-async def refresh(req: RefreshRequest, db: AsyncSession = Depends(get_db)):
-    hashed = hash_token(req.token)
+@router.post("/refresh", response_model=AuthResponse)
+async def refresh(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    raw = request.cookies.get(REFRESH_COOKIE)
+    if not raw:
+        raise HTTPException(status_code=401, detail="No refresh token")
+
+    hashed = hash_token(raw)
     result = await db.execute(
         select(RefreshToken).where(
             RefreshToken.token_hash == hashed,
@@ -294,6 +297,7 @@ async def refresh(req: RefreshRequest, db: AsyncSession = Depends(get_db)):
     )
     stored = result.scalar_one_or_none()
     if not stored:
+        clear_learner_cookies(response)
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     await db.delete(stored)  # rotate — one use only
@@ -307,22 +311,25 @@ async def refresh(req: RefreshRequest, db: AsyncSession = Depends(get_db)):
     await db.commit()
 
     learner = await db.get(Learner, stored.learner_id)
-    return TokenResponse(
-        access_token=make_access_token(stored.learner_id),
-        refresh_token=new_refresh,
+    set_learner_cookies(response, make_access_token(stored.learner_id), new_refresh)
+    return AuthResponse(
         learner_id=stored.learner_id,
         display_name=learner.display_name if learner else None,
+        onboarding_complete=bool(learner.onboarding_complete) if learner else False,
     )
 
 
 @router.post("/logout")
-async def logout(req: LogoutRequest, db: AsyncSession = Depends(get_db)):
-    hashed = hash_token(req.token)
-    result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == hashed))
-    stored = result.scalar_one_or_none()
-    if stored:
-        await db.delete(stored)
-        await db.commit()
+async def logout(request: Request, response: Response, db: AsyncSession = Depends(get_db)):
+    raw = request.cookies.get(REFRESH_COOKIE)
+    if raw:
+        hashed = hash_token(raw)
+        result = await db.execute(select(RefreshToken).where(RefreshToken.token_hash == hashed))
+        stored = result.scalar_one_or_none()
+        if stored:
+            await db.delete(stored)
+            await db.commit()
+    clear_learner_cookies(response)
     return {"ok": True}
 
 @router.patch("/me")

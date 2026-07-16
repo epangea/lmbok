@@ -29,7 +29,7 @@ import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Header
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
@@ -39,6 +39,7 @@ import jwt
 
 from db import get_db
 from models import Organization, OpportunityListing, OpportunityMatch, Learner, Message
+from cookie_auth import ORG_ACCESS_COOKIE, set_org_cookies, clear_org_cookies
 
 router = APIRouter()
 
@@ -68,13 +69,15 @@ def _decode_token(token: str) -> dict:
 
 
 async def get_current_org(
-    authorization: Optional[str] = Header(default=None),
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ) -> Organization:
-    """Dependency: validates org Bearer token, returns Organization row."""
-    if not authorization or not authorization.startswith("Bearer "):
+    """Dependency: validates org access token from the fl_org_access httpOnly
+    cookie (2026-07-16, P-SEC1 — previously a Bearer header, script-readable
+    when stashed in localStorage)."""
+    token = request.cookies.get(ORG_ACCESS_COOKIE)
+    if not token:
         raise HTTPException(401, "Org token required")
-    token = authorization.split(" ", 1)[1]
     try:
         payload = _decode_token(token)
     except jwt.ExpiredSignatureError:
@@ -180,7 +183,7 @@ def _slugify(text: str) -> str:
 
 
 @router.post("/register")
-async def register_org(req: OrgRegister, db: AsyncSession = Depends(get_db)):
+async def register_org(req: OrgRegister, response: Response, db: AsyncSession = Depends(get_db)):
     """Register a new organization account."""
     if not req.name.strip() or not req.email.strip() or not req.password:
         raise HTTPException(400, "name, email, and password are required")
@@ -221,16 +224,16 @@ async def register_org(req: OrgRegister, db: AsyncSession = Depends(get_db)):
     await db.commit()
     await db.refresh(org)
 
+    set_org_cookies(response, _make_token(org.id))
     return {
-        "ok":    True,
-        "token": _make_token(org.id),
-        "org":   _org_dict(org),
+        "ok":  True,
+        "org": _org_dict(org),
     }
 
 
 @router.post("/login")
-async def login_org(req: OrgLogin, db: AsyncSession = Depends(get_db)):
-    """Login and receive an org access token."""
+async def login_org(req: OrgLogin, response: Response, db: AsyncSession = Depends(get_db)):
+    """Login and receive an org access token (set as an httpOnly cookie)."""
     result = await db.execute(
         select(Organization).where(
             Organization.contact_email == req.email.strip().lower(),
@@ -244,11 +247,19 @@ async def login_org(req: OrgLogin, db: AsyncSession = Depends(get_db)):
     if not _check_pw(req.password, org.password_hash):
         raise HTTPException(401, "Invalid credentials")
 
+    set_org_cookies(response, _make_token(org.id))
     return {
-        "ok":    True,
-        "token": _make_token(org.id),
-        "org":   _org_dict(org),
+        "ok":  True,
+        "org": _org_dict(org),
     }
+
+
+@router.post("/logout")
+async def logout_org(response: Response):
+    """Org access tokens are single long-lived tokens (no server-side refresh
+    record), so logout just clears the cookies client-side."""
+    clear_org_cookies(response)
+    return {"ok": True}
 
 
 # ── Org profile ────────────────────────────────────────────

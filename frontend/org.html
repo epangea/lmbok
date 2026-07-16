@@ -246,6 +246,9 @@ hr{border:none;border-top:1px solid var(--bd);margin:24px 0}
       </div>
     </div>
   </div>
+  <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--text3)">
+    By continuing you agree to our <a href="/privacy.html" target="_blank" style="color:var(--text2)">Privacy Note</a>.
+  </div>
 </div>
 
 <!-- LEARNER APP -->
@@ -315,25 +318,32 @@ const S={learner:null,streak:null,myMatches:[],topMatch:null,allListings:[],filt
 const ARTS=[{s:'move',n:'Move'},{s:'eat',n:'Eat'},{s:'feel',n:'Feel'},{s:'notice',n:'Notice'},{s:'express',n:'Express'},{s:'live',n:'Live'},{s:'listen',n:'Listen'},{s:'give',n:'Give'},{s:'receive',n:'Receive'},{s:'collaborate',n:'Collaborate'},{s:'understand',n:'Understand'},{s:'respect',n:'Respect'},{s:'build',n:'Build'},{s:'grow',n:'Grow'},{s:'consume',n:'Consume'}];
 
 // ── API ───────────────────────────────────────────────────
+// Learner and org sessions each live in their own httpOnly cookies now
+// (fl_access/fl_refresh for learners, fl_org_access for orgs) — set by the
+// server, never touched by localStorage, and immune to XSS token theft
+// (P-SEC1, 2026-07-16). State-changing calls carry the matching CSRF
+// double-submit header (fl_csrf / fl_org_csrf cookie value echoed back).
+function getCookie(name){const m=document.cookie.match('(?:^|; )'+name+'=([^;]*)');return m?decodeURIComponent(m[1]):null;}
+
 const LA={
   async c(m,p,b){
-    const t=localStorage.getItem('fl_access');
-    const o={method:m,headers:{'Content-Type':'application/json',...(t?{Authorization:`Bearer ${t}`}:{})}};
+    const o={method:m,credentials:'same-origin',headers:{'Content-Type':'application/json'}};
+    if(m!=='GET'){const csrf=getCookie('fl_csrf');if(csrf)o.headers['X-CSRF-Token']=csrf;}
     if(b!==undefined)o.body=JSON.stringify(b);
     let r=await fetch('/api'+p,o);
-    if(r.status===401){const ok=await LA.ref();if(ok){o.headers.Authorization=`Bearer ${localStorage.getItem('fl_access')}`;r=await fetch('/api'+p,o);}else{showGate();return null;}}
+    if(r.status===401){const ok=await LA.ref();if(ok){r=await fetch('/api'+p,o);}else{showGate();return null;}}
     return r.ok?r.json().catch(()=>null):null;
   },
-  async ref(){const rt=localStorage.getItem('fl_refresh');if(!rt)return false;const r=await fetch('/api/auth/refresh',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({refresh_token:rt})});if(r.ok){const d=await r.json();localStorage.setItem('fl_access',d.access_token);return true;}return false;},
+  async ref(){const r=await fetch('/api/auth/refresh',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'}});return r.ok;},
   get:p=>LA.c('GET',p),post:(p,b)=>LA.c('POST',p,b),del:p=>LA.c('DELETE',p)
 };
 const OA={
   async c(m,p,b){
-    const t=localStorage.getItem('fl_org_token');if(!t){showGate();return null;}
-    const o={method:m,headers:{'Content-Type':'application/json',Authorization:`Bearer ${t}`}};
+    const o={method:m,credentials:'same-origin',headers:{'Content-Type':'application/json'}};
+    if(m!=='GET'){const csrf=getCookie('fl_org_csrf');if(csrf)o.headers['X-CSRF-Token']=csrf;}
     if(b!==undefined)o.body=JSON.stringify(b);
     const r=await fetch('/api/orgs'+p,o);
-    if(r.status===401){localStorage.removeItem('fl_org_token');showGate();return null;}
+    if(r.status===401){S.org=null;if(!S._booting)showGate();return null;}
     return r.ok?r.json().catch(()=>null):null;
   },
   get:p=>OA.c('GET',p),post:(p,b)=>OA.c('POST',p,b),patch:(p,b)=>OA.c('PATCH',p,b),del:p=>OA.c('DELETE',p)
@@ -342,10 +352,16 @@ const OA={
 // ── Boot ──────────────────────────────────────────────────
 async function boot(){
   document.documentElement.dataset.theme=localStorage.getItem('fl_theme')||'dark';
-  const ot=localStorage.getItem('fl_org_token');
-  if(ot){const o=await OA.get('/me');if(o){S.org=o;showOA();await loadOrg();return;}localStorage.removeItem('fl_org_token');}
+  // No more localStorage flag to check first — just ask each API whether a
+  // valid session cookie is present; a 401 from OA.get('/me') falls through
+  // to the learner check below. S._booting suppresses OA.c's normal
+  // "401 → show login gate" side effect while we're still probing.
+  S._booting=true;
+  const o=await OA.get('/me');
+  if(o){S._booting=false;S.org=o;showOA();await loadOrg();return;}
   // LA.call handles 401→refresh→retry internally; one call is enough
   const me=await LA.get('/learners/me');
+  S._booting=false;
   if(me){S.learner=me;showLA();await loadLearner();return;}
   showGate();
 }
@@ -642,11 +658,8 @@ async function lrnLogin(){
       err=document.getElementById("ll-err");
   if(err) err.textContent="";
   if(!em||!pw){if(err)err.textContent="Email and password required.";return;}
-  var r=await fetch("/api/auth/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:em,password:pw})});
+  var r=await fetch("/api/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:em,password:pw})});
   if(r.ok){
-    var d=await r.json();
-    localStorage.setItem("fl_access",d.access_token);
-    if(d.refresh_token)localStorage.setItem("fl_refresh",d.refresh_token);
     await boot();
   } else {
     var d2=await r.json().catch(()=>({}));
@@ -659,33 +672,33 @@ function omMode(m){ document.getElementById('om-login').style.display=m==='login
 async function omLogin(){
   var em=document.getElementById('om-e')?.value.trim(),pw=document.getElementById('om-p')?.value,err=document.getElementById('om-err');
   if(err)err.textContent='';if(!em||!pw){if(err)err.textContent='Email and password required.';return;}
-  var r=await fetch('/api/orgs/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});
-  if(r.ok){var d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;closeOrgModal();showOA();await loadOrg();}
+  var r=await fetch('/api/orgs/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});
+  if(r.ok){var d=await r.json();S.org=d.org;closeOrgModal();showOA();await loadOrg();}
   else{var d2=await r.json().catch(function(){return{};});if(err)err.textContent=d2.detail||'Invalid credentials.';}
 }
 async function omRegister(){
   var nm=document.getElementById('om-rn')?.value.trim(),em=document.getElementById('om-re')?.value.trim(),pw=document.getElementById('om-rp')?.value,ty=document.getElementById('om-rt')?.value,err=document.getElementById('om-rerr');
   if(err)err.textContent='';if(!nm||!em||!pw){if(err)err.textContent='All fields required.';return;}if(pw.length<8){if(err)err.textContent='Password must be 8+ characters.';return;}
-  var r=await fetch('/api/orgs/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,email:em,password:pw,org_type:ty})});
-  if(r.ok){var d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;closeOrgModal();showOA();await loadOrg();}
+  var r=await fetch('/api/orgs/register',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,email:em,password:pw,org_type:ty})});
+  if(r.ok){var d=await r.json();S.org=d.org;closeOrgModal();showOA();await loadOrg();}
   else{var d2=await r.json().catch(function(){return{};});if(err)err.textContent=d2.detail||'Registration failed.';}
 }
 function gMode(m){document.getElementById('g-login').style.display=m==='login'?'block':'none';document.getElementById('g-reg').style.display=m==='reg'?'block':'none';}
 async function orgLogin(){
   const em=document.getElementById('oe')?.value.trim(),pw=document.getElementById('op')?.value,err=document.getElementById('ol-err');
   if(err)err.textContent='';if(!em||!pw){if(err)err.textContent='Email and password required.';return;}
-  const r=await fetch('/api/orgs/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});
-  if(r.ok){const d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;showOA();await loadOrg();}
+  const r=await fetch('/api/orgs/login',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,password:pw})});
+  if(r.ok){const d=await r.json();S.org=d.org;showOA();await loadOrg();}
   else err.textContent='Invalid credentials.';
 }
 async function orgRegister(){
   const nm=document.getElementById('rn')?.value.trim(),em=document.getElementById('re2')?.value.trim(),pw=document.getElementById('rp')?.value,ty=document.getElementById('rt')?.value,err=document.getElementById('re3');
   err.textContent='';if(!nm||!em||!pw){err.textContent='All fields required.';return;}if(pw.length<8){err.textContent='Password must be 8+ characters.';return;}
-  const r=await fetch('/api/orgs/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,email:em,password:pw,org_type:ty})});
-  if(r.ok){const d=await r.json();localStorage.setItem('fl_org_token',d.token);S.org=d.org;showOA();await loadOrg();}
+  const r=await fetch('/api/orgs/register',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:nm,email:em,password:pw,org_type:ty})});
+  if(r.ok){const d=await r.json();S.org=d.org;showOA();await loadOrg();}
   else{const d=await r.json().catch(()=>({}));err.textContent=d.detail||'Registration failed.';}
 }
-function orgLogout(){localStorage.removeItem('fl_org_token');S.org=null;showGate();}
+function orgLogout(){OA.post('/logout').catch(()=>{});S.org=null;showGate();}
 
 // ── Components ────────────────────────────────────────────
 function ring(score,size=62){

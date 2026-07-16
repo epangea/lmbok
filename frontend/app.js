@@ -134,32 +134,41 @@ var SND = {
 // API CLIENT
 // Talks to FastAPI backend at /api/*
 // ══════════════════════════════════════════════════
+// Reads a non-httpOnly cookie by name (used only for the CSRF double-submit
+// token — fl_access/fl_refresh are httpOnly and never visible to JS, by
+// design, since P-SEC1 2026-07-16).
+function getCookie(name) {
+  const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 const API = {
   base: '/api',
 
   async req(method, path, body, isRetry) {
-    const token = localStorage.getItem('fl_token');
     const opts = {
       method,
+      credentials: 'same-origin',
       headers: { 'Content-Type': 'application/json' },
     };
-    if (token) opts.headers['Authorization'] = 'Bearer ' + token;
-    if (body)  opts.body = JSON.stringify(body);
+    if (method !== 'GET' && method !== 'HEAD') {
+      const csrf = getCookie('fl_csrf');
+      if (csrf) opts.headers['X-CSRF-Token'] = csrf;
+    }
+    if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API.base + path, opts);
-    if (res.status === 401 && !isRetry && token) {
-      // Token expired — try to refresh once then retry
-      const rt = localStorage.getItem('fl_refresh');
-      if (rt) {
-        try {
-          const rr = await fetch('/api/auth/refresh', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:rt})});
-          if (rr.ok) {
-            const rd = await rr.json();
-            localStorage.setItem('fl_token',   rd.access_token);
-            localStorage.setItem('fl_refresh', rd.refresh_token);
-            return API.req(method, path, body, true);  // retry once with new token
-          }
-        } catch(e) { /* fall through to logout */ }
-      }
+    if (res.status === 401 && !isRetry && API.isLoggedIn()) {
+      // Access cookie expired — try a silent refresh (cookie-based, no body
+      // needed) then retry once.
+      try {
+        const rr = await fetch('/api/auth/refresh', {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+        });
+        if (rr.ok) {
+          return API.req(method, path, body, true);  // retry once now that cookies are refreshed
+        }
+      } catch(e) { /* fall through to logout */ }
       // Can't refresh — log out
       API.logout();
       set({view:'login', authError:'Your session expired — please sign in again', learner:null});
@@ -178,32 +187,30 @@ const API = {
   delete: (path)       => API.req('DELETE', path),
 
   async register(username, email, password, display_name, birth_year) {
+    // Server sets fl_access/fl_refresh/fl_csrf as httpOnly (resp. readable)
+    // cookies directly on this response — nothing token-related to store here.
     const data = await API.post('/auth/register', { username, email, password, display_name, birth_year });
-    localStorage.setItem('fl_token',   data.access_token);
-    localStorage.setItem('fl_refresh', data.refresh_token);
     localStorage.setItem('fl_learner', JSON.stringify({ id: data.learner_id, display_name: data.display_name, onboarding_complete: false }));
     return data;
   },
 
   async login(email, password) {
     const data = await API.post('/auth/login', { email, password });
-    localStorage.setItem('fl_token',   data.access_token);
-    localStorage.setItem('fl_refresh', data.refresh_token);
     localStorage.setItem('fl_learner', JSON.stringify({ id: data.learner_id, display_name: data.display_name, onboarding_complete: !!data.onboarding_complete }));
     return data;
   },
 
   logout() {
-    const rt = localStorage.getItem('fl_refresh');
-    if (rt) API.post('/auth/logout', { token: rt }).catch(() => {});
-    localStorage.removeItem('fl_token');
-    localStorage.removeItem('fl_refresh');
+    API.post('/auth/logout').catch(() => {});
     localStorage.removeItem('fl_learner');
     localStorage.removeItem('fl_artScores');
     localStorage.removeItem('fl_dash_cache');
   },
 
-  isLoggedIn() { return !!localStorage.getItem('fl_token'); },
+  // fl_learner is just a display-info cache (id/name/onboarding flag), not a
+  // credential — it's fine in localStorage. The actual session lives in the
+  // httpOnly cookies and is validated server-side on every request.
+  isLoggedIn() { return !!localStorage.getItem('fl_learner'); },
   getLearner() {
     try { return JSON.parse(localStorage.getItem('fl_learner') || 'null'); }
     catch { return null; }
@@ -668,6 +675,9 @@ function AuthPage() {
         Already riding? <a onclick="set({authMode:'login',authError:''})">Sign in</a>
       </div>
       `}
+    </div>
+    <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--text3)">
+      By continuing you agree to our <a href="/privacy.html" target="_blank" style="color:var(--text2)">Privacy Note</a>.
     </div>
     ${S.showPolisGate ? `
     <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
@@ -4970,46 +4980,37 @@ async function boot() {
     draw();
     return;
   }
-  // Try to refresh the access token before doing anything
-  const refreshToken = localStorage.getItem('fl_refresh');
-  if (refreshToken) {
-    try {
-      const res = await fetch('/api/auth/refresh', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({token: refreshToken}),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        localStorage.setItem('fl_token',   data.access_token);
-        localStorage.setItem('fl_refresh', data.refresh_token);
-        const learner = API.getLearner();
-        if (learner) {
-          learner.display_name = data.display_name || learner.display_name;
-          localStorage.setItem('fl_learner', JSON.stringify(learner));
-        }
-        console.log('Token refreshed successfully');
-      } else if (res.status === 401 || res.status === 403) {
-        // Refresh token genuinely expired — log out cleanly
-        console.log('Refresh token expired — logging out');
-        API.logout();
-        set({view:'login', learner:null});
-        return;
-      } else {
-        // Server error (5xx) or other transient failure — keep existing
-        // token and continue. Do NOT log out; the server may just be
-        // restarting or temporarily overloaded.
-        console.log('Token refresh server error (' + res.status + ') — keeping existing token');
+  // Try to refresh the access token before doing anything. The refresh
+  // token itself lives in the httpOnly fl_refresh cookie (path-scoped to
+  // /api/auth) — the browser attaches it automatically, nothing to read
+  // from localStorage here (P-SEC1, 2026-07-16).
+  try {
+    const res = await fetch('/api/auth/refresh', {
+      method: 'POST', credentials: 'same-origin',
+      headers: {'Content-Type': 'application/json'},
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const learner = API.getLearner();
+      if (learner) {
+        learner.display_name = data.display_name || learner.display_name;
+        localStorage.setItem('fl_learner', JSON.stringify(learner));
       }
-    } catch(e) {
-      console.log('Token refresh failed:', e.message);
-      // Network error — keep existing token and try anyway
+      console.log('Token refreshed successfully');
+    } else if (res.status === 401 || res.status === 403) {
+      // Refresh token genuinely expired/missing — log out cleanly
+      console.log('Refresh token expired — logging out');
+      API.logout();
+      set({view:'login', learner:null});
+      return;
+    } else {
+      // Server error (5xx) or other transient failure — keep going; the
+      // server may just be restarting or temporarily overloaded.
+      console.log('Token refresh server error (' + res.status + ') — continuing');
     }
-  } else {
-    // No refresh token — log out
-    API.logout();
-    set({view:'login', learner:null});
-    return;
+  } catch(e) {
+    console.log('Token refresh failed:', e.message);
+    // Network error — continue and try anyway
   }
   draw();
   // Load bioregion seed profiles (populates the ecological detail in the Where I Stand card)

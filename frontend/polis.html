@@ -208,15 +208,31 @@ select option{background:var(--bg3);}
 
 <script>
 var API = '/api';
-var token = localStorage.getItem('fl_token') || '';
 var currentRef = null;
 
-function hdr() {
-  return token ? {'Content-Type':'application/json','Authorization':'Bearer '+token} : {'Content-Type':'application/json'};
+// Access/refresh tokens live in httpOnly cookies now (P-SEC1, 2026-07-16) —
+// nothing to read from localStorage. fl_learner (set by app.js on login) is
+// just a display-info cache, used here only to gate the page before we've
+// made a network call.
+function getCookie(name) {
+  var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+function isLoggedIn() {
+  try { return !!localStorage.getItem('fl_learner'); } catch(e) { return false; }
+}
+
+function hdr(method) {
+  var h = {'Content-Type':'application/json'};
+  if (method && method !== 'GET') {
+    var csrf = getCookie('fl_csrf');
+    if (csrf) h['X-CSRF-Token'] = csrf;
+  }
+  return h;
 }
 
 async function req(method, path, body) {
-  var opts = {method:method, headers:hdr()};
+  var opts = {method:method, credentials:'same-origin', headers:hdr(method)};
   if (body) opts.body = JSON.stringify(body);
   var r = await fetch(API + path, opts);
   if (r.status === 401) { window.location.href = '/'; return null; }
@@ -265,7 +281,7 @@ function _scopeAllowed(scope) {
 }
 
 async function checkGate() {
-  if (!token) { window.location.href = '/'; return; }
+  if (!isLoggedIn()) { window.location.href = '/'; return; }
   try {
     var access = await req('GET', '/polis/my-access');
     _accessData = access;

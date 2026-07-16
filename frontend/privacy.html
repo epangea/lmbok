@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta name="description" content="Privacy note — Surfing the Frequencies / FreqLearn"/>
+<title>Privacy Note — Surfing the Frequencies</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌊</text></svg>"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #080C14; --bg2: #0D1220; --bg3: #131929; --bg4: #1A2238;
+    --text: #E8EDF8; --text2: #8B96B8; --text3: #4A5478;
+    --font-display: 'Syne', sans-serif; --font-body: 'DM Sans', sans-serif;
+    --r: 12px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: var(--font-body); line-height: 1.7;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 24px 96px; }
+  a { color: #7FB8E8; }
+  h1 {
+    font-family: var(--font-display); font-weight: 800; font-size: clamp(24px,5vw,34px);
+    margin: 0 0 4px;
+  }
+  .updated { color: var(--text3); font-size: 13px; margin-bottom: 32px; }
+  h2 {
+    font-family: var(--font-display); font-weight: 700; font-size: 18px;
+    margin: 36px 0 12px; color: var(--text);
+  }
+  p, li { color: var(--text2); font-size: 15px; }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 8px; }
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 4px; font-size: 14px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--bg4); vertical-align: top; }
+  th { color: var(--text); font-family: var(--font-display); font-weight: 700; }
+  td { color: var(--text2); }
+  code {
+    background: var(--bg3); padding: 1px 6px; border-radius: 4px;
+    font-size: 13px; color: var(--text);
+  }
+  .back { display: inline-block; margin-top: 40px; color: var(--text2); font-size: 14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Privacy Note</h1>
+  <div class="updated">Last updated: 2026-07-16</div>
+
+  <p>Surfing the Frequencies (FreqLearn) is built on a simple rule: no ads,
+  no manipulation, no paywalls, and you own your own data and progress.
+  This note explains what little we do store on your device, and why.</p>
+
+  <h2>Cookies we use</h2>
+  <p>We use a small number of cookies to keep you signed in and to keep
+  your account secure. We don't use cookies for advertising, tracking
+  across other sites, or analytics profiling — we don't have any of those
+  systems.</p>
+  <table>
+    <tr><th>Cookie</th><th>Purpose</th><th>Lifetime</th></tr>
+    <tr><td><code>fl_access</code></td><td>Keeps you signed in as a learner</td><td>30 minutes</td></tr>
+    <tr><td><code>fl_refresh</code></td><td>Renews your session without asking you to log in again</td><td>30 days</td></tr>
+    <tr><td><code>fl_csrf</code></td><td>Confirms a request actually came from you, not another website</td><td>30 days</td></tr>
+    <tr><td><code>fl_org_access</code></td><td>Keeps an organization account signed in</td><td>30 days</td></tr>
+    <tr><td><code>fl_org_csrf</code></td><td>Same CSRF protection, for organization accounts</td><td>30 days</td></tr>
+  </table>
+  <p>These are all "strictly necessary" cookies — they exist only to make
+  login work and to stop other websites from forging requests on your
+  behalf. They aren't used for anything else, and under EU/UK cookie law
+  (and similar rules elsewhere) this category doesn't require a consent
+  banner, so you won't see one here.</p>
+
+  <h2>Other things stored on your device</h2>
+  <ul>
+    <li>A small cache of your display name and onboarding status, so the
+    app can greet you correctly before it finishes loading your full
+    profile.</li>
+    <li>Your language and theme preference.</li>
+    <li>Your bioregion (derived from a one-time, city-level location lookup
+    you can decline) — never sent to us or stored on our servers, only kept
+    on your device.</li>
+  </ul>
+
+  <h2>What we store on our servers</h2>
+  <p>Your account details (email, username, display name), your learning
+  progress, and anything you choose to write or contribute (session
+  responses, contributed bioregion portraits, Polis posts, etc.). We don't
+  sell or share this with third parties, and we don't run advertising of
+  any kind.</p>
+
+  <h2>Questions</h2>
+  <p>This is a small, single-maintainer project. If you have questions
+  about your data, reach out via <a href="https://curious.charb.top">curious.charb.top</a>.</p>
+
+  <a class="back" href="/">← Back to Surfing the Frequencies</a>
+</div>
+</body>
+</html>
