@@ -7,3 +7,6 @@ node_modules/
 .DS_Store
 *.bak
 frontend/app.hermes
+BRIEFING.md
+MAINTENANCE.md
+PROJECT_MASTER.md
