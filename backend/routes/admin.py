@@ -33,7 +33,7 @@ from sqlalchemy import select, text, desc
 from typing import Optional
 
 from db import get_db
-from models import OpportunityListing, Organization, Lecko, Arts, DevPhase
+from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session
 from routes.weekly_report import main as weekly_report_main
 
 logger = logging.getLogger("freqlearn.admin")
