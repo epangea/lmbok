@@ -91,3 +91,38 @@ def set_org_cookies(response: Response, access_token: str) -> None:
 def clear_org_cookies(response: Response) -> None:
     response.delete_cookie(ORG_ACCESS_COOKIE, path=ORG_ACCESS_COOKIE_PATH)
     response.delete_cookie(ORG_CSRF_COOKIE, path="/")
+
+
+# ── Admin ───────────────────────────────────────────────────
+# Added 2026-07-17 as part of P-SEC2. Admin still authenticates with the
+# single shared ADMIN_KEY (checked once, server-side, at POST /api/admin/login)
+# but the raw secret is never handed back to the browser and never touches
+# localStorage again — this closes the same XSS-exposure class P-SEC1 closed
+# for learner/org. A short-lived signed session token stands in for it,
+# transported the same httpOnly-cookie-plus-CSRF-cookie way as the others.
+#
+# ADMIN_ACCESS_COOKIE_PATH is intentionally broad ("/api", not "/api/admin")
+# because admin-gated routes live under two different prefixes —
+# /api/admin/* (admin.py) and /api/bioregions/admin/* (bioregions.py) — and
+# the cookie needs to reach both.
+ADMIN_ACCESS_COOKIE      = "fl_admin_session"
+ADMIN_CSRF_COOKIE        = "fl_admin_csrf"
+ADMIN_ACCESS_COOKIE_PATH = "/api"
+
+
+def set_admin_cookies(response: Response, admin_token: str) -> None:
+    response.set_cookie(
+        ADMIN_ACCESS_COOKIE, admin_token,
+        httponly=True, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE,
+        path=ADMIN_ACCESS_COOKIE_PATH, max_age=8 * 60 * 60,
+    )
+    response.set_cookie(
+        ADMIN_CSRF_COOKIE, _new_csrf_token(),
+        httponly=False, secure=COOKIE_SECURE, samesite=COOKIE_SAMESITE,
+        path="/", max_age=8 * 60 * 60,
+    )
+
+
+def clear_admin_cookies(response: Response) -> None:
+    response.delete_cookie(ADMIN_ACCESS_COOKIE, path=ADMIN_ACCESS_COOKIE_PATH)
+    response.delete_cookie(ADMIN_CSRF_COOKIE, path="/")

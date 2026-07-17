@@ -15,6 +15,7 @@ from db import engine, Base
 from cookie_auth import (
     ACCESS_COOKIE, CSRF_COOKIE, CSRF_HEADER,
     ORG_ACCESS_COOKIE, ORG_CSRF_COOKIE,
+    ADMIN_ACCESS_COOKIE, ADMIN_CSRF_COOKIE,
 )
 
 # ── Route imports ─────────────────────────────────────────
@@ -89,6 +90,7 @@ app.add_middleware(
 _CSRF_EXEMPT_PATHS = {
     "/api/auth/register", "/api/auth/login", "/api/auth/refresh",
     "/api/orgs/register", "/api/orgs/login",
+    "/api/admin/login",
 }
 
 @app.middleware("http")
@@ -98,16 +100,24 @@ async def csrf_protect(request: Request, call_next):
     if request.url.path in _CSRF_EXEMPT_PATHS:
         return await call_next(request)
 
-    if request.url.path.startswith("/api/orgs"):
+    # Admin session cookie is checked by presence, not path prefix, because
+    # admin-gated routes live under two different prefixes (/api/admin/* and
+    # /api/bioregions/admin/*) — see cookie_auth.py's ADMIN_ACCESS_COOKIE_PATH
+    # comment. Added 2026-07-17 as part of P-SEC2 (admin moved off the old
+    # X-Admin-Key-header-only auth that fell through this middleware entirely).
+    if request.cookies.get(ADMIN_ACCESS_COOKIE):
+        cookie_name = ADMIN_CSRF_COOKIE
+        session_cookie = ADMIN_ACCESS_COOKIE
+    elif request.url.path.startswith("/api/orgs"):
         cookie_name = ORG_CSRF_COOKIE
         session_cookie = ORG_ACCESS_COOKIE
     else:
         cookie_name = CSRF_COOKIE
         session_cookie = ACCESS_COOKIE
 
-    # Requests with no session cookie at all aren't riding on cookie auth
-    # (e.g. admin panel's X-Admin-Key header) — let them through; they'll
-    # 401/403 on their own merits if they needed auth.
+    # Requests with no matching session cookie at all aren't riding on
+    # cookie auth for this request — let them through; they'll 401/403 on
+    # their own merits if they needed auth.
     if not request.cookies.get(session_cookie):
         return await call_next(request)
 

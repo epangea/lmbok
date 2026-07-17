@@ -69,25 +69,17 @@ for page in "/" "/admin" "/contribute" "/org" "/polis" "/privacy.html"; do
 done
 
 echo ""
-echo "-- API checks (admin key) --"
-for ep in "/api/admin/stats"; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" \
-    -H "X-Admin-Key: ${ADMIN_KEY}" --max-time 8)
-  pass "$ep" "$code" "200"
-done
-for ep in "/api/" "/api/arts"; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" \
-    -H "X-Admin-Key: ${ADMIN_KEY}" --max-time 8)
-  pass "$ep" "$code" "200"
-done
-for ep in "/api/bioregions?lat=16.5&lng=107.6"; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" \
-    -H "X-Admin-Key: ${ADMIN_KEY}" --max-time 8)
+echo "-- API checks (public) --"
+# These never needed X-Admin-Key (public/learner-facing endpoints) — the
+# header was harmless-but-pointless here even before P-SEC2. Dropped now
+# that the header means nothing to the backend at all.
+for ep in "/api/" "/api/arts" "/api/bioregions?lat=16.5&lng=107.6"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" --max-time 8)
   pass "$ep" "$code" "200"
 done
 
 echo ""
-echo "-- Learner API (admin key, expect 401 — no learner cookie present) --"
+echo "-- Learner API (no credentials, expect 401) --"
 # Was 403 pre-P-SEC1: the old HTTPBearer() dependency auto-raised 403 when no
 # Authorization header was present at all (a known FastAPI quirk — 403
 # usually means "authenticated but forbidden," not "no credentials given").
@@ -95,10 +87,70 @@ echo "-- Learner API (admin key, expect 401 — no learner cookie present) --"
 # raises 401 (not authenticated) when it's missing. Confirmed intentional,
 # not a regression — see chat 2026-07-16.
 for ep in "/api/learners/me" "/api/sessions/today"; do
-  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" \
-    -H "X-Admin-Key: ${ADMIN_KEY}" --max-time 8)
+  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" --max-time 8)
   pass "$ep" "$code" "401"
 done
+
+echo ""
+echo "-- Admin cookie/CSRF checks (P-SEC2, 2026-07-17) --"
+# ADMIN_KEY is only ever sent once now, in this login call, over HTTPS, to
+# establish a session — never again as a header on every request. Runs
+# unconditionally (unlike the learner/org sections below) since ADMIN_KEY is
+# already required at the top of this script.
+AJAR=$(mktemp)
+AHDRS=$(mktemp)
+
+code=$(curl -s -c "$AJAR" -D "$AHDRS" -o /dev/null -w "%{http_code}" \
+  -X POST "${API_BASE}/api/admin/login" \
+  -H "Content-Type: application/json" \
+  -d "{\"admin_key\":\"${ADMIN_KEY}\"}" \
+  --max-time 8)
+pass "/api/admin/login" "$code" "200"
+
+if grep -q "#HttpOnly_.*fl_admin_session" "$AJAR"; then
+  echo "OK    fl_admin_session is httpOnly"
+else
+  echo "FAIL  fl_admin_session missing or not httpOnly"; fail=$((fail+1))
+fi
+if grep -qE "^[^#].*[[:space:]]fl_admin_csrf[[:space:]]" "$AJAR"; then
+  echo "OK    fl_admin_csrf is JS-readable (not httpOnly)"
+else
+  echo "FAIL  fl_admin_csrf missing or unexpectedly httpOnly"; fail=$((fail+1))
+fi
+if grep -i "^set-cookie: fl_admin_session" "$AHDRS" | grep -qi "secure"; then
+  echo "OK    fl_admin_session has Secure flag"
+else
+  echo "FAIL  fl_admin_session missing Secure flag"; fail=$((fail+1))
+fi
+
+ACSRF=$(awk -F'\t' '$6=="fl_admin_csrf"{print $7}' "$AJAR")
+
+# A plain GET should work off the cookie alone, no header needed
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/stats" --max-time 8)
+pass "/api/admin/stats (cookie only)" "$code" "200"
+
+# State-changing request WITHOUT the CSRF header must be rejected. Body is a
+# genuine no-op (writes ai_provider back to its own current value — see
+# MAINTENANCE.md schema-state table) so this is safe to run repeatedly.
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" -X PATCH "${API_BASE}/api/admin/settings" \
+  -H "Content-Type: application/json" -d '{"settings":{"ai_provider":"groq"}}' --max-time 8)
+pass "PATCH /api/admin/settings without X-CSRF-Token (must be rejected)" "$code" "403"
+
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" -X PATCH "${API_BASE}/api/admin/settings" \
+  -H "Content-Type: application/json" -H "X-CSRF-Token: ${ACSRF}" \
+  -d '{"settings":{"ai_provider":"groq"}}' --max-time 8)
+pass "PATCH /api/admin/settings with X-CSRF-Token" "$code" "200"
+
+# Logout must clear the session
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" -c "$AJAR" -X POST "${API_BASE}/api/admin/logout" \
+  -H "X-CSRF-Token: ${ACSRF}" --max-time 8)
+pass "/api/admin/logout" "$code" "200"
+
+# And the cookie should now be unusable
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/stats" --max-time 8)
+pass "/api/admin/stats after logout (must be rejected)" "$code" "401"
+
+rm -f "$AJAR" "$AHDRS"
 
 echo ""
 echo "-- Learner cookie/CSRF checks (P-SEC1, 2026-07-16) --"

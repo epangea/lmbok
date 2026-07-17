@@ -13,19 +13,19 @@ from datetime import datetime, timezone
 from typing import List, Optional
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, update, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, Field
 
 from db import get_db
 from routes.auth import get_current_learner
+from routes.admin import require_admin
 from models import BioregionContribution, BioregionPortrait, Learner
 
 logger = logging.getLogger("freqlearn")
 router = APIRouter()
 
-ADMIN_KEY    = os.environ.get("ADMIN_KEY", "")
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
@@ -64,9 +64,10 @@ async def _call_groq(prompt: str, max_tokens: int = 900, temperature: float = 0.
 
 # ── Auth helpers ──────────────────────────────────────────────
 
-def _require_admin(x_admin_key: str = Header(default="")):
-    if not ADMIN_KEY or x_admin_key != ADMIN_KEY:
-        raise HTTPException(status_code=403, detail="Forbidden")
+# require_admin imported from routes.admin (P-SEC2, 2026-07-17) — this file
+# used to define its own local duplicate here, checking the raw X-Admin-Key
+# header directly. That's exactly the class of drift P-SEC2 exists to close,
+# so this now shares the single cookie-session-based dependency instead.
 
 
 # ── Geo helpers ───────────────────────────────────────────────
@@ -522,7 +523,7 @@ async def get_portrait_version(
     return dict(arch)
 
 
-@router.patch("/admin/portraits/{portrait_id}/versions/{version_number}/notes", dependencies=[Depends(_require_admin)])
+@router.patch("/admin/portraits/{portrait_id}/versions/{version_number}/notes", dependencies=[Depends(require_admin)])
 async def patch_version_notes(
     portrait_id: int,
     version_number: int,
@@ -532,7 +533,7 @@ async def patch_version_notes(
     """
     Admin: update the change_notes on any version (current or archived).
     Useful for adding ecological context after the fact.
-    Auth handled by _require_admin dependency.
+    Auth handled by require_admin dependency.
     """
     notes = body.get("change_notes", "")
 
@@ -574,7 +575,7 @@ async def patch_version_notes(
 async def admin_list_portrait_versions(
     portrait_id: int,
     db: AsyncSession = Depends(get_db),
-    _admin = Depends(_require_admin),
+    _admin = Depends(require_admin),
 ):
     """Admin: list all versions for a portrait (no JWT required)."""
     exists = await db.execute(
@@ -626,7 +627,7 @@ async def admin_get_portrait_version(
     portrait_id: int,
     version_number: int,
     db: AsyncSession = Depends(get_db),
-    _admin = Depends(_require_admin),
+    _admin = Depends(require_admin),
 ):
     """Admin: fetch one version detail (no JWT required)."""
     live_row = await db.execute(
@@ -667,7 +668,7 @@ async def admin_get_portrait_version(
 
 # ── Admin endpoints ───────────────────────────────────────────
 
-@router.get("/admin/pending", dependencies=[Depends(_require_admin)])
+@router.get("/admin/pending", dependencies=[Depends(require_admin)])
 async def admin_pending(db: AsyncSession = Depends(get_db)):
     """Admin — list pending contributions for moderation."""
     result = await db.execute(
@@ -692,7 +693,7 @@ async def admin_pending(db: AsyncSession = Depends(get_db)):
     ]}
 
 
-@router.patch("/admin/contributions/{contrib_id}", dependencies=[Depends(_require_admin)])
+@router.patch("/admin/contributions/{contrib_id}", dependencies=[Depends(require_admin)])
 async def admin_moderate(
     contrib_id: int,
     body: dict,
@@ -724,7 +725,7 @@ async def admin_moderate(
     return {"ok": True, "status": c.status}
 
 
-@router.get("/admin/portraits", dependencies=[Depends(_require_admin)])
+@router.get("/admin/portraits", dependencies=[Depends(require_admin)])
 async def admin_portraits(db: AsyncSession = Depends(get_db)):
     """Admin — list all portraits (including those with 0 contributors)."""
     result = await db.execute(
@@ -744,7 +745,7 @@ async def admin_portraits(db: AsyncSession = Depends(get_db)):
     ]}
 
 
-@router.post("/admin/portraits/{portrait_id}/generate", dependencies=[Depends(_require_admin)])
+@router.post("/admin/portraits/{portrait_id}/generate", dependencies=[Depends(require_admin)])
 async def admin_generate_portrait(portrait_id: int, db: AsyncSession = Depends(get_db)):
     """Admin — trigger AI synthesis of approved contributions for a portrait cluster.
     Archives current version before overwriting, increments version_number.
@@ -998,7 +999,7 @@ _SEED_PROFILES = [
 ]
 
 
-@router.post("/admin/seed-profiles", dependencies=[Depends(_require_admin)])
+@router.post("/admin/seed-profiles", dependencies=[Depends(require_admin)])
 async def admin_seed_profiles(db: AsyncSession = Depends(get_db)):
     """Admin — seed all 13 bioregion profiles into bioregion_seed_profiles table.
     Idempotent: uses INSERT ... ON DUPLICATE KEY UPDATE so safe to run multiple times.

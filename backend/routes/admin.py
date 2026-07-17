@@ -22,25 +22,37 @@
 import os
 import re
 import json
+import secrets
 import asyncio
 import logging
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, desc
 from typing import Optional
+from jose import jwt, JWTError
+from pydantic import BaseModel
 
 from db import get_db
 from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session
 from routes.weekly_report import main as weekly_report_main
+from cookie_auth import ADMIN_ACCESS_COOKIE, set_admin_cookies, clear_admin_cookies
 
 logger = logging.getLogger("freqlearn.admin")
 
 router = APIRouter()
 
 ADMIN_KEY        = os.getenv("ADMIN_KEY", "")
+# ── Admin session signing (P-SEC2, 2026-07-17) ──────────────
+# Reuses the same JWT_SECRET env var learner/org auth already sign with —
+# not a new secret to manage, and admin-session JWTs carry their own
+# "scope": "admin" claim so they can't be confused with a learner/org token
+# even though the signing key is shared.
+JWT_SECRET       = os.getenv("JWT_SECRET", "change-this-in-production-please")
+JWT_ALG          = "HS256"
+ADMIN_SESSION_EXP_MIN = 8 * 60   # 8 hours — admin re-logs-in after this, no refresh token (single trusted operator, not worth the complexity)
 SCAVENGER_ORG_ID = 18   # organizations.id for 'freqlearn-scavenger'
 GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "")
 GROQ_MODEL       = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
@@ -56,13 +68,64 @@ VALID_ARTS = [
 VALID_TYPES = ("job", "internship", "volunteer", "project", "contract", "gig", "other")
 
 
-# ── Auth dependency ────────────────────────────────────────
+# ── Auth dependency (P-SEC2, 2026-07-17) ────────────────────
+# ADMIN_KEY itself is now only ever checked once, server-side, inside
+# /login below. Every route below this line is gated on a short-lived
+# signed session cookie instead — the raw ADMIN_KEY never travels back to
+# the browser and is never stored client-side (fl_admin_key localStorage
+# is retired). This mirrors get_current_learner in routes/auth.py: 401 for
+# "not authenticated" (missing/invalid/expired cookie), not 403 — 403 is
+# for "authenticated but not allowed," which doesn't apply here since
+# there's only one admin role.
 
-def require_admin(x_admin_key: Optional[str] = Header(default=None)):
+def require_admin(request: Request):
+    token = request.cookies.get(ADMIN_ACCESS_COOKIE)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALG])
+        if payload.get("scope") != "admin":
+            raise JWTError("wrong scope")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired admin session")
+
+
+class AdminLoginRequest(BaseModel):
+    admin_key: str
+
+
+@router.post("/login")
+async def admin_login(req: AdminLoginRequest, response: Response):
     if not ADMIN_KEY:
         raise HTTPException(500, "ADMIN_KEY not configured on server")
-    if x_admin_key != ADMIN_KEY:
-        raise HTTPException(403, "Invalid admin key")
+    # constant-time compare — this is a shared secret comparison, same class
+    # of check as a password, worth doing properly even though it's a single
+    # trusted operator today
+    if not secrets.compare_digest(req.admin_key, ADMIN_KEY):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin key")
+    token = jwt.encode(
+        {
+            "scope": "admin",
+            "exp": datetime.now(timezone.utc) + timedelta(minutes=ADMIN_SESSION_EXP_MIN),
+            "iat": datetime.now(timezone.utc),
+        },
+        JWT_SECRET, algorithm=JWT_ALG,
+    )
+    set_admin_cookies(response, token)
+    return {"ok": True}
+
+
+@router.post("/logout")
+async def admin_logout(response: Response):
+    clear_admin_cookies(response)
+    return {"ok": True}
+
+
+@router.get("/session")
+async def admin_session(_: None = Depends(require_admin)):
+    """Cheap endpoint for the frontend to check 'am I still logged in?' on
+    page load — the session cookie is httpOnly so JS can't just read it."""
+    return {"ok": True}
 
 
 # ── Serialiser ─────────────────────────────────────────────

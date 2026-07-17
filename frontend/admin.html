@@ -200,7 +200,10 @@ var _LANG = {
 function T(k){ var d = _LANG[localStorage.getItem('fl_lang')||'en'] || _LANG.en; return d[k] || _LANG.en[k] || k; }
 
 
-var AS = { section: 'dashboard', adminKey: localStorage.getItem('fl_admin_key') || '' };
+// P-SEC2 (2026-07-17): no more fl_admin_key in localStorage — the real
+// secret never comes back to the browser. AS.authed is just a UI flag;
+// the actual session lives in an httpOnly cookie the server checks.
+var AS = { section: 'dashboard', authed: false };
 
 // ── Settings state (survives section switches) ────
 var SETTINGS = {
@@ -236,35 +239,63 @@ var sessionsState = { sessions: null, total: 0, loading: false, error: null, off
 var moderateState = { pending: null, loading: false, error: null };
 
 // ── Auth wall ────────────────────────────────────
-function checkAuth() {
-  if (AS.adminKey) return true;
-  document.getElementById('admin-main').style.display = 'none';
+// P-SEC2 (2026-07-17): admin session now lives in an httpOnly cookie, not
+// localStorage — JS can never read it. So on page load we can't just check
+// a local flag; we ask the server 'am I still logged in?' via
+// GET /api/admin/session, which succeeds only if the cookie is present and
+// valid. checkAuth() is now async and resolves once the answer comes back.
+function getCookie(name) {
+  var m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+function showAuthWall() {
+  AS.authed = false;
+  var main = document.getElementById('admin-main');
+  if (main) main.style.display = 'none';
   var wall = document.getElementById('auth-wall');
   if (wall) wall.style.display = 'flex';
-  return false;
+}
+
+function checkAuth() {
+  return adminFetch('/admin/session').then(function() {
+    AS.authed = true;
+    var wall = document.getElementById('auth-wall');
+    if (wall) wall.style.display = 'none';
+    var main = document.getElementById('admin-main');
+    if (main) main.style.display = '';
+    return true;
+  }).catch(function() {
+    showAuthWall();
+    return false;
+  });
 }
 
 function submitAdminKey() {
   var val = (document.getElementById('auth-key-input') || {}).value || '';
   if (!val.trim()) return;
-  AS.adminKey = val.trim();
-  localStorage.setItem('fl_admin_key', AS.adminKey);
   var msg = document.getElementById('auth-error');
   if (msg) { msg.style.color = 'var(--text3)'; msg.textContent = 'Checking key…'; }
-  // Verify key works before unlocking the UI
-  adminFetch('/admin/scavenger/listings').then(function() {
+  fetch('/api/admin/login', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ admin_key: val.trim() }),
+  }).then(function(r) {
+    if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || ('HTTP ' + r.status)); });
+    return r.json();
+  }).then(function() {
     if (msg) msg.textContent = '';
+    AS.authed = true;
     document.getElementById('auth-wall').style.display = 'none';
     document.getElementById('admin-main').style.display = '';
     renderAdmin();
   }).catch(function(err) {
-    AS.adminKey = '';
-    localStorage.removeItem('fl_admin_key');
     if (!msg) return;
     msg.style.color = 'var(--coral)';
     if (err.message && err.message.indexOf('not configured') !== -1) {
       msg.textContent = 'ADMIN_KEY is not set on the server yet. Add ADMIN_KEY=<your-secret> to backend/.env and restart uvicorn, then try again here.';
-    } else if (err.message === 'Forbidden') {
+    } else if (err.message === 'Invalid admin key') {
       msg.textContent = 'Wrong key — try again.';
     } else {
       msg.textContent = 'Could not verify key: ' + (err.message || 'unknown error');
@@ -285,10 +316,19 @@ function adminFetch(path, methodOrOpts, body) {
     opts = methodOrOpts || {};
   }
   opts.headers = Object.assign({
-    'X-Admin-Key':  AS.adminKey,
     'Content-Type': 'application/json',
   }, opts.headers || {});
+  // P-SEC2: no more X-Admin-Key header — the httpOnly session cookie rides
+  // along automatically via credentials:'same-origin'. Non-GET requests
+  // still need the CSRF double-submit header, same pattern as learner/org.
+  opts.credentials = 'same-origin';
+  var method = (opts.method || 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    var csrf = getCookie('fl_admin_csrf');
+    if (csrf) opts.headers['X-CSRF-Token'] = csrf;
+  }
   return fetch('/api' + path, opts).then(function(r) {
+    if (r.status === 401) { showAuthWall(); throw new Error('Not authenticated'); }
     if (r.status === 403) throw new Error('Forbidden');
     if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); });
     return r.json();
@@ -389,14 +429,9 @@ function logsLoad(which) {
   });
 }
 
-function saveAdminKey() {
-  var val = (document.getElementById('admin-key-input') || {}).value || '';
-  if (!val || val === '••••••••') return;
-  AS.adminKey = val.trim();
-  localStorage.setItem('fl_admin_key', AS.adminKey);
-  alert('Admin key saved.');
-  renderAdmin();
-}
+// saveAdminKey retired (P-SEC2, 2026-07-17) — there's no client-side key
+// to re-save anymore. Re-authenticating happens through the auth wall
+// (submitAdminKey) after sign-out or session expiry.
 
 function saveScavengerSettings() {
   var name  = (document.getElementById('scav-sender-name')  || {}).value || '';
@@ -1615,14 +1650,11 @@ function AdminSettings() {
 
   body += '</div>';
 
-  // Admin key field -- handled separately for security
-  body += '<div class="card" style="margin-top:16px"><h3 style="margin-bottom:14px">Admin key</h3>'
-    + '<p style="font-size:11px;color:var(--text3);margin-bottom:8px">Stored client-side in localStorage. Must match ADMIN_KEY env var on server.</p>'
-    + '<div style="display:flex;gap:8px">'
-    + '<input class="form-input" id="admin-key-input" type="password" placeholder="Enter ADMIN_KEY" style="max-width:300px"/>'
-    + '<button class="btn btn-wave btn-sm" onclick="saveAdminKey()">Save key</button>'
-    + '</div>'
-    + '<p style="font-size:11px;color:var(--text3);margin-top:6px">' + (AS.adminKey ? '&#10003; Key is set' : '&#9888; Key not set') + '</p>'
+  // Admin session card (P-SEC2, 2026-07-17) — no client-side key to show
+  // or re-save; the session is an httpOnly cookie issued at login.
+  body += '<div class="card" style="margin-top:16px"><h3 style="margin-bottom:14px">Admin session</h3>'
+    + '<p style="font-size:11px;color:var(--text3);margin-bottom:8px">&#10003; Signed in. Session lives in an httpOnly cookie (not readable or storable by the browser) and expires automatically after 8 hours.</p>'
+    + '<button class="btn btn-ghost btn-sm" onclick="doAdminLogout()">Sign out</button>'
     + '</div>';
 
   return '<div class="page">' + body + '</div>';
@@ -2144,20 +2176,22 @@ window.orgsLoadListings    = orgsLoadListings;
 window.lecsLoad            = lecsLoad;
 window.lecsToggle          = lecsToggle;
 window.doAdminLogout = function() {
-  AS.adminKey = '';
-  localStorage.removeItem('fl_admin_key');
-  window.location.reload();
+  adminFetch('/admin/logout', 'POST').catch(function() {}).then(function() {
+    window.location.reload();
+  });
 };
 
 // Boot — deferred so all DOM elements exist
 document.addEventListener('DOMContentLoaded', function() {
-  if (!checkAuth()) {
-    var inp = document.getElementById('auth-key-input');
-    if (inp) inp.focus();
-  } else {
-    renderAdmin();
-    showAdmin(AS.section);
-  }
+  checkAuth().then(function(ok) {
+    if (!ok) {
+      var inp = document.getElementById('auth-key-input');
+      if (inp) inp.focus();
+    } else {
+      renderAdmin();
+      showAdmin(AS.section);
+    }
+  });
 });
 </script>
 
