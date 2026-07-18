@@ -466,7 +466,6 @@ async function sendLMsg(){
 
 // ── ORG LOAD ──────────────────────────────────────────────
 async function loadOrg(){
-  document.getElementById('onm').textContent=S.org.name;
   document.getElementById('odn').textContent=S.org.name;
   const ls=await OA.get('/me/listings');S.orgListings=ls||[];
   const results=await Promise.all(S.orgListings.map(l=>OA.get(`/listings/${l.id}/matches`)));

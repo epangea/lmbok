@@ -237,6 +237,16 @@ class Organization(Base):
     is_verified:   Mapped[bool]          = mapped_column(Boolean, default=False)
     is_active:     Mapped[bool]          = mapped_column(Boolean, default=True)
     created_at:    Mapped[datetime]      = mapped_column(DateTime, default=func.now())
+    # 2026-07-18 fix: these two columns were added to the live DB via the
+    # ALTER TABLE in orgs.py's module docstring, but never added here — so
+    # every Organization(password_hash=...) construction in orgs.py's
+    # register_org() raised "'password_hash' is an invalid keyword argument
+    # for Organization" (a Python TypeError, before any DB call), which is
+    # why POST /api/orgs/register 500'd with nothing DB-related to show for
+    # it. login_org()'s org.password_hash read would have hit the same
+    # missing-attribute problem for any org that *did* exist.
+    password_hash:    Mapped[Optional[str]] = mapped_column(String(255))
+    org_token_secret: Mapped[Optional[str]] = mapped_column(String(100))
 
 
 class OpportunityListing(Base):

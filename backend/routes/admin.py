@@ -10,10 +10,29 @@
 #   app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 #
 # Endpoints:
-#   GET    /api/admin/scavenger/listings            — all scavenged listings
+#   GET    /api/admin/scavenger/listings            — ALL pending/live listings (scavenged AND
+#                                                       org-submitted — see 2026-07-17 fix note below)
 #   POST   /api/admin/scavenger/run                 — AI scavenger run → inserts listings
-#   PATCH  /api/admin/scavenger/listings/{id}/approve — approve (set is_active=1)
-#   DELETE /api/admin/scavenger/listings/{id}       — hard delete rejected listing
+#   PATCH  /api/admin/scavenger/listings/{id}/approve — approve (set is_active=1), any source
+#   DELETE /api/admin/scavenger/listings/{id}       — hard delete; scavenged listings only
+#                                                       (org-submitted listings can't be deleted
+#                                                       here — see note below)
+#   GET    /api/admin/coverage                      — Phase × Art session counts (P24)
+#   GET    /api/admin/seed-profiles                 — read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
+#   GET    /api/admin/learners                      — all learners with streak/XP stats (real data)
+#
+# FIX 2026-07-17 (found during P2 org+Polis end-to-end test build):
+#   Org-submitted listings (orgs.py POST /api/orgs/listings sets scavenged=False,
+#   is_active=False, "pending admin approval") were UNAPPROVABLE — the only admin
+#   listing endpoints filtered `scavenged == True`, so an org-submitted listing
+#   never appeared in `GET /scavenger/listings` and could never be PATCHed live.
+#   Orgs could register, log in, and submit a listing that would then sit inactive
+#   forever with zero admin-visible path to activate it. Fixed by dropping the
+#   `scavenged == True` filter from the list/approve endpoints below (both sources
+#   now show up, each tagged with a `source` field so admin can tell them apart);
+#   DELETE (hard-delete/reject) stays scavenged-only since destroying a real org's
+#   submitted data isn't the right "reject" behavior — an org listing that isn't
+#   approved just stays inactive.
 #   GET    /api/admin/coverage                      — Phase × Art session counts (P24)
 #   GET    /api/admin/seed-profiles                 — read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
 #   GET    /api/admin/learners                      — all learners with streak/XP stats (real data)
@@ -130,7 +149,7 @@ async def admin_session(_: None = Depends(require_admin)):
 
 # ── Serialiser ─────────────────────────────────────────────
 
-def _listing_out(listing: OpportunityListing) -> dict:
+def _listing_out(listing: OpportunityListing, org: Optional[Organization] = None) -> dict:
     required = listing.required_arts or []
     if isinstance(required, str):
         try:
@@ -146,6 +165,11 @@ def _listing_out(listing: OpportunityListing) -> dict:
         "source_url":   listing.source_url,
         "is_active":    bool(listing.is_active),
         "scavenged":    bool(listing.scavenged),
+        # 2026-07-17: distinguishes AI-scavenged listings from real org
+        # submissions in the shared review queue below (P2 fix).
+        "source":       "scavenger" if listing.scavenged else "org",
+        "org_id":       listing.org_id,
+        "org_name":     org.name if org else None,
         "created_at":   listing.created_at.isoformat() if listing.created_at else None,
     }
 
@@ -157,13 +181,21 @@ async def get_scavenged_listings(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all AI-scavenged listings (pending and approved)."""
+    """Return all listings pending/live review — both AI-scavenged AND
+    org-submitted (2026-07-17 fix, see module docstring). Each item's
+    `source` field ("scavenger" | "org") tells the two apart."""
     rows = (await db.execute(
         select(OpportunityListing)
-        .where(OpportunityListing.scavenged == True)
         .order_by(OpportunityListing.created_at.desc())
     )).scalars().all()
-    return [_listing_out(r) for r in rows]
+    org_ids = {r.org_id for r in rows if r.org_id}
+    orgs = {}
+    if org_ids:
+        org_rows = (await db.execute(
+            select(Organization).where(Organization.id.in_(org_ids))
+        )).scalars().all()
+        orgs = {o.id: o for o in org_rows}
+    return [_listing_out(r, orgs.get(r.org_id)) for r in rows]
 
 
 @router.post("/scavenger/run")
@@ -301,20 +333,25 @@ async def approve_listing(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve a scavenged listing — makes it visible to learners."""
+    """Approve a listing — makes it visible to learners. Works for both
+    AI-scavenged and org-submitted listings (2026-07-17 fix — previously
+    scoped to `scavenged == True` only, which left every org-submitted
+    listing permanently unapprovable; see module docstring)."""
     listing = (await db.execute(
-        select(OpportunityListing).where(
-            OpportunityListing.id == listing_id,
-            OpportunityListing.scavenged == True,
-        )
+        select(OpportunityListing).where(OpportunityListing.id == listing_id)
     )).scalar_one_or_none()
     if not listing:
-        raise HTTPException(404, "Scavenged listing not found")
+        raise HTTPException(404, "Listing not found")
 
     listing.is_active = True
     await db.commit()
-    logger.info(f"Scavenged listing {listing_id} approved")
-    return {"ok": True, "listing": _listing_out(listing)}
+    logger.info(f"Listing {listing_id} approved (source={'scavenger' if listing.scavenged else 'org'})")
+    org = None
+    if listing.org_id:
+        org = (await db.execute(
+            select(Organization).where(Organization.id == listing.org_id)
+        )).scalar_one_or_none()
+    return {"ok": True, "listing": _listing_out(listing, org)}
 
 
 @router.delete("/scavenger/listings/{listing_id}")
@@ -323,15 +360,25 @@ async def reject_listing(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Hard-delete a scavenged listing (safe — no learner matches exist while is_active=False)."""
+    """Hard-delete a scavenged listing (safe — no learner matches exist while
+    is_active=False). Deliberately scavenged-only (2026-07-17): unlike an
+    AI-generated draft, an org-submitted listing is a real org's real
+    submission — silently hard-deleting it isn't the right "reject" behavior.
+    Leaving it inactive (the default state until approved) is reject enough;
+    the org itself can also delete/deactivate its own listing via
+    orgs.py DELETE /api/orgs/listings/{id}."""
     listing = (await db.execute(
-        select(OpportunityListing).where(
-            OpportunityListing.id == listing_id,
-            OpportunityListing.scavenged == True,
-        )
+        select(OpportunityListing).where(OpportunityListing.id == listing_id)
     )).scalar_one_or_none()
     if not listing:
-        raise HTTPException(404, "Scavenged listing not found")
+        raise HTTPException(404, "Listing not found")
+    if not listing.scavenged:
+        raise HTTPException(
+            400,
+            "This is an org-submitted listing, not an AI-scavenged draft — "
+            "it can't be deleted from here. Leave it unapproved to keep it "
+            "hidden, or ask the org to remove it themselves."
+        )
 
     await db.delete(listing)
     await db.commit()

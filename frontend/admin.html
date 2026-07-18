@@ -1034,7 +1034,7 @@ function learnersToggleDetail(id) {
 // ── SCAVENGER AGENT (live) ────────────────────────
 function AdminScavenger() {
   return '<h2 style="margin-bottom:6px">Web scavenger agent</h2>'
-    + '<p style="margin-bottom:20px">The scavenger uses AI to generate opportunity listings matched to the Arts of Living. Approve to make visible to learners, or reject to discard.</p>'
+    + '<p style="margin-bottom:20px">Review listings before they go live — both AI-scavenged drafts and listings submitted directly by organizations. Approve to make visible to learners; AI drafts can also be rejected/discarded (org submissions can\u2019t be deleted here — leave unapproved to keep hidden).</p>'
     + '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">'
     + '<button class="btn btn-wave btn-sm" id="scav-run-btn" onclick="scavRun()">&#9654; Run scavenger now</button>'
     + '<button class="btn btn-ghost btn-sm" onclick="showAdmin(\'outreach\')">View outreach queue →</button>'
@@ -1080,14 +1080,17 @@ function scavCard(r) {
   }).join('');
   var link = r.source_url
     ? ' · <a href="' + r.source_url + '" target="_blank" style="font-size:11px;color:var(--wave)">source ↗</a>' : '';
+  var sourceBadge = r.source === 'org'
+    ? '<span class="badge badge-blue">Org' + (r.org_name ? ': ' + r.org_name : '') + '</span>'
+    : '<span class="badge badge-blue">AI scavenger</span>';
   var actions = r.is_active
     ? '<span class="badge badge-green">✓ Live</span>'
     : '<button class="btn btn-wave btn-sm" onclick="scavApprove(' + r.id + ')">✓ Approve</button>'
-      + ' <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="scavReject(' + r.id + ')">✕ Reject</button>';
+      + (r.source === 'org' ? '' : ' <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="scavReject(' + r.id + ')">✕ Reject</button>');
   return '<div class="scav-result">'
     + '<div style="flex:1"><h4>' + r.title + '</h4>'
     + '<p style="margin-bottom:6px">' + (r.description || '') + '</p>'
-    + '<p style="font-size:11px;color:var(--text3);margin-bottom:6px">' + r.listing_type + link + '</p>'
+    + '<p style="font-size:11px;color:var(--text3);margin-bottom:6px">' + sourceBadge + ' · ' + r.listing_type + link + '</p>'
     + '<div style="display:flex;flex-wrap:wrap;gap:4px">' + arts + '</div></div>'
     + '<div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:8px">'
     + actions + '</div></div>';
