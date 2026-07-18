@@ -237,7 +237,7 @@ const _dc = (function(){
 
 const S = {
   view: API.isLoggedIn() ? (API.getLearner()?.onboarding_complete ? 'dashboard' : 'onboard') : 'login',
-  authMode: 'login',   // login | register
+  authMode: (location.hash === '#register') ? 'register' : 'login',   // login | register
   authEmail: '',
   regName: '', regUsername: '', regEmail: '', regYear: '',
   onboardStep: 1,      // 1-5
@@ -1103,7 +1103,7 @@ function Nav() {
 
   return `
   <nav class="nav">
-    <div class="logo" style="white-space:nowrap;flex-shrink:0">Surfing the Frequencies</div>
+    <a href="/" style="font-size:11px;color:var(--text3);text-decoration:none;white-space:nowrap;padding:4px 8px;border:1px solid var(--border);border-radius:20px;margin-right:4px;transition:color .15s" onmouseover="this.style.color='var(--wave)'" onmouseout="this.style.color='var(--text3)'">← LMBoK</a><div class="logo" style="white-space:nowrap;flex-shrink:0">Surfing the Frequencies</div>
     <div class="nav-tabs">${desktopTabs}</div>
     <div class="nav-current-view">${currentLabel}</div>
     <div class="nav-av" onclick="showProfileMenu(event)"
@@ -4974,6 +4974,10 @@ function draw() {
 
 // ── Boot ──────────────────────────────────────────
 async function boot() {
+  // Clear #register / #login hash from URL bar (set by landing page)
+  if (location.hash === '#register' || location.hash === '#login') {
+    history.replaceState(null, '', '/app.html');
+  }
   // ── Responsive dashboard grid ──────────────────────────────
   // Injects CSS once: on narrow viewports columns stack in order 1→2→3
   if (!API.isLoggedIn()) {

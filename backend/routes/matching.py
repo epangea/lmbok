@@ -226,6 +226,15 @@ async def express_interest(
         )
     )).scalar_one_or_none()
     if existing:
+        # 2026-07-18: a withdrawn match (see withdraw_interest below) still has
+        # a row here — the (learner_id, listing_id) unique constraint means a
+        # learner re-expressing interest after withdrawing must reactivate the
+        # existing row, not silently no-op and report "already_exists" while
+        # actually still being withdrawn underneath.
+        if existing.learner_status == "withdrawn":
+            existing.learner_status = "pending"
+            await db.commit()
+            return {"ok": True, "id": existing.id, "reactivated": True}
         return {"ok": True, "id": existing.id, "already_exists": True}
     match = OpportunityMatch(learner_id=learner.id, listing_id=listing_id,
                              learner_status="pending", org_status="pending")
@@ -241,6 +250,12 @@ async def withdraw_interest(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db),
 ):
+    """Withdraw interest in a match. Soft-delete only (2026-07-18 fix) —
+    hard-deleting the OpportunityMatch row 500'd (FK constraint violation)
+    whenever any Message rows referenced it, since messages.match_id has no
+    ON DELETE CASCADE. Same fix pattern orgs.py's delete_listing() already
+    uses for the same reason: deactivate, don't destroy, to preserve the
+    match record and message history. Found via scripts/e2e_org_polis.sh."""
     match = (await db.execute(
         select(OpportunityMatch).where(
             OpportunityMatch.id == match_id,
@@ -249,7 +264,7 @@ async def withdraw_interest(
     )).scalar_one_or_none()
     if not match:
         raise HTTPException(404, "Match not found")
-    await db.delete(match)
+    match.learner_status = "withdrawn"
     await db.commit()
     return {"ok": True}
 
