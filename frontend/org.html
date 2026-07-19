@@ -501,7 +501,13 @@ async function lrnLogin(){
   if(!em||!pw){if(err)err.textContent="Email and password required.";return;}
   var r=await fetch("/api/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:em,password:pw})});
   if(r.ok){
-    await boot();
+    // Go straight to the learner view instead of boot(), which checks the
+    // org session first — if a valid org cookie (e.g. curiouscharb) is
+    // still sitting in the browser, boot() would route here into the Org
+    // interface even though a learner login just succeeded. Mirrors the
+    // direct-show pattern orgLogin()/omLogin() already use for org login.
+    const me=await LA.get('/learners/me');
+    if(me){S.learner=me;showLA();await loadLearner();}else{await boot();}
   } else {
     var d2=await r.json().catch(()=>({}));
     if(err)err.textContent=d2.detail||"Invalid credentials.";
