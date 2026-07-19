@@ -1065,6 +1065,15 @@ window.mobileNavGo = function(id) {
   if (action) setTimeout(function(){ eval(action); }, 50);
 };
 
+// ── Footer (present on every view, incl. login/register) ──────
+function Footer() {
+  return `
+  <footer class="app-footer" style="text-align:center;padding:20px 16px 28px;font-size:12px;color:var(--text3)">
+    <a href="/?src=nav" style="color:var(--text3);text-decoration:none;transition:color .15s"
+       onmouseover="this.style.color='var(--wave)'" onmouseout="this.style.color='var(--text3)'">🏠 Home</a>
+  </footer>`;
+}
+
 function Nav() {
   const tabs = [
     {id:'dashboard', label:T('nav.agora'),    icon:'✦',  action:"set({view:'dashboard',phase:0,answered:false})"},
@@ -1103,7 +1112,7 @@ function Nav() {
 
   return `
   <nav class="nav">
-    <a href="/" style="font-size:11px;color:var(--text3);text-decoration:none;white-space:nowrap;padding:4px 8px;border:1px solid var(--border);border-radius:20px;margin-right:4px;transition:color .15s" onmouseover="this.style.color='var(--wave)'" onmouseout="this.style.color='var(--text3)'">← LMBoK</a><div class="logo" style="white-space:nowrap;flex-shrink:0">Surfing the Frequencies</div>
+    <div class="logo" style="white-space:nowrap;flex-shrink:0">Surfing the Frequencies</div>
     <div class="nav-tabs">${desktopTabs}</div>
     <div class="nav-current-view">${currentLabel}</div>
     <div class="nav-av" onclick="showProfileMenu(event)"
@@ -4956,8 +4965,11 @@ function draw() {
 
   const root = document.getElementById('root');
   const isAuth = S.view === 'login' || S.view === 'register';
+  // The 'Session not loaded yet' warning (Session() view, no currentSession,
+  // not currently loading) is a dead-end error state — skip the footer there.
+  const suppressFooter = (S.view === 'session' && !S.sessionLoading && !currentSession);
 
-  root.innerHTML = (isAuth ? '' : Nav()) + (views[S.view] || Dashboard)();
+  root.innerHTML = (isAuth ? '' : Nav()) + (views[S.view] || Dashboard)() + (suppressFooter ? '' : Footer());
 
   // Restore challenge text
   const t = document.getElementById('ctxt');
@@ -4978,6 +4990,10 @@ async function boot() {
   if (location.hash === '#register' || location.hash === '#login') {
     history.replaceState(null, '', '/app.html');
   }
+  // Being back in the app means the "stay on the homepage" session flag
+  // (set by index.html when landing there via the Home link) no longer
+  // applies — clear it so a future bare visit to "/" redirects normally.
+  try { sessionStorage.removeItem('lmbok_home_visit'); } catch(e) {}
   // ── Responsive dashboard grid ──────────────────────────────
   // Injects CSS once: on narrow viewports columns stack in order 1→2→3
   if (!API.isLoggedIn()) {

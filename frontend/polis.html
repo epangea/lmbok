@@ -156,7 +156,8 @@ select option{background:var(--bg3);}
 <nav class="nav">
   <div class="logo">Surfing the Frequencies</div>
   <span style="font-size:12px;color:var(--polis);font-weight:600;background:var(--polis-dim);padding:4px 12px;border-radius:20px;">The Polis</span>
-  <a href="/" class="nav-back">← Agora</a>
+  <a href="/app.html" class="nav-back">← Agora</a>
+  <a href="/?src=nav" class="nav-back" style="margin-left:6px">🏠 Home</a>
 </nav>
 
 <div class="hero">
@@ -200,7 +201,7 @@ select option{background:var(--bg3);}
     <p id="gate-body" style="color:var(--text2);font-size:14px;line-height:1.8;margin-bottom:24px">
       Sign in to read the Polis. Participation unlocks at 🌳 Grove stage — earned through broad learning across multiple arts.
     </p>
-    <a href="/" class="btn btn-polis">Return to Agora →</a>
+    <a href="/app.html" class="btn btn-polis">Return to Agora →</a>
   </div>
 </div>
 
@@ -640,7 +641,7 @@ function renderProposeTab() {
             + gaps.map(function(g){ return '▲ ' + g; }).join('<br>')
             + '</div>'
           : '')
-      + '<a href="/" class="btn btn-polis">← Keep surfing</a>'
+      + '<a href="/app.html" class="btn btn-polis">← Keep surfing</a>'
       + '</div>';
     return;
   }

@@ -3,8 +3,20 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<!-- Redirect logged-in users straight to the app — runs before any render -->
-<script>if(localStorage.getItem('fl_learner')){location.replace('/app.html');}</script>
+<!-- Redirect logged-in users straight to the app — runs before any render.
+     Skipped when arriving via an explicit in-app "Home" link (?src=nav), and
+     stays skipped for the rest of this tab's session (sessionStorage) so a
+     refresh of the homepage doesn't bounce a logged-in learner straight back
+     to /app.html — only a genuinely fresh visit to "/" auto-redirects. -->
+<script>(function(){
+  try {
+    if (location.search.indexOf('src=nav') !== -1) { sessionStorage.setItem('lmbok_home_visit','1'); }
+    var staying = location.search.indexOf('src=nav') !== -1 || sessionStorage.getItem('lmbok_home_visit');
+    if (localStorage.getItem('fl_learner') && !staying) { location.replace('/app.html'); }
+  } catch(e) {
+    if (localStorage.getItem('fl_learner') && location.search.indexOf('src=nav')===-1) { location.replace('/app.html'); }
+  }
+})();</script>
 <meta name="description" content="LMBoK — Life Management Body of Knowledge. A forever-free, human-centered lifelong learning platform for everyone, everywhere, always."/>
 <meta property="og:title" content="LMBoK — Life Management Body of Knowledge"/>
 <meta property="og:description" content="Surf the frequencies of your own learning — free, forever, for every human on Earth."/>
@@ -757,7 +769,7 @@ footer a:hover { color: var(--amber); }
       </div>
     </div>
 
-    <div class="nav-cta-row">
+    <div class="nav-cta-row" id="navCtaRow">
       <a href="/app.html#login" class="btn btn-ghost" data-i18n="nav_signin">Sign In</a>
       <a href="/app.html#register" class="btn btn-solid" data-i18n="nav_join">Join Free</a>
     </div>
@@ -778,7 +790,7 @@ footer a:hover { color: var(--amber); }
   <p class="hero-tagline fade" data-i18n="hero_tagline">
     Surf the frequencies of your own learning —<br/>free, forever, for every human on Earth.
   </p>
-  <div class="hero-cta fade">
+  <div class="hero-cta fade" id="heroCta">
     <a href="/app.html#register" class="btn btn-amber" data-i18n="hero_cta1">Start Your Journey</a>
     <a href="/app.html#login" class="btn btn-ghost" data-i18n="hero_cta2">Already a learner? Sign in</a>
   </div>
@@ -1159,7 +1171,7 @@ footer a:hover { color: var(--amber); }
     <p style="font-size:.8rem; letter-spacing:.24em; text-transform:uppercase; color:var(--amber); font-weight:700; margin-bottom:16px;" data-i18n="cta_eyebrow">Forever Free · Forever Open</p>
     <h2 style="font-family:'Newsreader',serif; font-weight:300; font-size:clamp(1.8rem,5vw,3rem); color:#F0EDE4; margin-bottom:16px; line-height:1.2;" data-i18n="cta_title">Ready to <em style="font-style:italic; color:var(--amber);">surf your frequencies?</em></h2>
     <p style="color:rgba(240,237,228,.7); max-width:500px; margin:0 auto 36px; font-size:1.05rem;" data-i18n="cta_body">Create your free account. No cost, ever. No strings. Just you, your journey, and a living community learning together.</p>
-    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;">
+    <div style="display:flex; gap:12px; justify-content:center; flex-wrap:wrap;" id="finalCtaRow">
       <a href="/app.html#register" class="btn btn-amber" style="font-size:1rem; padding:12px 28px;" data-i18n="cta_btn1">Create My Free Account</a>
       <a href="/app.html#login" class="btn" style="background:rgba(255,255,255,.12); color:#fff; font-size:1rem; padding:12px 28px;" data-i18n="cta_btn2">Sign In</a>
     </div>
@@ -1761,6 +1773,31 @@ try {
       if (o.textContent.includes(saved.flag)) o.classList.add('active');
       else o.classList.remove('active');
     });
+  }
+} catch(e) {}
+
+/* Remove the ?src=nav marker (used only to skip the logged-in auto-redirect
+   above) from the visible URL, once we know we're staying on this page. */
+if (location.search.indexOf('src=nav') !== -1) {
+  history.replaceState(null, '', location.pathname);
+}
+
+/* ====================================================
+   If a logged-in learner deliberately landed here (Home
+   link), "Sign In" / "Join Free" don't apply to them —
+   swap each CTA pair for a single link back into the app.
+   ==================================================== */
+try {
+  if (localStorage.getItem('fl_learner')) {
+    var agoraBtn = function(cls) {
+      return '<a href="/app.html" class="' + cls + '">LMBoK Agora →</a>';
+    };
+    var navRow = document.getElementById('navCtaRow');
+    if (navRow) navRow.innerHTML = agoraBtn('btn btn-solid');
+    var heroRow = document.getElementById('heroCta');
+    if (heroRow) heroRow.innerHTML = agoraBtn('btn btn-amber');
+    var finalRow = document.getElementById('finalCtaRow');
+    if (finalRow) finalRow.innerHTML = agoraBtn('btn btn-amber');
   }
 } catch(e) {}
 </script>
