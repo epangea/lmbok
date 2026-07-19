@@ -145,6 +145,34 @@ function getCookie(name) {
 const API = {
   base: '/api',
 
+  // Shared in-flight refresh promise. 2026-07-19 fix (P12): several requests
+  // (e.g. bioregion save firing '/auth/me' + '/generate/profile-update'
+  // back-to-back with no await between them, plus a session start around the
+  // same time) can all hit a 401 at once when the access cookie has expired.
+  // Each used to call POST /auth/refresh independently — but the refresh
+  // token is single-use/rotated server-side, so only the first of several
+  // concurrent refresh calls actually succeeds; the rest 401 and trigger
+  // clear_learner_cookies(), which deletes fl_csrf. Set-Cookie headers apply
+  // in whatever order the responses happen to arrive, not send order, so the
+  // "clear" response could land after the "refresh succeeded" one and wipe
+  // out the just-issued CSRF cookie — every pending retry then 403s with
+  // "CSRF check failed". Fix: only the first 401 starts a real refresh;
+  // anyone else who hits a 401 while one is already in flight just awaits
+  // that same promise instead of racing a second one.
+  _refreshPromise: null,
+
+  async _refresh() {
+    if (!API._refreshPromise) {
+      API._refreshPromise = fetch('/api/auth/refresh', {
+        method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': 'application/json' },
+      }).then(function(rr){ return rr.ok; })
+        .catch(function(){ return false; })
+        .finally(function(){ API._refreshPromise = null; });
+    }
+    return API._refreshPromise;
+  },
+
   async req(method, path, body, isRetry) {
     const opts = {
       method,
@@ -159,13 +187,11 @@ const API = {
     const res = await fetch(API.base + path, opts);
     if (res.status === 401 && !isRetry && API.isLoggedIn()) {
       // Access cookie expired — try a silent refresh (cookie-based, no body
-      // needed) then retry once.
+      // needed) then retry once. Concurrent callers share one refresh call
+      // — see API._refresh() above.
       try {
-        const rr = await fetch('/api/auth/refresh', {
-          method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        if (rr.ok) {
+        const ok = await API._refresh();
+        if (ok) {
           return API.req(method, path, body, true);  // retry once now that cookies are refreshed
         }
       } catch(e) { /* fall through to logout */ }
