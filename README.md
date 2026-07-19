@@ -82,17 +82,26 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
         weekly_report.py        Weekly summary generation
 
     frontend/
-      index.html    Main SPA
+      index.html    Landing page (public marketing site, served at /)
+      app.html      SPA shell (the actual learner app, served at /app.html)
       app.js        Main SPA logic
       app.css       Main SPA styles
       admin.html    Admin panel
       polis.html    Civic participation UI
       org.html      Organization/Ekklesia UI
       contribute.html  Learner contribution UI
+      privacy.html  Privacy note
       favicon.ico
+
+    docs/
+      LANDING_PAGE.md  How to edit the landing page (copy, translations, video IDs) and how it integrates with the app
 
     scripts/        DB migrations, seed data, diagnostics, and one-off fixes
                     (kept for history -- see commit log for context on each)
+
+## Documentation
+
+- [`docs/LANDING_PAGE.md`](docs/LANDING_PAGE.md) — how to edit the landing page (copy, translations, video IDs) and how it integrates with the app (auth-aware redirect, Home link, CTAs)
 
 ## Roadmap (high level -- see PROJECT_MASTER.md for the working backlog)
 
