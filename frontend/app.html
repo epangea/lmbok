@@ -15,7 +15,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;700;900&family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 
 <!-- Styles -->
-<link rel="stylesheet" href="app.css">
+<!-- Cache-busting: bump ASSET_VERSION below on every deploy that touches
+     app.css/app.js. Without it, browsers can hold a long-lived cached copy
+     of these files and a plain reload won't fetch the new version — only a
+     hard-refresh or incognito window would show the change (confirmed
+     2026-07-19, P12 follow-up). Query-string versioning forces a fresh
+     fetch on any version bump regardless of nginx cache headers. -->
+<link rel="stylesheet" href="app.css?v=20260719b">
 </head>
 <body>
 
@@ -38,13 +44,15 @@
        FastAPI on port 8000 (proxied via nginx at /api/*)
        MariaDB — schema in /var/www/freqlearn/schema.sql
 
-     To update: edit app.js or app.css and upload.
+     To update: edit app.js or app.css and upload, then bump ASSET_VERSION
+     (the ?v=... query string on both tags below) so browsers don't serve a
+     stale cached copy on a plain reload — see P12 follow-up, 2026-07-19.
      No build step required — nginx serves static files directly.
 ============================================================ -->
 
 <div id="root"></div>
 
-<script src="app.js"></script>
+<script src="app.js?v=20260719b"></script>
 
 </body>
 </html>
