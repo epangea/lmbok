@@ -304,6 +304,17 @@ async def generate_session(
 
     reusable = [s for s in existing if s.warmup_prompt not in recently_seen]
 
+    # Language filter (2026-07-20 fix): reuse must match the learner's
+    # requested language. Without this, a stored English session could be
+    # silently served to a learner who asked for content in Vietnamese/
+    # French/etc, or vice versa. Unlike the phase filter above, there is no
+    # cross-language fallback here on purpose — if there's no reusable
+    # content in the right language, the len(reusable) >= 3 check below
+    # simply won't clear and this falls through to a fresh AI generation,
+    # which always produces the correct language (see lang_names below).
+    req_language = req.language or "en"
+    reusable = [s for s in reusable if (s.language or "en") == req_language]
+
     # ── Inline reuse (OFF by default — see BRIEFING 2026-07-09) ─────
     # This branch used to fire unconditionally whenever >=3 stored sessions
     # existed for the art, which meant it silently pre-empted the AI-first
@@ -346,6 +357,7 @@ async def generate_session(
             model="library",
             latency_ms=0,
             status="scheduled",
+            language=stored.language or req_language,
             warmup_prompt=stored.warmup_prompt,
             explore_content=stored.explore_content,
             challenge_prompt=stored.challenge_prompt,
@@ -413,6 +425,8 @@ async def generate_session(
         'ar': 'Arabic (العربية)',
         'vi': 'Vietnamese (tiếng Việt)',
         'zh': 'Mandarin Chinese (中文)',
+        'de': 'German (Deutsch)',
+        'ru': 'Russian (Русский)',
     }
     lang_instruction = ""
     if req.language and req.language != 'en':
@@ -797,10 +811,13 @@ class ScaffoldResponse(BaseModel):
 # excluding sessions the learner has already seen. Returns None if no
 # suitable session exists, which the caller should treat as 503.
 #
-# 2026-07-01 (this session): the helper does the simple version -- match on
+# 2026-07-01: the helper does the simple version -- match on
 # (art, phase, language), filter seen prompts, pick random from the top 30.
-# Tomorrow's work will refine this with the full (art_id, primary_skill_id,
-# dev_phase_id, language) tuple + already-seen exclusion.
+#
+# 2026-07-20 fix: the language match described above was never actually
+# implemented -- the candidate query only filtered on art+phase, so a
+# non-English learner in library mode could silently be served a stored
+# English session (or vice versa). Now filtered for real; see below.
 # ============================================================
 async def _serve_from_library(
     db: AsyncSession,
@@ -835,6 +852,15 @@ async def _serve_from_library(
     else:
         existing = all_stored
 
+    if not existing:
+        return None
+
+    # Language filter: must match the requested language. No cross-language
+    # fallback -- serving the wrong language is worse than a clean 503 (the
+    # caller already surfaces "no library session matched this
+    # art/phase/language" when this returns None).
+    req_language = req.language or "en"
+    existing = [s for s in existing if (s.language or "en") == req_language]
     if not existing:
         return None
 
@@ -883,6 +909,7 @@ async def _serve_from_library(
         model="library",
         latency_ms=0,
         status="scheduled",
+        language=stored.language or req_language,
         warmup_prompt=stored.warmup_prompt,
         explore_content=stored.explore_content,
         challenge_prompt=stored.challenge_prompt,
