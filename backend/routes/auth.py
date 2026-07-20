@@ -4,6 +4,7 @@
 # ============================================================
 
 import os
+import re
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -34,15 +35,20 @@ REFRESH_EXP = 30          # days
 # ── Pydantic schemas ──────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
-    username:     str
     email:        EmailStr
     password:     str
-    display_name: str | None = None
-    birth_year:   int | None = None
 
 class LoginRequest(BaseModel):
     email:    EmailStr
     password: str
+
+class RegisterResponse(BaseModel):
+    """Registration no longer logs the learner in (2026-07-20 — gating access
+    on email verification). No cookies are set on this response; the learner
+    must click the emailed link, then log in normally."""
+    ok:      bool = True
+    email:   EmailStr
+    message: str = "Check your inbox to verify your account."
 
 class AuthResponse(BaseModel):
     """Tokens no longer travel in the body (P-SEC1, 2026-07-16) — they're set
@@ -75,6 +81,22 @@ def make_refresh_token() -> str:
 def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
+async def _generate_unique_username(db: AsyncSession, email: str) -> str:
+    """Registration dropped the visible username field (2026-07-20 — email +
+    password only). `Learner.username` is still unique/NOT NULL in the DB, so
+    derive one from the email's local part and disambiguate on collision.
+    Learners can still set a display_name in onboarding; this is only the
+    internal unique handle."""
+    base = re.sub(r"[^a-z0-9]", "", email.split("@")[0].lower())[:30] or "learner"
+    candidate = base
+    suffix = 0
+    while True:
+        result = await db.execute(select(Learner).where(Learner.username == candidate))
+        if result.scalar_one_or_none() is None:
+            return candidate
+        suffix += 1
+        candidate = f"{base}{suffix}"
+
 
 # ── Email verification helpers ──────────────────────────────
 
@@ -86,7 +108,7 @@ def _generate_verification_token() -> str:
 
 
 def _send_verification_email(to_addr: str, display_name: str, token: str) -> None:
-    link = f"{_VERIFY_URL_BASE}/?token={token}"
+    link = f"{_VERIFY_URL_BASE}/app.html?token={token}"
     subject = "Verify your email — Surfing the Frequencies"
     body = (
         f"Hi {display_name},\n\n"
@@ -131,30 +153,26 @@ async def get_current_learner(
 
 # ── Routes ────────────────────────────────────────────────────
 
-@router.post("/register", response_model=AuthResponse)
+@router.post("/register", response_model=RegisterResponse)
 async def register(
     req: RegisterRequest,
     background_tasks: BackgroundTasks,
-    response: Response,
     db: AsyncSession = Depends(get_db),
 ):
     try:
         existing = await db.execute(
-            select(Learner).where(
-                (Learner.email == req.email) | (Learner.username == req.username)
-            )
+            select(Learner).where(Learner.email == req.email)
         )
         if existing.scalar_one_or_none():
-            raise HTTPException(status_code=400, detail="Email or username already taken")
+            raise HTTPException(status_code=400, detail="An account with this email already exists")
 
+        username = await _generate_unique_username(db, req.email)
         hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
 
         learner = Learner(
-            username=req.username,
+            username=username,
             email=req.email,
             password_hash=hashed,
-            display_name=req.display_name or req.username,
-            birth_year=req.birth_year,
         )
         db.add(learner)
         await db.flush()
@@ -172,24 +190,17 @@ async def register(
         background_tasks.add_task(
             _send_verification_email,
             learner.email,
-            learner.display_name or learner.username,
+            username,
             token,
         )
 
-        refresh_raw = make_refresh_token()
-        db.add(RefreshToken(
-            learner_id=learner.id,
-            token_hash=hash_token(refresh_raw),
-            expires_at=datetime.now(timezone.utc) + timedelta(days=REFRESH_EXP)
-        ))
-        await db.commit()
-
-        set_learner_cookies(response, make_access_token(learner.id), refresh_raw)
-        return AuthResponse(
-            learner_id=learner.id,
-            display_name=learner.display_name,
-            onboarding_complete=False,
-        )
+        # 2026-07-20: registration no longer logs the learner in. Previously
+        # this set login cookies immediately, so a fresh signup skipped email
+        # verification entirely (login() checks email_verified, but register()
+        # never did) — new accounts got full access without ever confirming
+        # the address. Now: no cookies, no refresh token issued here; the
+        # learner must click the emailed link, then log in normally.
+        return RegisterResponse(email=learner.email)
     except HTTPException:
         raise
     except Exception as e:
@@ -206,26 +217,44 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
     Verify email using the token sent during registration.
     Returns {ok: True} on success, 400 on invalid/expired token.
     """
-    result = await db.execute(
-        select(Learner).where(Learner.verification_token == token)
-    )
-    learner = result.scalar_one_or_none()
-    if not learner:
-        raise HTTPException(status_code=400, detail="Invalid verification token")
+    try:
+        result = await db.execute(
+            select(Learner).where(Learner.verification_token == token)
+        )
+        learner = result.scalar_one_or_none()
+        if not learner:
+            raise HTTPException(status_code=400, detail="Invalid verification token")
 
-    if learner.verification_expires and learner.verification_expires < datetime.now(timezone.utc):
-        raise HTTPException(status_code=400, detail="Verification link has expired")
+        # verification_expires comes back from MariaDB as a naive datetime (the
+        # column isn't DateTime(timezone=True)) even though it was written from
+        # an aware datetime.now(timezone.utc) at registration — MySQL just stores
+        # the wall-clock value. Comparing it directly against an aware "now"
+        # raises TypeError ("can't compare offset-naive and offset-aware
+        # datetimes"), which was silently 500ing this endpoint uncaught. Strip
+        # tzinfo off "now" to match what's actually stored, rather than changing
+        # the column type (bigger migration, not needed just for this).
+        if learner.verification_expires and learner.verification_expires < datetime.now(timezone.utc).replace(tzinfo=None):
+            raise HTTPException(status_code=400, detail="Verification link has expired")
 
-    learner.email_verified = True
-    learner.verification_token = None
-    learner.verification_expires = None
-    await db.commit()
-    return {"ok": True}
+        learner.email_verified = True
+        learner.verification_token = None
+        learner.verification_expires = None
+        await db.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Verification failed: {type(e).__name__}: {str(e)[:200]}",
+        )
 
 
 @router.post("/resend-verification")
 async def resend_verification(
     req: dict,
+    background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -247,8 +276,17 @@ async def resend_verification(
     # Basic rate limit: don't resend if one was sent in the last 5 minutes
     # (In production you'd store sent_at; for now we rely on the fact that
     #  each call sets a new token.)
-    _send_verification_email(learner)
+    token = _generate_verification_token()
+    learner.verification_token = token
+    learner.verification_expires = datetime.now(timezone.utc) + timedelta(hours=24)
     await db.commit()
+
+    background_tasks.add_task(
+        _send_verification_email,
+        learner.email,
+        learner.display_name or learner.username,
+        token,
+    )
     return {"ok": True, "message": "Verification email sent."}
 
 

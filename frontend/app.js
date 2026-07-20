@@ -212,12 +212,11 @@ const API = {
   patch:  (path, body) => API.req('PATCH',  path, body),
   delete: (path)       => API.req('DELETE', path),
 
-  async register(username, email, password, display_name, birth_year) {
-    // Server sets fl_access/fl_refresh/fl_csrf as httpOnly (resp. readable)
-    // cookies directly on this response — nothing token-related to store here.
-    const data = await API.post('/auth/register', { username, email, password, display_name, birth_year });
-    localStorage.setItem('fl_learner', JSON.stringify({ id: data.learner_id, display_name: data.display_name, onboarding_complete: false }));
-    return data;
+  async register(email, password) {
+    // 2026-07-20: registration no longer logs the learner in — no cookies
+    // come back on this response, so nothing to store in fl_learner here.
+    // The learner must verify their email, then log in normally.
+    return API.post('/auth/register', { email, password });
   },
 
   async login(email, password) {
@@ -265,7 +264,8 @@ const S = {
   view: API.isLoggedIn() ? (API.getLearner()?.onboarding_complete ? 'dashboard' : 'onboard') : 'login',
   authMode: (location.hash === '#register') ? 'register' : 'login',   // login | register
   authEmail: '',
-  regName: '', regUsername: '', regEmail: '', regYear: '',
+  regEmail: '',
+  pendingVerifyEmail: '', verifyStatus: null, resendSent: false, resendLoading: false, resendError: '',
   onboardStep: 1,      // 1-5
   onboardName: '',
   onboardPhase: '',
@@ -674,24 +674,12 @@ function AuthPage() {
       </div>
       ` : `
       <div class="form-group">
-        <label class="form-label">Your name</label>
-        <input class="form-input" id="reg-name" type="text" placeholder="What shall we call you?" value="${S.regName||''}" />
-      </div>
-      <div class="form-group">
-        <label class="form-label">Username</label>
-        <input class="form-input" id="reg-username" type="text" placeholder="lowercase, no spaces" value="${S.regUsername||''}" />
-      </div>
-      <div class="form-group">
         <label class="form-label">Email</label>
-        <input class="form-input" id="reg-email" type="email" placeholder="you@example.com" value="${S.regEmail||''}" />
+        <input class="form-input" id="reg-email" type="email" placeholder="you@example.com" autocomplete="email" value="${S.regEmail||''}" />
       </div>
       <div class="form-group">
         <label class="form-label">Password</label>
-        <input class="form-input" id="reg-password" type="password" placeholder="at least 8 characters"/>
-      </div>
-      <div class="form-group">
-        <label class="form-label">Birth year <span style="color:var(--text3)">(optional — helps us personalise)</span></label>
-        <input class="form-input" id="reg-year" type="number" placeholder="e.g. 1985" min="1920" max="2024" value="${S.regYear||''}" />
+        <input class="form-input" id="reg-password" type="password" placeholder="at least 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/>
       </div>
       <div class="form-error ${S.authError?'show':''}" id="auth-err">${S.authError}</div>
       <button class="btn btn-wave btn-full btn-lg" style="margin-top:8px" onclick="doRegister()" id="auth-btn">
@@ -719,9 +707,96 @@ function AuthPage() {
   </div>`;
 }
 
-// ══════════════════════════════════════════════════
-// NAV
-// ══════════════════════════════════════════════════
+// ── Post-registration "check your inbox" screen ──────────────
+// Shown after registration (no auto-login anymore, 2026-07-20) and also
+// reused when a login attempt hits the "please verify your email" gate.
+function CheckInboxPage() {
+  return `
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="logo" style="font-size:clamp(13px,4vw,17px);white-space:nowrap">Surfing the Frequencies</div>
+      </div>
+      <div style="text-align:center;font-size:40px;margin:8px 0 4px">📬</div>
+      <div class="onboard-title" style="text-align:center">Check your inbox</div>
+      <div class="onboard-sub" style="text-align:center">
+        We sent a verification link to <strong>${S.pendingVerifyEmail||'your email'}</strong>.
+        Click it to activate your account — the link expires in 24 hours.<br><br>
+        Don't see it? Check your spam or junk folder.
+      </div>
+      ${S.resendSent ? `
+      <div style="text-align:center;color:var(--wave,#00E5C8);font-size:14px;margin:12px 0">Verification email resent ✓</div>
+      ` : `
+      <button class="btn btn-full" style="margin-top:8px" onclick="resendVerification()" id="resend-btn" ${S.resendLoading?'disabled':''}>
+        ${S.resendLoading ? '<div class="spinner"></div>' : 'Resend verification email'}
+      </button>
+      `}
+      ${S.resendError ? `<div class="form-error show" style="margin-top:8px">${S.resendError}</div>` : ''}
+      <div class="auth-switch" style="margin-top:16px">
+        <a onclick="set({view:'login',authMode:'login',authError:'',resendSent:false,resendError:''})">← Back to sign in</a>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ── Email verification landing screen ────────────────────────
+// Reached via the ?token=... link in the verification email. The actual
+// verify call happens once in boot() before this ever renders; this just
+// reflects S.verifyStatus ('pending' | 'success' | 'expired' | 'error').
+function VerifyPage() {
+  var body;
+  if (S.verifyStatus === 'success') {
+    body = `<div style="text-align:center;font-size:40px;margin:8px 0 4px">✅</div>
+      <div class="onboard-title" style="text-align:center">Email verified!</div>
+      <div class="onboard-sub" style="text-align:center">Your account is active — sign in to begin.</div>
+      <button class="btn btn-wave btn-full btn-lg" style="margin-top:12px" onclick="set({view:'login',authMode:'login'})">Sign in →</button>`;
+  } else if (S.verifyStatus === 'pending') {
+    body = `<div style="text-align:center;padding:24px 0"><div class="spinner"></div></div>
+      <div class="onboard-sub" style="text-align:center">Verifying your email…</div>`;
+  } else {
+    // 'error' or 'expired' — the backend returns the same 400 shape for
+    // both invalid and expired tokens, so we surface its message directly
+    // and offer a resend rather than guessing which case it was.
+    body = `<div style="text-align:center;font-size:40px;margin:8px 0 4px">⚠️</div>
+      <div class="onboard-title" style="text-align:center">Verification link didn't work</div>
+      <div class="onboard-sub" style="text-align:center">${S.verifyError || 'This link may have expired or already been used.'}</div>
+      <div class="form-group" style="margin-top:12px">
+        <label class="form-label">Resend to your email</label>
+        <input class="form-input" id="verify-resend-email" type="email" placeholder="you@example.com" value="${S.pendingVerifyEmail||''}" />
+      </div>
+      ${S.resendSent ? `
+      <div style="text-align:center;color:var(--wave,#00E5C8);font-size:14px;margin:8px 0">Verification email resent ✓</div>
+      ` : `
+      <button class="btn btn-full" onclick="resendVerification(document.getElementById('verify-resend-email').value.trim())" ${S.resendLoading?'disabled':''}>
+        ${S.resendLoading ? '<div class="spinner"></div>' : 'Resend verification email'}
+      </button>
+      `}
+      <div class="auth-switch" style="margin-top:16px"><a onclick="set({view:'login',authMode:'login'})">← Back to sign in</a></div>`;
+  }
+  return `
+  <div class="auth-wrap">
+    <div class="auth-card">
+      <div class="auth-logo">
+        <div class="logo" style="font-size:clamp(13px,4vw,17px);white-space:nowrap">Surfing the Frequencies</div>
+      </div>
+      ${body}
+    </div>
+  </div>`;
+}
+
+window.resendVerification = async function(emailOverride) {
+  var email = emailOverride || S.pendingVerifyEmail;
+  if (!email) { set({resendError:'Enter your email above first.'}); return; }
+  set({resendLoading:true, resendError:'', pendingVerifyEmail:email});
+  try {
+    await API.post('/auth/resend-verification', { email: email });
+    set({resendLoading:false, resendSent:true});
+  } catch(e) {
+    set({resendLoading:false, resendError: e.message || 'Could not resend — please try again'});
+  }
+};
+
+
 // ── i18n — T(key, vars) translation helper ────────────────────
 const LANG = {
   en: {
@@ -3199,6 +3274,12 @@ window.doLogin = async function() {
     if (e.message) {
       var c = parseInt(e.message, 10) || 0;
       var m = e.message.toLowerCase();
+      if (m.includes('verify your email')) {
+        // Backend gate (login() checks email_verified) — send them to the
+        // same check-inbox screen registration uses, with resend available.
+        set({authLoading:false, view:'checkInbox', pendingVerifyEmail: email, resendSent:false, resendError:''});
+        return;
+      }
       if (c === 401 || c === 403 || c === 400 || c === 422
           || m.includes('invalid') || m.includes('credentials') || m.includes('incorrect') || m.includes('unauthorized'))
         msg = 'Wrong email or password — please try again';
@@ -3214,22 +3295,15 @@ window.doLogin = async function() {
 };
 
 window.doRegister = async function() {
-  const name  = document.getElementById('reg-name')?.value?.trim();
-  const uname = document.getElementById('reg-username')?.value?.trim();
   const email = document.getElementById('reg-email')?.value?.trim();
   const pass  = document.getElementById('reg-password')?.value;
-  const year  = parseInt(document.getElementById('reg-year')?.value) || null;
-  // Save values to state so they survive re-render on error
-  if (name)  S.regName     = name;
-  if (uname) S.regUsername = uname;
-  if (email) S.regEmail    = email;
-  if (year)  S.regYear     = year;
-  if (!name || !uname || !email || !pass) { set({authError:'Please fill in all required fields'}); return; }
-  if (pass.length < 8) { set({authError:'Password must be at least 8 characters — please go back and try again'}); return; }
+  if (email) S.regEmail = email;
+  if (!email || !pass) { set({authError:'Please fill in all required fields'}); return; }
+  if (pass.length < 8) { set({authError:'Password must be at least 8 characters — please try again'}); return; }
   set({authLoading:true, authError:''});
   try {
-    await API.register(uname, email, pass, name, year);
-    set({authLoading:false, view:'onboard', learner:API.getLearner()});
+    await API.register(email, pass);
+    set({authLoading:false, view:'checkInbox', pendingVerifyEmail: email, resendSent:false, resendError:''});
   } catch(e) {
     set({authLoading:false, authError: e.message || 'Registration failed'});
   }
@@ -4978,19 +5052,21 @@ window.switchBioVersion = async function(portraitId, versionNumber) {
 
 function draw() {
   const views = {
-    login:     AuthPage,
-    onboard:   OnboardPage,
-    register:  AuthPage,
-    dashboard: Dashboard,
-    session:   Session,
-    skills:    Mouseion,
-    reflect:   Stoa,
-    portfolio: Portfolio,
-    bioregion: BioregionPage,
+    login:      AuthPage,
+    onboard:    OnboardPage,
+    register:   AuthPage,
+    checkInbox: CheckInboxPage,
+    verify:     VerifyPage,
+    dashboard:  Dashboard,
+    session:    Session,
+    skills:     Mouseion,
+    reflect:    Stoa,
+    portfolio:  Portfolio,
+    bioregion:  BioregionPage,
   };
 
   const root = document.getElementById('root');
-  const isAuth = S.view === 'login' || S.view === 'register';
+  const isAuth = S.view === 'login' || S.view === 'register' || S.view === 'checkInbox' || S.view === 'verify';
   // The 'Session not loaded yet' warning (Session() view, no currentSession,
   // not currently loading) is a dead-end error state — skip the footer there.
   const suppressFooter = (S.view === 'session' && !S.sessionLoading && !currentSession);
@@ -5012,6 +5088,30 @@ function draw() {
 
 // ── Boot ──────────────────────────────────────────
 async function boot() {
+  // ── Email verification link (?token=...) ──────────────────
+  // 2026-07-20: previously nothing anywhere consumed this — the emailed
+  // link pointed here but no code ever called the verify-email API, so
+  // clicking it did nothing. Handled first, before the login-state check
+  // below, since a learner clicking this link isn't necessarily logged in.
+  var _verifyToken = new URLSearchParams(location.search).get('token');
+  if (_verifyToken) {
+    set({view:'verify', verifyStatus:'pending'});
+    try {
+      const res = await fetch('/api/auth/verify-email?token=' + encodeURIComponent(_verifyToken),
+        { method:'GET', credentials:'same-origin' });
+      if (res.ok) {
+        set({verifyStatus:'success'});
+      } else {
+        const d = await res.json().catch(() => ({}));
+        set({verifyStatus:'error', verifyError: d.detail || 'This link may have expired or already been used.'});
+      }
+    } catch(e) {
+      set({verifyStatus:'error', verifyError:'Network error — please try again.'});
+    }
+    // Strip the token out of the URL bar so a refresh doesn't re-verify
+    history.replaceState(null, '', '/app.html');
+    return;
+  }
   // Clear #register / #login hash from URL bar (set by landing page)
   if (location.hash === '#register' || location.hash === '#login') {
     history.replaceState(null, '', '/app.html');
