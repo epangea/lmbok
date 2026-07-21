@@ -261,6 +261,7 @@
   "stat.skills_touched": "skills touched",
   "stat.this_session": "this session",
   "stat.time_invested": "time invested",
+  "stat.xp_last_30_days": "XP earned — last 30 days",
   "stat.xp_month": "XP this month",
   "stoa.private": "Private by default · yours always",
   "stoa.recent": "Recent reflections",

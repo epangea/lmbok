@@ -543,7 +543,7 @@ function radar(being, becoming, connecting) {
   var bcPct = Math.round(becoming*100);
   var cPct  = Math.round(connecting*100);
 
-  return '<svg width="100%" viewBox="0 0 300 250" style="display:block;max-width:240px;margin:0 auto;overflow:visible">'
+  return '<svg width="100%" viewBox="0 0 300 250" style="display:block;max-width:240px;margin:0 auto;overflow:visible;direction:ltr" dir="ltr">'
     + '<defs><filter id="wg" x="-50%" y="-50%" width="200%" height="200%">'
     + '<feGaussianBlur stdDeviation="3" result="b"/>'
     + '<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>'
@@ -591,7 +591,7 @@ function radarDomains(scores) {
       +'<tspan x="'+p[0]+'" dy="10">'+d.l2+'</tspan>'
       +'</text>';
   }).join('');
-  return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'" style="overflow:visible">'+grids+axes+'<polygon points="'+dpoly+'" fill="rgba(0,229,200,0.10)" stroke="var(--wave)" stroke-width="1.5" stroke-linejoin="round"/>'+dots+lbls+'</svg>';
+  return '<svg width="'+sz+'" height="'+sz+'" viewBox="0 0 '+sz+' '+sz+'" style="overflow:visible;direction:ltr" dir="ltr">'+grids+axes+'<polygon points="'+dpoly+'" fill="rgba(0,229,200,0.10)" stroke="var(--wave)" stroke-width="1.5" stroke-linejoin="round"/>'+dots+lbls+'</svg>';
 }
 
 // ── 15-art "Who you are" avatar radar ──────────────────────
@@ -647,7 +647,7 @@ function radarArts(artScores) {
     var c=GC[x.g].stroke; var anc=px<cx-4?'end':px>cx+4?'start':'middle';
     return '<text x="'+px+'" y="'+(py+3)+'" text-anchor="'+anc+'" font-size="10" font-weight="700" font-style="italic" fill="'+c+'" font-family="sans-serif" opacity="0.9">'+GC[x.g].label+'</text>';
   }).join('');
-  return '<svg width="'+sz+'" height="218" viewBox="0 15 '+sz+' 218" style="overflow:visible">'+sectors+grids+axes+'<polygon points="'+dpoly+'" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" stroke-linejoin="round"/>'+dots+lbls+gLbls+'</svg>';
+  return '<svg width="'+sz+'" height="218" viewBox="0 15 '+sz+' 218" style="overflow:visible;direction:ltr" dir="ltr">'+sectors+grids+axes+'<polygon points="'+dpoly+'" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.45)" stroke-width="1.2" stroke-linejoin="round"/>'+dots+lbls+gLbls+'</svg>';
 }
 
 // ══════════════════════════════════════════════════
@@ -1069,6 +1069,7 @@ const LANG = {  // Only English ships inline; other languages load
     'stat.skills_touched':'skills touched',
     'stat.this_session':'this session',
     'stat.time_invested':'time invested',
+    'stat.xp_last_30_days':'XP earned — last 30 days',
     'stat.xp_month':'XP this month',
     'stoa.private':'Private by default · yours always',
     'stoa.recent':'Recent reflections',
@@ -1077,7 +1078,7 @@ const LANG = {  // Only English ships inline; other languages load
     'stoa.title':'The Peripatos',
     'stoa.todays_prompt':'Today\'s prompt',
   },
-};
+};;
 
 function T(key, vars) {
   var dict = LANG[S.language] || LANG.en;
@@ -3026,8 +3027,8 @@ function Portfolio() {
       </div>
     </div>
     <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 14px 6px;overflow:hidden">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">XP earned — last 30 days</div>
-      <svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible;display:block">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${T('stat.xp_last_30_days')}</div>
+      <svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible;display:block;direction:ltr" dir="ltr">
         ${ticks}${bars}
       </svg>
     </div>`;
