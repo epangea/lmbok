@@ -48,11 +48,18 @@
      (the ?v=... query string on both tags below) so browsers don't serve a
      stale cached copy on a plain reload — see P12 follow-up, 2026-07-19.
      No build step required — nginx serves static files directly.
+
+     i18n (2026-07-21): translated strings live in lang/<code>.json (one file
+     per language, en/fr/es/vi/zh/ar/de/ru), fetched lazily by app.js only
+     when a learner's UI language isn't English — see ensureLanguageLoaded()
+     in app.js. If you edit any file under lang/, bump LANG_ASSET_VERSION at
+     the top of app.js (separate from ASSET_VERSION here, since app.html
+     never references the lang/ files directly).
 ============================================================ -->
 
 <div id="root"></div>
 
-<script src="app.js?v=20260720a"></script>
+<script src="app.js?v=20260721a"></script>
 
 </body>
 </html>
