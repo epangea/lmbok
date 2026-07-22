@@ -5231,7 +5231,18 @@ async function boot() {
           _saveBioregionToProfile();
         }
       }
-      if (me.language && me.language !== S.language) {
+      // Sync S.language from the server ONLY for an already-onboarded
+      // learner (e.g. they changed it via Preferences on another device --
+      // this reload should pick that up). For a learner still IN onboarding,
+      // this fetch is a background, unawaited promise that can resolve at
+      // any time relative to the user's own actions -- including *after*
+      // they've already picked a language on onboarding's new step 0. Syncing
+      // unconditionally here would silently revert that live pick back to
+      // whatever was stored at registration, right before the first AI
+      // session fires with S.language -- this was very likely the actual
+      // mechanism behind sessions generating in the wrong language even
+      // though the learner had already made a selection. (Fixed 2026-07-22.)
+      if (me.language && me.language !== S.language && me.onboarding_complete) {
         set({language: me.language, learner: Object.assign({}, S.learner||{}, me)});
       } else {
         set({learner: Object.assign({}, S.learner||{}, me)});

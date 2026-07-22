@@ -1723,6 +1723,16 @@ function setLang(code, flag, name) {
   closeLangDropdown();
   // Persist choice
   try { localStorage.setItem('lmbok_lang', JSON.stringify({code,flag,name})); } catch(e){}
+  // Also write directly into app.js's own storage key (fl_lang), not just
+  // this page's separate lmbok_lang. Without this, app.js's own init read
+  // `localStorage.getItem('fl_lang') || landingPageLang() || 'en'` --
+  // fl_lang gets written on basically every app.html visit (see applyLang()
+  // in app.js), so after a visitor's very first session, fl_lang always
+  // already has *some* value and permanently wins that `||` chain, silently
+  // discarding any later pick made here on the landing page. Writing both
+  // keys at the moment of choice makes this the single source of truth
+  // instead of a stale-vs-fresh ambiguity resolved later. (2026-07-22 fix)
+  try { localStorage.setItem('fl_lang', code); } catch(e){}
 }
 
 function toggleLangDropdown() {
