@@ -153,6 +153,8 @@
   "onboard.desc_connecting": "Understanding, building, growing, consuming",
   "onboard.familiarity_body": "This helps the engine meet you where you are — not where it assumes you should be.",
   "onboard.first_art_body": "Choose the art that speaks to where you are today. This shapes your first session — you can explore all 15 arts over time.",
+  "onboard.language_body": "This is the language you’ll see the platform in. You can always change it later in Preferences.",
+  "onboard.language_title": "Choose your language",
   "onboard.name_body_cont": "It can be your real name, a nickname, anything that feels like you.",
   "onboard.name_desc": "This is how you will appear on your journey.",
   "onboard.name_placeholder": "Your name...",

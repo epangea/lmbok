@@ -153,6 +153,8 @@
   "onboard.desc_connecting": "理解、建设、成长、消费",
   "onboard.familiarity_body": "这有助于引擎在您当下所在的位置与您相遇 — 而不是它假设您应该在的位置。",
   "onboard.first_art_body": "选择今天最能打动您的艺术。这将决定您的第一堂课 — 随着时间推移，您可以探索全部 15 门艺术。",
+  "onboard.language_body": "这是您将在平台上看到的语言。您随时可以在偏好设置中更改。",
+  "onboard.language_title": "选择您的语言",
   "onboard.name_body_cont": "可以是您的真实姓名、昵称，任何能代表您的名字。",
   "onboard.name_desc": "这将是您在旅程中呈现的方式。",
   "onboard.name_placeholder": "您的名字…",

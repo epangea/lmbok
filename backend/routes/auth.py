@@ -31,12 +31,18 @@ JWT_ALG     = "HS256"
 ACCESS_EXP  = 30          # minutes
 REFRESH_EXP = 30          # days
 
+# Must match the languages actually shipped in frontend/lang/*.json (+ inline
+# 'en' in app.js). Kept here so a bad/unknown code from the client can't land
+# in learners.language and silently break i18n lookups for that learner.
+SUPPORTED_LANGS = {"en", "fr", "es", "de", "ru", "vi", "zh", "ar"}
+
 
 # ── Pydantic schemas ──────────────────────────────────────────
 
 class RegisterRequest(BaseModel):
     email:        EmailStr
     password:     str
+    language:     str | None = None   # P4.2(B): optional pick from the register form
 
 class LoginRequest(BaseModel):
     email:    EmailStr
@@ -168,11 +174,15 @@ async def register(
 
         username = await _generate_unique_username(db, req.email)
         hashed = bcrypt.hashpw(req.password.encode(), bcrypt.gensalt()).decode()
+        lang = (req.language or "").strip().lower()
+        if lang not in SUPPORTED_LANGS:
+            lang = "en"
 
         learner = Learner(
             username=username,
             email=req.email,
             password_hash=hashed,
+            language=lang,
         )
         db.add(learner)
         await db.flush()

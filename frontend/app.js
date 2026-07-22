@@ -32,7 +32,7 @@
 // bump doesn't cover them -- bump THIS constant whenever any file under
 // lang/ changes content, same deploy discipline as app.html's ASSET_VERSION
 // for app.js/app.css.
-const LANG_ASSET_VERSION = '20260721a';
+const LANG_ASSET_VERSION = '20260722a';
 
 
 
@@ -219,11 +219,11 @@ const API = {
   patch:  (path, body) => API.req('PATCH',  path, body),
   delete: (path)       => API.req('DELETE', path),
 
-  async register(email, password) {
+  async register(email, password, language) {
     // 2026-07-20: registration no longer logs the learner in — no cookies
     // come back on this response, so nothing to store in fl_learner here.
     // The learner must verify their email, then log in normally.
-    return API.post('/auth/register', { email, password });
+    return API.post('/auth/register', { email, password, language });
   },
 
   async login(email, password) {
@@ -267,6 +267,18 @@ const _dc = (function(){
   } catch(e) { return null; }
 })();
 
+// RTL languages -- declared before S/applyLang() below, since applyLang()
+// is now called synchronously right at load (not just reactively inside
+// set()), and a `var` only hoists the declaration, not the assignment.
+var RTL_LANGS = ['ar'];
+
+function landingPageLang() {
+  try {
+    var saved = JSON.parse(localStorage.getItem('lmbok_lang') || 'null');
+    return (saved && saved.code) || null;
+  } catch (e) { return null; }
+}
+
 const S = {
   view: API.isLoggedIn() ? (API.getLearner()?.onboarding_complete ? 'dashboard' : 'onboard') : 'login',
   authMode: (location.hash === '#register') ? 'register' : 'login',   // login | register
@@ -298,7 +310,7 @@ const S = {
   peripatosEntryOpen: null,       // {id,title,messages,created_at} when reading
   peripatosSaveStatus: null,      // null | 'saving' | 'saved' | 'error'
   learnerProfile: null,  // accumulated life-CV string (loaded from /learners/me)
-  language:    localStorage.getItem('fl_lang') || 'en',
+  language:    localStorage.getItem('fl_lang') || landingPageLang() || 'en',
   stoaPrompt:   '',      // prompt used for current entry
   stoaEntries:  null,    // loaded reflection entries (null = not yet fetched)
   stoaSessionId: null,   // session_id to link if coming from Academy
@@ -357,6 +369,17 @@ const S = {
   bioregionView:          'portraits', // 'portraits' | 'map' | 'table' | 'fieldguide'
 
 };
+
+// Apply dir/lang immediately from whatever S.language resolved to at load
+// (localStorage fl_lang, or the landing-page pick, or 'en'). Without this,
+// document.documentElement.dir only ever got set reactively -- inside
+// set(), and only when a language *change* actually fired ({language: x}
+// in the patch). A returning learner whose saved language was already
+// Arabic on page load never triggered that path (nothing changed), so the
+// page rendered RTL content in a dir="ltr" shell until they touched
+// Preferences again. Calling it here, synchronously, before boot() and
+// before the first draw(), means the very first paint is already correct.
+applyLang();
 
 function set(p) {
   // Trigger profile update when leaving the Mouseion sandbox
@@ -688,6 +711,15 @@ function AuthPage() {
         <label class="form-label">${T('common.password')}</label>
         <input class="form-input" id="reg-password" type="password" placeholder="at least 8 characters" autocomplete="new-password" onkeydown="if(event.key==='Enter')doRegister()"/>
       </div>
+      <div class="form-group">
+        <label class="form-label">${T('prefs.language')}</label>
+        <select class="form-input" id="reg-language">
+          ${LANGUAGES.map(function(l) {
+            var sel = (S.language||'en') === l[0] ? ' selected' : '';
+            return '<option value="'+l[0]+'"'+sel+'>'+l[1]+' '+l[2]+'</option>';
+          }).join('')}
+        </select>
+      </div>
       <div class="form-error ${S.authError?'show':''}" id="auth-err">${S.authError}</div>
       <button class="btn btn-wave btn-full btn-lg" style="margin-top:8px" onclick="doRegister()" id="auth-btn">
         ${S.authLoading ? '<div class="spinner"></div>' : 'Begin the journey →'}
@@ -961,6 +993,8 @@ const LANG = {  // Only English ships inline; other languages load
     'onboard.desc_connecting':'Understanding, building, growing, consuming',
     'onboard.familiarity_body':'This helps the engine meet you where you are — not where it assumes you should be.',
     'onboard.first_art_body':'Choose the art that speaks to where you are today. This shapes your first session — you can explore all 15 arts over time.',
+    'onboard.language_title':'Choose your language',
+    'onboard.language_body':'This is the language you\u2019ll see the platform in. You can always change it later in Preferences.',
     'onboard.name_body_cont':'It can be your real name, a nickname, anything that feels like you.',
     'onboard.name_desc':'This is how you will appear on your journey.',
     'onboard.name_placeholder':'Your name...',
@@ -1115,8 +1149,6 @@ function ensureLanguageLoaded(code) {
     });
 }
 
-// RTL languages
-var RTL_LANGS = ['ar'];
 function applyLang() {
   var isRTL = RTL_LANGS.includes(S.language);
   document.documentElement.lang = S.language || 'en';
@@ -1227,14 +1259,20 @@ window.showProfileMenu = function(e) {
   var l = S.learner || {};
   var menu = document.createElement('div');
   menu.id = 'profile-menu';
-  menu.style.cssText = 'position:fixed;top:56px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:var(--r);z-index:9999;min-width:210px;box-shadow:0 8px 32px rgba(0,0,0,0.5);overflow:hidden';
+  // Nav uses an unset flex-direction, so under dir="rtl" (Arabic) the row
+  // flows right-to-left and the avatar button itself ends up on the LEFT.
+  // A hardcoded `right:16px` here ignored that and always pinned the menu
+  // to the physical right edge, so in Arabic the dropdown floated on the
+  // opposite side of the screen from the button that opened it (P4.3).
+  var isRTL = document.documentElement.dir === 'rtl';
+  menu.style.cssText = 'position:fixed;top:56px;' + (isRTL ? 'left:16px' : 'right:16px') + ';background:var(--card);border:1px solid var(--border);border-radius:var(--r);z-index:9999;min-width:210px;box-shadow:0 8px 32px rgba(0,0,0,0.5);overflow:hidden';
   menu.innerHTML =
     '<div style="padding:14px 16px;border-bottom:1px solid var(--border)">'
     + '<div style="font-weight:700;color:var(--text1);font-size:14px">' + (l.display_name||l.username||'Learner') + '</div>'
     + '<div style="color:var(--text3);font-size:12px;margin-top:3px">Lv ' + (S.level||1) + ' · ' + (S.xp||0) + ' XP</div>'
     + '</div>'
-    + '<button onclick="showPreferences()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:block">⚙ Preferences</button>'
-    + '<button onclick="doLogout()" style="width:100%;padding:11px 16px;text-align:left;background:none;border:none;color:var(--coral);font-size:13px;cursor:pointer;display:block">↪ Sign out</button>';
+    + '<button onclick="showPreferences()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:block">⚙ ' + T('common.preferences') + '</button>'
+    + '<button onclick="doLogout()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--coral);font-size:13px;cursor:pointer;display:block">↪ ' + T('nav.signout') + '</button>';
   document.body.appendChild(menu);
   setTimeout(function() {
     document.addEventListener('click', function close(ev) {
@@ -3258,7 +3296,8 @@ window.doLogin = async function() {
   try {
     await API.login(email, pass);
     const learnerData = API.getLearner();
-    set({authLoading:false, view: learnerData?.onboarding_complete ? 'dashboard' : 'onboard', learner:learnerData});
+    set({authLoading:false, view: learnerData?.onboarding_complete ? 'dashboard' : 'onboard',
+         onboardStep: learnerData?.onboarding_complete ? S.onboardStep : 0, learner:learnerData});
     if (learnerData?.onboarding_complete) loadDashboard();
   } catch(e) {
     var msg = 'Something went wrong — please try again';
@@ -3288,13 +3327,14 @@ window.doLogin = async function() {
 window.doRegister = async function() {
   const email = document.getElementById('reg-email')?.value?.trim();
   const pass  = document.getElementById('reg-password')?.value;
+  const lang  = document.getElementById('reg-language')?.value || S.language || 'en';
   if (email) S.regEmail = email;
   if (!email || !pass) { set({authError:'Please fill in all required fields'}); return; }
   if (pass.length < 8) { set({authError:'Password must be at least 8 characters — please try again'}); return; }
   set({authLoading:true, authError:''});
   try {
-    await API.register(email, pass);
-    set({authLoading:false, view:'checkInbox', pendingVerifyEmail: email, resendSent:false, resendError:''});
+    await API.register(email, pass, lang);
+    set({authLoading:false, view:'checkInbox', pendingVerifyEmail: email, resendSent:false, resendError:'', language: lang});
   } catch(e) {
     set({authLoading:false, authError: e.message || 'Registration failed'});
   }
@@ -3499,11 +3539,7 @@ window.showPreferences = function() {
     + '<div style="margin-bottom:18px">'
     + '<label style="font-size:12px;color:var(--text2);display:block;margin-bottom:8px">' + T('prefs.language') + '</label>'
     + '<div style="display:flex;flex-wrap:wrap;gap:7px">'
-    + [
-        ['en','🇬🇧','English'],['fr','🇫🇷','Français'],['es','🇪🇸','Español'],
-        ['de','🇩🇪','Deutsch'],['ru','🇷🇺','Русский'],
-        ['vi','🇻🇳','Tiếng Việt'],['zh','🇨🇳','中文'],['ar','🇸🇦','العربية'],
-      ].map(function(l) {
+    + LANGUAGES.map(function(l) {
         var sel = (S.language||'en') === l[0];
         return '<button onclick="prefPickLang(\''+l[0]+'\')" id="plng-'+l[0]+'" '
           + 'style="padding:7px 11px;font-size:13px;border-radius:6px;cursor:pointer;'
@@ -3951,6 +3987,11 @@ var PHASES = [
 
 var EMOJIS = ['🌊','🔥','🌿','⚡','🎵','🦋','🌙','🌸','🐉','🦁','🌍','✨'];
 var COLORS = ['#00E5C8','#3D7BFF','#FF6B6B','#FFD166','#9B72FF','#6DC86D','#FF9F43','#EE5A24','#0652DD','#C4E538'];
+var LANGUAGES = [
+  ['en','🇬🇧','English'],['fr','🇫🇷','Français'],['es','🇪🇸','Español'],
+  ['de','🇩🇪','Deutsch'],['ru','🇷🇺','Русский'],
+  ['vi','🇻🇳','Tiếng Việt'],['zh','🇨🇳','中文'],['ar','🇸🇦','العربية'],
+];
 
 function pips(current) {
   return PHASES.map(function(_,i) {
@@ -3963,7 +4004,21 @@ function OnboardPage() {
   var step = S.onboardStep;
   var inner = '';
 
-  if (step === 1) {
+  if (step === 0) {
+    var langOpts = LANGUAGES.map(function(l) {
+      var sel = (S.language||'en') === l[0] ? ' sel' : '';
+      return '<div class="phase-card' + sel + '" onclick="obSetLanguage(\'' + l[0] + '\')" style="text-align:center">'
+        + '<div class="phase-icon">' + l[1] + '</div>'
+        + '<div class="phase-name">' + l[2] + '</div>'
+        + '</div>';
+    }).join('');
+    inner = "<div class=\"onboard-title\">" + T('onboard.language_title') + "</div>"
+      + "<div class=\"onboard-sub\">" + T('onboard.language_body') + "</div>"
+      + "<div class=\"phase-grid\">" + langOpts + "</div>"
+      + "<button class=\"btn btn-wave btn-full btn-lg\" onclick=\"obConfirmLanguage()\">" + T('common.continue') + " \u2192</button>";
+  }
+
+  else if (step === 1) {
     inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:1, total:5}) + "</div>"
       + "<div class=\"onboard-title\">" + T('onboard.welcome_title') + "</div>"
       + "<div class=\"onboard-sub\">" + T('onboard.welcome_body') + "</div>"
@@ -4080,6 +4135,12 @@ function OnboardPage() {
     + "</div></div>";
 }
 
+window.obSetLanguage = function(code) { set({language: code}); };
+window.obConfirmLanguage = async function() {
+  try { await API.patch('/learners/me/preferences', { language: S.language || 'en' }); }
+  catch(e) { console.log('Language preference save:', e.message); }
+  set({onboardStep: 1});
+};
 window.obPhase  = function(slug) { SND.step(); set({onboardPhase: slug}); };
 window.obArt    = function(slug) { SND.tap(); set({onboardArt: slug}); };
 window.obEmoji  = function(e)    { set({onboardEmoji: e}); };
