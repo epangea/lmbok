@@ -79,6 +79,9 @@
     <div class="sidebar-item" onclick="showAdmin('ai')" id="si-ai">
       <span class="sidebar-icon">🤖</span> AI Engine
     </div>
+    <div class="sidebar-item" onclick="showAdmin('promptmap')" id="si-promptmap">
+      <span class="sidebar-icon">🧩</span> Prompt Anatomy
+    </div>
 
     <div class="sidebar-section">System</div>
     <div class="sidebar-item" onclick="showAdmin('settings')" id="si-settings">
@@ -126,9 +129,9 @@
 'use strict';
 
 var _LANG = {
-  en: { 'admin.dashboard':'Dashboard','admin.learners':'Learners','admin.orgs':'Organizations','admin.leckos':'LECKO library','admin.sessions':'Session library','admin.moderate':'Moderate','admin.bioregions':'Bioregions','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'AI Engine','admin.settings':'Settings','admin.logs':'Logs' },
-  de: { 'admin.dashboard':'Dashboard','admin.learners':'Lernende','admin.orgs':'Organisationen','admin.leckos':'LECKO Bibliothek','admin.sessions':'Session Bibliothek','admin.moderate':'Moderation','admin.bioregions':'Bioregionen','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'KI-Engine','admin.settings':'Einstellungen','admin.logs':'Logs' },
-  ru: { 'admin.dashboard':'Панель','admin.learners':'Ученики','admin.orgs':'Организации','admin.leckos':'Библиотека LECKO','admin.sessions':'Библиотека сессий','admin.moderate':'Модерация','admin.bioregions':'Биорегионы','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'AI движок','admin.settings':'Настройки','admin.logs':'Логи' }
+  en: { 'admin.dashboard':'Dashboard','admin.learners':'Learners','admin.orgs':'Organizations','admin.leckos':'LECKO library','admin.sessions':'Session library','admin.moderate':'Moderate','admin.bioregions':'Bioregions','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'AI Engine','admin.promptmap':'Prompt Anatomy','admin.settings':'Settings','admin.logs':'Logs' },
+  de: { 'admin.dashboard':'Dashboard','admin.learners':'Lernende','admin.orgs':'Organisationen','admin.leckos':'LECKO Bibliothek','admin.sessions':'Session Bibliothek','admin.moderate':'Moderation','admin.bioregions':'Bioregionen','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'KI-Engine','admin.promptmap':'Prompt-Anatomie','admin.settings':'Einstellungen','admin.logs':'Logs' },
+  ru: { 'admin.dashboard':'Панель','admin.learners':'Ученики','admin.orgs':'Организации','admin.leckos':'Библиотека LECKO','admin.sessions':'Библиотека сессий','admin.moderate':'Модерация','admin.bioregions':'Биорегионы','admin.scavenger':'Scavenger','admin.outreach':'Outreach','admin.ai':'AI движок','admin.promptmap':'Анатомия промпта','admin.settings':'Настройки','admin.logs':'Логи' }
 };
 function T(k){ var d = _LANG[localStorage.getItem('fl_lang')||'en'] || _LANG.en; return d[k] || _LANG.en[k] || k; }
 
@@ -1202,7 +1205,91 @@ function AdminAI() {
     + matrixCard;
 }
 
-// ── Phase × Art matrix (P24) ──────────────────────
+// ── PROMPT ANATOMY — read-only catalog of what builds the session prompt ──
+// Added 2026-07-23. Display only — no fetch, no admin API call, no write
+// path. Nothing here can affect what routes/generate.py actually sends to
+// the AI; this just documents it for admin visibility. If the prompt
+// assembly in generate.py changes, this list needs a manual update to match
+// — it is not generated from the live code.
+function AdminPromptMap() {
+  var parts = [
+    {
+      title: 'Platform identity & pedagogical lineage',
+      loc:   'backend/routes/generate.py — static text at the top of the prompt template',
+      desc:  'Fixed framing sent with every single generation request: names the platform, and lists the educational/developmental thinkers and books "To Be Human" draws on. Identical for every learner, art, and phase.'
+    },
+    {
+      title: 'Learner continuity block',
+      loc:   'backend/prior_session_context.py — get_prior_session_context(); toggle: Settings \u2192 AI \u2192 ai_include_prior_context',
+      desc:  'Summarizes the learner\u2019s last 3 sessions in this art + phase so a new session builds on what came before instead of repeating themes. Skipped entirely if the setting is off.'
+    },
+    {
+      title: 'Art context (name / tagline / description)',
+      loc:   'arts table — looked up live per request by art_slug',
+      desc:  'The specific art being taught this session (e.g. "Move," "Listen"). Pulled fresh from the database, not hardcoded.'
+    },
+    {
+      title: 'Development phase context (name / age range)',
+      loc:   'dev_phases table — looked up live by phase_slug',
+      desc:  'Which of the 6 life stages (prenascent \u2192 elder) this learner is in. Sets the age framing for everything downstream.'
+    },
+    {
+      title: 'Skill line',
+      loc:   'backend/routes/generate.py — skill_line, from the skills table or req.skill_context',
+      desc:  'Names the specific skill this session targets, when one is set. Omitted if no skill is attached to the request.'
+    },
+    {
+      title: 'Domain guidance',
+      loc:   'backend/routes/generate.py — DOMAIN_GUIDANCE dict, hardcoded, 6 entries (cognitive / affective / psychomotor + 3 combinations)',
+      desc:  'Bloom-taxonomy-style framing telling the AI whether to lean on reasoning, emotion, or the body, based on the skill\u2019s type.'
+    },
+    {
+      title: 'Interests line',
+      loc:   'backend/routes/generate.py — interests_line, from req.learner_interests',
+      desc:  'Weaves in the learner\u2019s declared personal interests where natural, if any are on file.'
+    },
+    {
+      title: 'Contextual Art Lens',
+      loc:   'backend/routes/generate.py — ART_LENS dict, hardcoded, 15 entries (one per art)',
+      desc:  'The precise definition of each art from "To Be Human," so a session doesn\u2019t default to a permaculture/land-and-ecology frame regardless of which art is being taught.'
+    },
+    {
+      title: 'Phase-specific pedagogy guidance',
+      loc:   'backend/routes/generate.py — phase_guides dict, hardcoded, 6 entries (prenascent, nascent, child, adolescent, adult, elder)',
+      desc:  'Tone, complexity, and challenge-type rules matched to the learner\u2019s life stage \u2014 e.g. "nascent" sessions are written for the sleep-deprived parent, not the infant.'
+    },
+    {
+      title: 'Session design rules & output schema',
+      loc:   'backend/routes/generate.py — static text, fixed instructions',
+      desc:  'The universal 5-phase structure (warmup \u2192 explore \u2192 challenge \u2192 reflect \u2192 assess) and the exact JSON shape the AI must return. Same for every session, no variation.'
+    },
+    {
+      title: 'Language instruction',
+      loc:   'backend/routes/generate.py — lang_instruction / lang_names dict, hardcoded, 7 languages',
+      desc:  'Forces the entire session (all 5 phases + assess options) into the learner\u2019s chosen language when it isn\u2019t English.'
+    },
+  ];
+
+  var rows = parts.map(function(p, i) {
+    return '<div class="card" style="margin-bottom:12px">'
+      + '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">'
+      + '<span style="font-size:11px;color:var(--text3);font-weight:700;min-width:18px">' + (i + 1) + '</span>'
+      + '<h3 style="margin:0">' + p.title + '</h3>'
+      + '</div>'
+      + '<div style="font-size:11px;color:var(--wave);font-family:monospace;margin-bottom:8px;padding-left:28px">' + p.loc + '</div>'
+      + '<div style="font-size:13px;color:var(--text2);line-height:1.6;padding-left:28px">' + p.desc + '</div>'
+      + '</div>';
+  }).join('');
+
+  return '<h2 style="margin-bottom:6px">Prompt anatomy</h2>'
+    + '<p style="margin-bottom:20px;color:var(--text2);font-size:13px">'
+    + 'Read-only reference \u2014 the parts that assemble into every AI session-generation prompt, in the order they appear. '
+    + 'This page displays the current structure for visibility only; it does not edit anything, and editing here is not yet built.'
+    + '</p>'
+    + rows;
+}
+
+
 
 (function buildMatrix() {
   var arts = ['move','eat','feel','notice','express','live','listen','give',
@@ -2073,6 +2160,7 @@ function renderAdmin() {
     scavenger: AdminScavenger,
     outreach:  AdminOutreach,
     ai:        AdminAI,
+    promptmap: AdminPromptMap,
     bioregions: AdminBioregions,
     settings:  AdminSettings,
     logs:      AdminLogs,
