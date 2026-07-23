@@ -2046,13 +2046,27 @@ function phaseBody(p) {
       ],
       correct_index: 1,
     };
+    // P40 (2026-07-23 fix): this template must reconstruct the full
+    // post-answer state on EVERY render, not just render the choice
+    // buttons once and let chkA() patch them in imperatively — that
+    // assumption broke the moment the assess companion needed a full
+    // re-render (set({})) to open/close/update its own chat modal, which
+    // wiped chkA()'s one-time DOM edits back to a pristine "unanswered"
+    // state with nothing left to click. See MAINTENANCE gotcha table.
+    var answered   = !!S.answered;
+    var selIdx     = S.assessSelectedIndex;
+    var isCorrect  = answered && typeof selIdx === 'number' && selIdx === aq.correct_index;
     return `
     <div class="tutor-row"><div class="tutor-icon">🌊</div>
     <div class="tutor-bubble">One last wave. Your honest best — this helps me know where to take you next.</div></div>
     <div class="card" style="margin-bottom:14px">
       <p style="font-size:15px;font-weight:500;margin-bottom:13px">${aq.question}</p>
-      ${aq.options.map((opt,i) => `<button class="choice-btn" id="a${i}" onclick="chkA('a${i}',${i===aq.correct_index},${i})">${opt}</button>`).join('')}
-      <div id="afb" style="font-size:13px;margin-top:9px;min-height:18px"></div>
+      ${aq.options.map((opt,i) => {
+        var cls = 'choice-btn';
+        if (answered) { cls += (i === selIdx) ? (isCorrect ? ' ok' : ' picked') : ''; }
+        return `<button class="${cls}" id="a${i}" ${answered ? 'disabled' : ''} onclick="chkA('a${i}',${i===aq.correct_index},${i})">${opt}</button>`;
+      }).join('')}
+      <div id="afb" style="font-size:13px;margin-top:9px;min-height:18px;color:${isCorrect?'var(--wave)':'var(--text2)'}">${renderAssessFeedback(answered, isCorrect)}</div>
       <details style="margin-top:12px">
         <summary style="font-size:12px;color:var(--wave);cursor:pointer;list-style:none;display:flex;align-items:center;gap:5px">
           <span style="border:1px solid var(--wave);border-radius:50%;width:16px;height:16px;display:inline-flex;align-items:center;justify-content:center;font-size:10px">i</span>
@@ -2067,7 +2081,7 @@ function phaseBody(p) {
       <div class="stat-box"><div class="stat-v" style="color:var(--wave)">+18 xp</div><div class="stat-l">${T('stat.this_session')}</div></div>
       <div class="stat-box"><div class="stat-v" style="font-size:16px;color:var(--gold);font-family:var(--font-display)">${currentSession ? currentSession.art_name : T('common.grow')}</div><div class="stat-l">${T('stat.art_progressing')}</div></div>
     </div>
-    <div id="complete-btn-wrap" style="display:none"><button class="btn btn-wave btn-full" onclick="finishSession()">Complete session \u2192</button></div>`;
+    <div id="complete-btn-wrap" style="display:${(S.selfScore!=null)?'block':'none'}"><button class="btn btn-wave btn-full" onclick="finishSession()">Complete session \u2192</button></div>`;
   }
   return '';
 }
@@ -3406,68 +3420,75 @@ window.pickR = function(btn, resp) {
 
 window.setSelfScore = function(score, el) {
   S.selfScore = score;
-  // Visual feedback — highlight selected, dim siblings
-  var btns = el.parentElement.querySelectorAll('button');
-  btns.forEach(function(b) {
-    b.style.background   = 'var(--card)';
-    b.style.borderColor  = 'var(--border)';
-    b.style.color        = 'var(--text2)';
-  });
-  el.style.background  = 'rgba(0,229,200,0.15)';
-  el.style.borderColor = 'var(--wave)';
-  el.style.color       = 'var(--wave)';
-  // Reveal the Complete button now that a self-score has been chosen
-  var wrap = document.getElementById('complete-btn-wrap');
-  if (wrap) wrap.style.display = 'block';
+  // P40 fix (2026-07-23): used to be pure imperative DOM styling with no
+  // set({}) call — worked only because nothing else ever re-rendered the
+  // assess phase after an answer. The companion modal now legitimately
+  // needs to re-render (new messages, loading state), so this has to go
+  // through state + a real re-render like everything else, or a later
+  // companion-triggered redraw would silently un-highlight this pick.
+  set({});
 };
 
-const SELF_RATING_ROW_HTML =
-      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'
+// Renders the "Still learning / Getting it / I knew this" row, reflecting
+// S.selfScore so it survives a re-render (P40 fix) instead of only ever
+// being styled once, imperatively, at click time.
+function renderSelfRatingRow() {
+  var opts = [[40,'🌱 Still learning'],[75,'✓ Getting it'],[100,'🚀 I knew this']];
+  var btns = opts.map(function(o) {
+    var active = S.selfScore === o[0];
+    var style = active
+      ? 'flex:1;padding:7px 4px;font-size:11px;background:rgba(0,229,200,0.15);border:1px solid var(--wave);border-radius:6px;cursor:pointer;color:var(--wave)'
+      : 'flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)';
+    return '<button onclick="setSelfScore('+o[0]+',this)" style="'+style+'">'+o[1]+'</button>';
+  }).join('');
+  return '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'
     + '<p style="font-size:12px;color:var(--text3);margin-bottom:8px">'+T('session.understand_q')+'</p>'
-    + '<div style="display:flex;gap:6px">'
-    + '<button onclick="setSelfScore(40,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">🌱 Still learning</button>'
-    + '<button onclick="setSelfScore(75,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">✓ Getting it</button>'
-    + '<button onclick="setSelfScore(100,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">🚀 I knew this</button>'
-    + '</div></div>';
+    + '<div style="display:flex;gap:6px">'+btns+'</div></div>';
+}
+
+// Renders the #afb feedback area for the assess phase — pulled out of chkA()
+// into its own function (P40 fix, 2026-07-23) so the p===4 template above can
+// call it on every render and reconstruct the exact same post-answer state,
+// rather than relying on chkA() to inject it once and never again. See the
+// MAINTENANCE gotcha for the full mechanism of the bug this fixes.
+function renderAssessFeedback(answered, isCorrect) {
+  if (!answered) return '';
+  if (isCorrect) {
+    return '✓ Correct!' + renderSelfRatingRow();
+  }
+  // Wrong pick: no red/coral, no immediately-revealed correct answer —
+  // that's the "red error" P40 replaces. Companion invite stays available
+  // even after being opened and closed (this was the actual reported bug:
+  // it used to vanish on any re-render, leaving nothing to click). Self-
+  // rating stays as the explicit fallback per decision confirmed 2026-07-23.
+  var companionLine = S.assessCompanionResolved
+    ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
+      + '<span style="font-size:15px">🌊</span>'
+      + '<span>Discussion with the companion is done — you can head to Complete whenever you\'re ready.</span></div>'
+      + '<button onclick="openAssessCompanion()" class="btn btn-ghost btn-sm" style="margin-top:8px">Reopen the companion</button>'
+    : '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
+      + '<span style="font-size:15px">🌊</span>'
+      + '<span>Let\'s talk this through — there\'s often more than one way to see this.</span></div>'
+      + '<button onclick="openAssessCompanion()" class="btn btn-wave btn-sm" style="margin-top:10px">Open the companion →</button>';
+  return companionLine
+    + '<div style="margin-top:4px;font-size:11px;color:var(--text3)">or, if you\'d rather just rate yourself:</div>'
+    + renderSelfRatingRow();
+}
 
 window.chkA = function(id, ok, pickedIndex) {
-  if(S.answered) return; S.answered=true;
+  if(S.answered) return;
   // 2026-07-07: capture which option the learner picked so the backend
   // can persist it and the LEARNER CONTINUITY block in future prompts can
   // show "learner chose B 'X', correct was D 'Y'" — especially useful when
   // the wrong answer is close to the correct one.
+  // P40 fix (2026-07-23): setting state + calling set({}) here, instead of
+  // manually flipping button classNames/afb.innerHTML, is the actual fix —
+  // the p===4 template now derives everything from this same state on every
+  // render, so a later re-render (opening/closing the companion) reconstructs
+  // the identical UI instead of reverting to a blank "unanswered" look.
+  S.answered = true;
   S.assessSelectedIndex = (typeof pickedIndex === 'number') ? pickedIndex : null;
-  // Disable all options
-  ['a0','a1','a2','a3'].forEach(a=>{const e=document.getElementById(a);if(e){e.disabled=true;e.className='choice-btn';}});
-
-  const fb=document.getElementById('afb');
-
-  if (ok) {
-    // Correct pick: unchanged today's behavior — quick ✓ + self-rating, no companion.
-    const el=document.getElementById(id); if(el) el.className='choice-btn ok';
-    if(fb){
-      fb.style.color='var(--wave)';
-      fb.innerHTML = '✓ Correct!' + SELF_RATING_ROW_HTML;
-    }
-    return;
-  }
-
-  // P40: wrong pick no longer gets the red/coral flag or an immediately-revealed
-  // correct answer — that's the "red error" this replaces. Selected option gets
-  // a neutral highlight instead, and the learner is invited into a companion
-  // conversation about their reasoning. Self-rating stays reachable as a
-  // fallback if they'd rather skip the discussion (decision confirmed 2026-07-23).
-  const el=document.getElementById(id); if(el) el.className='choice-btn picked';
-  if(fb){
-    fb.style.color='var(--text2)';
-    fb.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
-      + '<span style="font-size:15px">🌊</span>'
-      + '<span>Let\'s talk this through — there\'s often more than one way to see this.</span>'
-      + '</div>'
-      + '<button onclick="openAssessCompanion()" class="btn btn-wave btn-sm" style="margin-top:10px">Open the companion →</button>'
-      + '<div style="margin-top:4px;font-size:11px;color:var(--text3)">or, if you\'d rather just rate yourself:</div>'
-      + SELF_RATING_ROW_HTML;
-  }
+  set({});
 };
 
 // ══════════════════════════════════════════════════
