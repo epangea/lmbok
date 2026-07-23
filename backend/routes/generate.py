@@ -392,6 +392,28 @@ async def generate_session(
     if skill_name:
         skill_line = f"\nThe primary skill being developed is: {skill_name}."
 
+    # ── Bioregion line (2026-07-23): grounds the session in the learner's ──
+    # actual place, when known. Sourced directly from learner.bioregion —
+    # already on the fetched Learner row (models.py), so no extra query.
+    # For the land/ecology arts (build, grow, consume, live, eat — the same
+    # five ART_LENS already ties to permaculture), bioregion is essential,
+    # specific shaping context, not just flavor. For every other art it's
+    # soft-worded ("only where it naturally deepens... never force it") so
+    # this doesn't push a generic ecological frame onto arts like feel,
+    # collaborate, or understand — that boundary is still ART_LENS/lens_line's job.
+    bioregion_line = ""
+    if learner.bioregion:
+        bioregion_line = (
+            f"\nThe learner is rooted in the {learner.bioregion} bioregion — their local "
+            f"ecological and cultural place in the world. For arts grounded in land and "
+            f"ecology (build, grow, consume, live, eat), this bioregion is essential context: "
+            f"let it shape real specifics — climate, native species, growing seasons, local "
+            f"water and energy realities — so the lesson is genuinely local and relevant, not "
+            f"generic. For every other art, weave it in only where it naturally deepens the "
+            f"session (a local example, a nearby reference point); never force it, and never "
+            f"let it override the art's own frame."
+        )
+
     # ── Domain line: situates the session in the skill's academic/practical domain ──
     # learning_domain is a rich string (e.g. "Physiology", "Visual Art & Expression")
     # skill_type is a Bloom-style flag: cognitive | affective | psychomotor (may be combined)
@@ -634,7 +656,7 @@ Generate a complete 5-phase learning session for the following context:
 ART: The art of {art.name} — {art.tagline}
 ART DESCRIPTION: {art.description or art.tagline}
 DEVELOPMENT PHASE: {phase_name} (ages {age_range})
-{skill_line}{domain_line}{interests_line}{lens_line}
+{skill_line}{domain_line}{interests_line}{bioregion_line}{lens_line}
 
 PHASE-SPECIFIC GUIDANCE — this is critical, apply it to every part of the session:
 {phase_guidance}

@@ -1294,6 +1294,12 @@ ART DESCRIPTION: {art.description or art.tagline}`
       template: `The learner's known interests include: {learner_interests}. Weave these in where natural.`
     },
     {
+      title: 'Bioregion line',
+      loc:   'backend/routes/generate.py — bioregion_line, sourced directly from learner.bioregion (learners table). Added 2026-07-23.',
+      desc:  'Grounds the session in the learner\u2019s actual place, when their bioregion is on file. For the land/ecology arts (build, grow, consume, live, eat — the same five ART_LENS ties to permaculture), the bioregion is essential shaping context, not just flavor. For every other art it\u2019s soft-worded so it doesn\u2019t force an ecological frame onto arts like feel or collaborate. Omitted entirely if the learner has no bioregion set.',
+      template: `The learner is rooted in the {learner.bioregion} bioregion — their local ecological and cultural place in the world. For arts grounded in land and ecology (build, grow, consume, live, eat), this bioregion is essential context: let it shape real specifics — climate, native species, growing seasons, local water and energy realities — so the lesson is genuinely local and relevant, not generic. For every other art, weave it in only where it naturally deepens the session (a local example, a nearby reference point); never force it, and never let it override the art's own frame.`
+    },
+    {
       title: 'Contextual Art Lens',
       loc:   'backend/routes/generate.py — ART_LENS dict, hardcoded, 15 entries (one per art)',
       desc:  'The precise definition of each art from "To Be Human," so a session doesn\u2019t default to a permaculture/land-and-ecology frame regardless of which art is being taught.',
