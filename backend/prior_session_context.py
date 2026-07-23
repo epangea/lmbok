@@ -94,10 +94,20 @@ async def get_prior_session_context(
         else:
             assess_summary = f'"{assess_q}" (selection not recorded)'
 
+        # P40: if the learner engaged the assess companion on a "wrong" pick,
+        # surface its verdict here so future sessions don't re-flag a
+        # misconception the companion already resolved as valid reasoning.
+        verdict = s.assess_companion_verdict or {}
+        verdict_summary = verdict.get("summary") if isinstance(verdict, dict) else None
+        verdict_line = (
+            f"\n      Companion discussion: {verdict_summary}"
+            if verdict_summary else ""
+        )
+
         date_str = s.created_at.strftime("%Y-%m-%d") if s.created_at else "(date unknown)"
         lines.append(
             f"  - Session {i} ({date_str}): \"{s.title or '(untitled)'}\"\n"
-            f"      Assess: {assess_summary}\n"
+            f"      Assess: {assess_summary}{verdict_line}\n"
             f"      Self-rated understanding: {s.assess_score if s.assess_score is not None else 'n/a'} "
             f"({_score_label(s.assess_score)})."
         )

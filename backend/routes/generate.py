@@ -392,28 +392,6 @@ async def generate_session(
     if skill_name:
         skill_line = f"\nThe primary skill being developed is: {skill_name}."
 
-    # ── Bioregion line (2026-07-23): grounds the session in the learner's ──
-    # actual place, when known. Sourced directly from learner.bioregion —
-    # already on the fetched Learner row (models.py), so no extra query.
-    # For the land/ecology arts (build, grow, consume, live, eat — the same
-    # five ART_LENS already ties to permaculture), bioregion is essential,
-    # specific shaping context, not just flavor. For every other art it's
-    # soft-worded ("only where it naturally deepens... never force it") so
-    # this doesn't push a generic ecological frame onto arts like feel,
-    # collaborate, or understand — that boundary is still ART_LENS/lens_line's job.
-    bioregion_line = ""
-    if learner.bioregion:
-        bioregion_line = (
-            f"\nThe learner is rooted in the {learner.bioregion} bioregion — their local "
-            f"ecological and cultural place in the world. For arts grounded in land and "
-            f"ecology (build, grow, consume, live, eat), this bioregion is essential context: "
-            f"let it shape real specifics — climate, native species, growing seasons, local "
-            f"water and energy realities — so the lesson is genuinely local and relevant, not "
-            f"generic. For every other art, weave it in only where it naturally deepens the "
-            f"session (a local example, a nearby reference point); never force it, and never "
-            f"let it override the art's own frame."
-        )
-
     # ── Domain line: situates the session in the skill's academic/practical domain ──
     # learning_domain is a rich string (e.g. "Physiology", "Visual Art & Expression")
     # skill_type is a Bloom-style flag: cognitive | affective | psychomotor (may be combined)
@@ -656,7 +634,7 @@ Generate a complete 5-phase learning session for the following context:
 ART: The art of {art.name} — {art.tagline}
 ART DESCRIPTION: {art.description or art.tagline}
 DEVELOPMENT PHASE: {phase_name} (ages {age_range})
-{skill_line}{domain_line}{interests_line}{bioregion_line}{lens_line}
+{skill_line}{domain_line}{interests_line}{lens_line}
 
 PHASE-SPECIFIC GUIDANCE — this is critical, apply it to every part of the session:
 {phase_guidance}
@@ -824,6 +802,42 @@ class ScaffoldRequest(BaseModel):
 
 class ScaffoldResponse(BaseModel):
     reply: str
+
+
+# ============================================================
+# POST /api/generate/assess-companion   (P40, 2026-07-23)
+# Socratic companion for a "wrong" assess pick — sibling to
+# /scaffold rather than a branch inside it, because this needs a
+# structured {reply, resolved, score_update} response, not
+# /scaffold's plain-text contract. Stateless on server, same as
+# /scaffold: the client resends the full message history each call.
+#
+# Replaces the old chkA() red/coral "wrong answer" flag. The AI can
+# consider a "wrong" option legitimately valid (the generated
+# distractors often contain partial truth) and, when it agrees the
+# learner's reasoning holds up, silently raises the score via
+# score_update rather than requiring a learner-facing accept step.
+# ============================================================
+
+class AssessCompanionContext(BaseModel):
+    art_name:          str | None = None
+    skill_name:        str | None = None
+    learner_name:      str | None = None
+    question:          str
+    options:           list[str]
+    correct_index:     int
+    selected_index:    int
+    reflect_summary:   str | None = None   # this session's reflect-phase response so far
+    prior_context:      str | None = None  # LEARNER CONTINUITY-style text from past sessions, if available
+
+class AssessCompanionRequest(BaseModel):
+    messages: list[ScaffoldMessage]
+    context:  AssessCompanionContext
+
+class AssessCompanionResponse(BaseModel):
+    reply:        str
+    resolved:     bool           # True once the AI considers the discussion concluded
+    score_update: int | None = None  # non-null only when the AI is (re)setting the score this turn
 
 
 # ============================================================
@@ -1076,6 +1090,106 @@ Respond only with your reply to the learner. No preamble, no meta-commentary."""
         raise HTTPException(503, f"Scaffold companion unavailable: {str(e)[:120]}")
 
     return ScaffoldResponse(reply=reply_text)
+
+
+@router.post("/assess-companion", response_model=AssessCompanionResponse)
+async def assess_companion(
+    req: AssessCompanionRequest,
+    learner: Learner = Depends(get_current_learner),
+):
+    ctx = req.context
+    options_lines = "\n".join(
+        f"  {chr(ord('A')+i)}. {opt}" for i, opt in enumerate(ctx.options)
+    )
+    correct_letter   = chr(ord('A') + ctx.correct_index) if ctx.correct_index < 26 else str(ctx.correct_index)
+    selected_letter  = chr(ord('A') + ctx.selected_index) if ctx.selected_index < 26 else str(ctx.selected_index)
+    correct_text     = ctx.options[ctx.correct_index]  if 0 <= ctx.correct_index  < len(ctx.options) else "(unknown)"
+    selected_text    = ctx.options[ctx.selected_index] if 0 <= ctx.selected_index < len(ctx.options) else "(unknown)"
+
+    name_line     = f"Learner's name: {ctx.learner_name}" if ctx.learner_name else ""
+    art_line      = f"Art being explored: {ctx.art_name}" if ctx.art_name else ""
+    skill_line    = f"Skill focus: {ctx.skill_name}" if ctx.skill_name else ""
+    reflect_line  = f"\nWhat the learner has reflected on so far this session:\n\"{ctx.reflect_summary}\"" if ctx.reflect_summary else ""
+    prior_line    = f"\n{ctx.prior_context}" if ctx.prior_context else ""
+
+    system_prompt = f"""You are the Assess companion inside "Surfing the Frequencies" — a free lifelong learning platform built on the philosophy of "To Be Human" by Charbel Haddad.
+
+The learner just answered an assess question and picked an option the platform's answer key marks as not the single best answer. Your job is NOT to simply tell them they're wrong. The options were AI-generated and often contain genuine partial truth even in the "incorrect" ones — your real task is to have an honest, Socratic conversation to figure out together whether their reasoning actually holds up, or whether there's a better answer and why.
+
+{name_line}
+{art_line}
+{skill_line}
+{reflect_line}
+{prior_line}
+
+THE QUESTION: "{ctx.question}"
+OPTIONS:
+{options_lines}
+Learner picked: {selected_letter}. "{selected_text}"
+Answer key says: {correct_letter}. "{correct_text}"
+
+YOUR ROLE:
+- Ask the learner why they chose what they chose before judging anything. Assume good faith — there is often a real reason.
+- If their reasoning is sound and logically defensible, or if you genuinely agree more than one option is acceptable here, say so plainly and explain why — don't just defer to the answer key if it's actually wrong or the question is ambiguous.
+- If the answer key's option really is meaningfully better, guide them to discover why themselves through questions — don't just announce the "correct" answer.
+- Never make the learner feel incapable, incompetent, or less intelligent for picking a different option. This is a discussion between equals, not a correction.
+- Warm, curious, short responses: 2-4 sentences, usually ending in one open question, until the discussion is genuinely settled.
+- Never say "great question" or hollow affirmations.
+
+RESPONSE FORMAT — this is critical:
+Respond with ONLY a JSON object, no preamble, no markdown fences, no other text:
+{{"reply": "<your message to the learner>", "resolved": <true if this discussion has reached a real conclusion, otherwise false>, "score_update": <an integer 0-100 if you are now confident enough to set/raise the learner's score for this assess, otherwise null>}}
+
+Only set "resolved": true and a non-null "score_update" once you have genuinely evaluated their reasoning (through actual back-and-forth, not on the very first message) and reached a real conclusion — either that their answer holds up, that more than one answer is valid, or that the answer key's option is indeed the best one and they now understand why. Keep "score_update" null and "resolved": false while the conversation is still open."""
+
+    groq_messages = [{"role": m.role, "content": m.content} for m in req.messages]
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(503, "GROQ_API_KEY not configured")
+    import httpx
+    payload = {
+        "model": "llama-3.3-70b-versatile",
+        "messages": [{"role": "system", "content": system_prompt}] + groq_messages,
+        "max_tokens": 400,
+        "temperature": 0.6,
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json=payload,
+            )
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+    except Exception as e:
+        raise HTTPException(503, f"Assess companion unavailable: {str(e)[:120]}")
+
+    # Strip accidental markdown fences before parsing — models occasionally
+    # wrap JSON in ```json ... ``` despite instructions not to.
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    try:
+        parsed = json.loads(cleaned)
+        reply_text   = str(parsed.get("reply", "")).strip()
+        resolved     = bool(parsed.get("resolved", False))
+        score_update = parsed.get("score_update", None)
+        if score_update is not None:
+            score_update = max(0, min(100, int(score_update)))
+        if not reply_text:
+            raise ValueError("empty reply")
+    except Exception:
+        # Model didn't return valid JSON — fail soft with the raw text as the
+        # reply rather than erroring the whole conversation out for the learner.
+        reply_text, resolved, score_update = raw, False, None
+
+    return AssessCompanionResponse(reply=reply_text, resolved=resolved, score_update=score_update)
 
 
 # ============================================================

@@ -36,6 +36,14 @@ class CompleteSessionRequest(BaseModel):
     reflect_response:   str | None = None
     assess_score:       int | None = None
     assess_selected_index: int | None = None   # 0-based index of the option the learner picked; NULL if not answered
+    # P40: set when the learner engaged the assess companion (wrong pick) and
+    # it reached a conclusion — {"resolved": bool, "final_score": int|None,
+    # "summary": str}. None when no companion conversation happened (correct
+    # pick, or the learner used the self-rating fallback instead). When present,
+    # assess_score above is already the companion-adjusted value — the frontend
+    # applies that override before building this request, no server-side
+    # recompute needed.
+    assess_companion_verdict: dict | None = None
     phase_reached:      int = 5
     # Skill-session attribution fields (sent by frontend when a Learning Domain skill was clicked)
     skill_context:      str | None = None        # display name, e.g. "Data Analysis"
@@ -174,6 +182,11 @@ async def complete_session(
     # chose B 'X', correct was D 'Y'" so the AI can address a misconception
     # — especially useful when the wrong answer is close to the correct one.
     session.assess_selected_index = req.assess_selected_index
+    # P40: persist the companion's verdict summary, if a companion
+    # conversation happened. assess_score above already carries the
+    # companion-adjusted value when this is set (frontend applies the
+    # override before sending /complete) — no additional scoring logic here.
+    session.assess_companion_verdict = req.assess_companion_verdict
     session.completed_at       = datetime.now(timezone.utc)
 
     # Update skill progress

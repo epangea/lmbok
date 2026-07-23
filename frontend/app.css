@@ -322,6 +322,9 @@ a.nav-tab{display:inline-flex;align-items:center;}
 .choice-btn:hover{border-color:var(--deep);background:var(--deep-dim);color:var(--deep)}
 .choice-btn.ok{border-color:var(--wave);background:var(--wave-dim);color:var(--wave)}
 .choice-btn.no{border-color:var(--coral);background:var(--coral-dim);color:var(--coral)}
+/* P40 (2026-07-23): neutral highlight for a "wrong" pick — replaces .no's red/coral flag.
+   No judgement color, just marks which option was selected while the companion discusses it. */
+.choice-btn.picked{border-color:var(--deep);background:var(--deep-dim);color:var(--deep)}
 
 /* ── Textarea ────────────────────────────────────── */
 textarea{

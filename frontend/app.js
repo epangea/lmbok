@@ -295,6 +295,13 @@ const S = {
   activeSession: null,  // current session data from API
   sessionStartTime: null,
   assessSelectedIndex: null,   // 0-based index of the option the learner picked on the current session's assess; null if not yet answered (added 2026-07-07)
+  // P40 (2026-07-23): assess companion — opens on a wrong pick instead of the old red/coral flag.
+  assessCompanionOpen: false,      // chat panel visible
+  assessCompanionMessages: [],     // [{role,content}] this assess's companion thread
+  assessCompanionLoading: false,   // true while waiting for a companion reply
+  assessCompanionResolved: false,  // true once the AI considers the discussion concluded
+  assessCompanionScoreUpdate: null,// last non-null score the AI set; overrides self-rating when present
+  assessCompanionSummary: null,    // short verdict summary persisted with /complete when resolved
   mouseionThought: '',   // free-text context from Mouseion, woven into sessions
   skillContext: null,    // specific skill name to focus session on (set by startSkillSession)
   skillDomain:  null,    // learning_domain for current skill session (from SKILL_DOMAIN_META)
@@ -2108,6 +2115,13 @@ async function loadAISession(artSlug) {
     sessionLoading = false;
     set({sessionLoading: false, phase: 0, answered: false});
     S.assessSelectedIndex = null;   // 2026-07-07: reset pick state for the new session
+    // P40: reset companion state for the new session's assess
+    S.assessCompanionOpen = false;
+    S.assessCompanionMessages = [];
+    S.assessCompanionLoading = false;
+    S.assessCompanionResolved = false;
+    S.assessCompanionScoreUpdate = null;
+    S.assessCompanionSummary = null;
   } catch(e) {
     console.error('AI generation failed — full error:', e);
     console.error('Error message:', e.message);
@@ -3407,6 +3421,15 @@ window.setSelfScore = function(score, el) {
   if (wrap) wrap.style.display = 'block';
 };
 
+const SELF_RATING_ROW_HTML =
+      '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'
+    + '<p style="font-size:12px;color:var(--text3);margin-bottom:8px">'+T('session.understand_q')+'</p>'
+    + '<div style="display:flex;gap:6px">'
+    + '<button onclick="setSelfScore(40,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">🌱 Still learning</button>'
+    + '<button onclick="setSelfScore(75,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">✓ Getting it</button>'
+    + '<button onclick="setSelfScore(100,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">🚀 I knew this</button>'
+    + '</div></div>';
+
 window.chkA = function(id, ok, pickedIndex) {
   if(S.answered) return; S.answered=true;
   // 2026-07-07: capture which option the learner picked so the backend
@@ -3416,28 +3439,160 @@ window.chkA = function(id, ok, pickedIndex) {
   S.assessSelectedIndex = (typeof pickedIndex === 'number') ? pickedIndex : null;
   // Disable all options
   ['a0','a1','a2','a3'].forEach(a=>{const e=document.getElementById(a);if(e){e.disabled=true;e.className='choice-btn';}});
-  // Mark selected button
-  const el=document.getElementById(id); if(el) el.className='choice-btn '+(ok?'ok':'no');
-  // If wrong, highlight the correct answer in green
-  if(!ok && currentSession && currentSession.assess_question){
-    const ci = currentSession.assess_question.correct_index;
-    const correctBtn = document.getElementById('a'+ci);
-    if(correctBtn) correctBtn.className='choice-btn ok';
-  }
-  // Feedback + confidence self-rating
+
   const fb=document.getElementById('afb');
+
+  if (ok) {
+    // Correct pick: unchanged today's behavior — quick ✓ + self-rating, no companion.
+    const el=document.getElementById(id); if(el) el.className='choice-btn ok';
+    if(fb){
+      fb.style.color='var(--wave)';
+      fb.innerHTML = '✓ Correct!' + SELF_RATING_ROW_HTML;
+    }
+    return;
+  }
+
+  // P40: wrong pick no longer gets the red/coral flag or an immediately-revealed
+  // correct answer — that's the "red error" this replaces. Selected option gets
+  // a neutral highlight instead, and the learner is invited into a companion
+  // conversation about their reasoning. Self-rating stays reachable as a
+  // fallback if they'd rather skip the discussion (decision confirmed 2026-07-23).
+  const el=document.getElementById(id); if(el) el.className='choice-btn picked';
   if(fb){
-    fb.style.color=ok?'var(--wave)':'var(--coral)';
-    fb.innerHTML = (ok?'✓ Correct!':'Not quite — the correct answer is highlighted above.')
-      + '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border)">'
-      + '<p style="font-size:12px;color:var(--text3);margin-bottom:8px">'+T('session.understand_q')+'</p>'
-      + '<div style="display:flex;gap:6px">'
-      + '<button onclick="setSelfScore(40,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">🌱 Still learning</button>'
-      + '<button onclick="setSelfScore(75,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">✓ Getting it</button>'
-      + '<button onclick="setSelfScore(100,this)" style="flex:1;padding:7px 4px;font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:6px;cursor:pointer;color:var(--text2)">🚀 I knew this</button>'
-      + '</div></div>';
+    fb.style.color='var(--text2)';
+    fb.innerHTML = '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
+      + '<span style="font-size:15px">🌊</span>'
+      + '<span>Let\'s talk this through — there\'s often more than one way to see this.</span>'
+      + '</div>'
+      + '<button onclick="openAssessCompanion()" class="btn btn-wave btn-sm" style="margin-top:10px">Open the companion →</button>'
+      + '<div style="margin-top:4px;font-size:11px;color:var(--text3)">or, if you\'d rather just rate yourself:</div>'
+      + SELF_RATING_ROW_HTML;
   }
 };
+
+// ══════════════════════════════════════════════════
+// P40 — Assess companion (Socratic discussion on a "wrong" pick)
+// Sibling to the Mouseion/Challenge/Reflect sandbox companion above,
+// but hits its own endpoint (structured reply/resolved/score_update,
+// not plain text) and keeps its own message thread.
+// ══════════════════════════════════════════════════
+
+window.openAssessCompanion = function() {
+  S.assessCompanionOpen = true;
+  if (S.assessCompanionMessages.length === 0) {
+    // Seed the thread with an opening question from the companion so the
+    // learner isn't staring at a blank box — matches the sandbox pattern.
+    var aq = currentSession && currentSession.assess_question;
+    var pickedText = (aq && typeof S.assessSelectedIndex === 'number') ? aq.options[S.assessSelectedIndex] : '';
+    S.assessCompanionMessages = [{
+      role: 'assistant',
+      content: 'You picked "' + pickedText + '." What made that the right call for you?'
+    }];
+  }
+  set({});
+  setTimeout(function(){
+    var t = document.getElementById('assess-companion-thread');
+    if (t) t.scrollTop = t.scrollHeight;
+  }, 60);
+};
+
+window.closeAssessCompanion = function() {
+  S.assessCompanionOpen = false;
+  set({});
+};
+
+async function sendAssessCompanionMessage() {
+  var inputEl = document.getElementById('assess-companion-input');
+  if (!inputEl) return;
+  var text = inputEl.value.trim();
+  if (!text || S.assessCompanionLoading) return;
+  inputEl.value = '';
+
+  S.assessCompanionMessages = S.assessCompanionMessages.concat([{role:'user', content:text}]);
+  set({assessCompanionLoading: true});
+
+  var aq = currentSession && currentSession.assess_question ? currentSession.assess_question : null;
+
+  try {
+    var res = await API.post('/generate/assess-companion', {
+      messages: S.assessCompanionMessages,
+      context: {
+        art_name:       currentSession ? currentSession.art_name : null,
+        skill_name:     S.skillContext || null,
+        learner_name:   S.learner ? S.learner.display_name : null,
+        question:       aq ? aq.question : '',
+        options:        aq ? aq.options : [],
+        correct_index:  aq ? aq.correct_index : 0,
+        selected_index: (typeof S.assessSelectedIndex === 'number') ? S.assessSelectedIndex : 0,
+        // This session's reflect-phase response so far, per the original request
+        // ("a summary of all their prior reflections in this session").
+        reflect_summary: S.reflectText || null,
+      },
+    });
+    S.assessCompanionMessages = S.assessCompanionMessages.concat([{role:'assistant', content:res.reply}]);
+    S.assessCompanionResolved = !!res.resolved;
+    if (res.score_update !== null && res.score_update !== undefined) {
+      S.assessCompanionScoreUpdate = res.score_update;
+      S.selfScore = res.score_update;  // overrides the self-rating fallback per decision #2
+    }
+    if (res.resolved) {
+      // Short verdict summary for the LEARNER CONTINUITY block — reuse the
+      // companion's own final reply rather than a second AI call.
+      S.assessCompanionSummary = res.reply;
+      var wrap = document.getElementById('complete-btn-wrap');
+      if (wrap) wrap.style.display = 'block';
+    }
+  } catch(e) {
+    S.assessCompanionMessages = S.assessCompanionMessages.concat([
+      {role:'assistant', content:"I'm having trouble connecting right now. Try again in a moment, or use the self-rating below instead."}
+    ]);
+  }
+  set({assessCompanionLoading: false});
+
+  setTimeout(function(){
+    var t = document.getElementById('assess-companion-thread');
+    if (t) t.scrollTop = t.scrollHeight;
+  }, 60);
+}
+
+function renderAssessCompanionModal() {
+  if (!S.assessCompanionOpen) return '';
+  var msgs = S.assessCompanionMessages;
+  var threadHTML = msgs.map(function(m) {
+    var isUser = m.role === 'user';
+    return '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start'+(isUser?';flex-direction:row-reverse':'')+'">'
+      + '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;background:'+(isUser?'var(--bg4)':'var(--bg3)')+'">'
+      + (isUser ? '👤' : '🌊') + '</div>'
+      + '<div style="max-width:85%;font-size:13px;line-height:1.65;padding:8px 12px;border-radius:12px;'+(isUser?'border-radius:12px 4px 12px 12px;background:var(--bg4);color:var(--text)':'border-radius:4px 12px 12px 12px;background:var(--bg3);color:var(--text2)')+'">'
+      + m.content + '</div></div>';
+  }).join('');
+
+  if (S.assessCompanionLoading) {
+    threadHTML += '<div style="display:flex;gap:8px;align-items:center;padding:4px 0">'
+      + '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:13px">🌊</div>'
+      + '<div style="font-size:12px;color:var(--text3);font-style:italic">thinking…</div></div>';
+  }
+
+  return `
+  <div style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px">
+    <div style="background:var(--bg2);border-radius:var(--r);max-width:480px;width:100%;max-height:80vh;display:flex;flex-direction:column;overflow:hidden">
+      <div style="padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div style="font-family:var(--font-display);font-weight:700;font-size:14px;color:var(--deep)">🌊 The Companion</div>
+        <button class="btn btn-ghost btn-sm" onclick="closeAssessCompanion()">✕</button>
+      </div>
+      <div id="assess-companion-thread" style="flex:1;overflow-y:auto;padding:16px 18px">${threadHTML}</div>
+      ${S.assessCompanionResolved ? `
+      <div style="padding:0 18px 10px;font-size:11px;color:var(--wave)">✓ This discussion has reached a conclusion — you can close this and complete the session whenever you're ready.</div>
+      ` : ''}
+      <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px">
+        <input id="assess-companion-input" type="text" placeholder="Say what you're thinking…"
+          style="flex:1;padding:9px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:13px"
+          onkeydown="if(event.key==='Enter'){event.preventDefault();sendAssessCompanionMessage();}">
+        <button class="btn btn-wave btn-sm" onclick="sendAssessCompanionMessage()" ${S.assessCompanionLoading?'disabled':''}>Send</button>
+      </div>
+    </div>
+  </div>`;
+}
 
 // Direct session start — skips interest pulse, goes straight to the art.
 // Used by Recommended Next Start and individual art row clicks.
@@ -3743,11 +3898,22 @@ window.finishSession = function() {
           challenge_response: S.challengeText || '',
           reflect_response:   S.reflectText   || '',
           phase_reached:      5,
+          // P40: when the companion resolved the discussion, S.selfScore was
+          // already overridden with its score_update by sendAssessCompanionMessage —
+          // this line doesn't need special-casing, it just picks that up.
           assess_score:       S.selfScore || (S.answered ? 85 : 50),
           // 2026-07-07: which option did the learner actually pick? Backend
           // persists this on the session row and uses it to build the
           // LEARNER CONTINUITY block in future generations.
           assess_selected_index: S.assessSelectedIndex,
+          // P40: short verdict summary if a companion conversation reached a
+          // conclusion, so future sessions' LEARNER CONTINUITY block can see
+          // *why* a "wrong" pick was accepted, not just the resulting score.
+          assess_companion_verdict: S.assessCompanionResolved ? {
+            resolved: true,
+            final_score: S.assessCompanionScoreUpdate,
+            summary: S.assessCompanionSummary,
+          } : null,
           // Pass skill context so backend can (when ready) distribute XP across contributing arts
           skill_context:      S.skillContext || null,
           contributing_arts:  S.skillContext ? Object.keys(window.SKILL_ART_WEIGHTS && SKILL_ART_WEIGHTS[S.skillContext] || {}) : null,
@@ -3777,6 +3943,12 @@ window.finishSession = function() {
   currentSession = null;
   S.sandboxMessages = [];
   S.sandboxOpen = false;
+  // P40: reset companion state — the next session's assess starts fresh
+  S.assessCompanionOpen = false;
+  S.assessCompanionMessages = [];
+  S.assessCompanionResolved = false;
+  S.assessCompanionScoreUpdate = null;
+  S.assessCompanionSummary = null;
   set({view:'dashboard', phase:0, answered:false, selfScore:null, xp: S.xp + 18, sessionStartTime: null});
 };
 
@@ -5118,7 +5290,9 @@ function draw() {
   // not currently loading) is a dead-end error state — skip the footer there.
   const suppressFooter = (S.view === 'session' && !S.sessionLoading && !currentSession);
 
-  root.innerHTML = (isAuth ? '' : Nav()) + (views[S.view] || Dashboard)() + (suppressFooter ? '' : Footer());
+  root.innerHTML = (isAuth ? '' : Nav()) + (views[S.view] || Dashboard)() + (suppressFooter ? '' : Footer())
+    // P40: assess companion modal — only relevant during a session's assess phase.
+    + (S.view === 'session' ? renderAssessCompanionModal() : '');
 
   // Restore challenge text
   const t = document.getElementById('ctxt');

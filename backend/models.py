@@ -172,6 +172,13 @@ class Session(Base):
     reflect_response:    Mapped[Optional[str]] = mapped_column(Text)
     assess_score:        Mapped[Optional[int]] = mapped_column(Integer)
     assess_selected_index: Mapped[Optional[int]] = mapped_column(SmallInteger, nullable=True)  # 0-based index of the option the learner picked; NULL if not answered
+    # P40 (2026-07-23, migration scripts/2026-07-23-assess-companion-verdict.sql):
+    # short AI-written summary of the Socratic companion conversation that runs
+    # when a learner picks a "wrong" assess answer and engages the companion
+    # instead of just self-rating. NULL when no companion conversation happened
+    # (correct pick, or learner used the self-rating fallback instead).
+    # Shape: {"resolved": bool, "final_score": int|None, "summary": str}
+    assess_companion_verdict: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     started_at:          Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at:        Mapped[Optional[datetime]] = mapped_column(DateTime)
     created_at:          Mapped[datetime]      = mapped_column(DateTime, default=func.now())
