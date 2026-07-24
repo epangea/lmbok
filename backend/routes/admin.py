@@ -55,7 +55,8 @@ from jose import jwt, JWTError
 from pydantic import BaseModel
 
 from db import get_db
-from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft
+from sqlalchemy.exc import IntegrityError
+from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft, Learner, LearnerAdminMessage
 from routes.weekly_report import main as weekly_report_main
 from cookie_auth import ADMIN_ACCESS_COOKIE, set_admin_cookies, clear_admin_cookies
 from mail import send_mail
@@ -752,7 +753,17 @@ async def get_learners(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """All learners with denormalized streak/XP stats and derived top art."""
+    """All learners with denormalized streak/XP stats and derived top art.
+
+    2026-07-24 (P9.2): added email_verified + a computed `status` field.
+    Previously this endpoint only exposed `is_active` (defaults True at
+    registration, independent of email verification), so the admin UI
+    badged every brand-new, unverified signup as "Active" — misleading,
+    since login() itself already blocks unverified accounts. `status` is
+    now the single source of truth for the UI: 'pending' (email not yet
+    verified), 'active' (verified + not deactivated), or 'deactivated'
+    (admin-disabled, regardless of verification).
+    """
     result = await db.execute(text("""
         SELECT
             l.id,
@@ -761,6 +772,7 @@ async def get_learners(
             l.email,
             l.bioregion,
             l.is_active,
+            l.email_verified,
             l.created_at,
             l.last_seen_at,
             COALESCE(ls.current_streak,  0) AS current_streak,
@@ -782,6 +794,12 @@ async def get_learners(
         ORDER BY l.created_at DESC
     """))
     rows = result.mappings().all()
+    def _status(is_active: bool, email_verified: bool) -> str:
+        if not is_active:
+            return "deactivated"
+        if not email_verified:
+            return "pending"
+        return "active"
     return {
         "learners": [
             {
@@ -793,6 +811,8 @@ async def get_learners(
                 "last_seen_at":       row["last_seen_at"].isoformat() if row["last_seen_at"] else None,
                 "bioregion":          row["bioregion"],
                 "is_active":          bool(row["is_active"]),
+                "email_verified":     bool(row["email_verified"]),
+                "status":             _status(bool(row["is_active"]), bool(row["email_verified"])),
                 "current_streak":     int(row["current_streak"]),
                 "longest_streak":     int(row["longest_streak"]),
                 "total_sessions":     int(row["total_sessions"]),
@@ -804,6 +824,170 @@ async def get_learners(
             for row in rows
         ]
     }
+
+
+@router.patch("/learners/{learner_id}")
+async def admin_update_learner(
+    learner_id: int,
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Admin control over a learner's account state (P9.2):
+      - {"is_active": false}  → deactivate (e.g. suspected bot/abuse)
+      - {"is_active": true}   → reactivate
+      - {"email_verified": true} → manual verification override, for a
+        learner stuck on a broken/undelivered email. Deliberately a plain
+        admin action (no separate audit table) — same trust boundary as
+        every other admin mutation here, and it's a rare, visible action
+        an admin does directly to one account, not a bulk/automated one.
+    Only these two fields are writable through this endpoint.
+    """
+    result = await db.execute(select(Learner).where(Learner.id == learner_id))
+    learner = result.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(404, "Learner not found")
+
+    if "is_active" in data:
+        learner.is_active = bool(data["is_active"])
+    if "email_verified" in data:
+        learner.email_verified = bool(data["email_verified"])
+        if learner.email_verified:
+            # Clear any outstanding token so a stale emailed link can't
+            # later flip verification_expires logic unexpectedly.
+            learner.verification_token = None
+            learner.verification_expires = None
+
+    await db.commit()
+    return {
+        "ok": True,
+        "id": learner.id,
+        "is_active": learner.is_active,
+        "email_verified": learner.email_verified,
+    }
+
+
+@router.delete("/learners/{learner_id}")
+async def admin_delete_learner(
+    learner_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Real, permanent hard delete (P9.2) — deliberately different from
+    delete_org()'s soft-delete-disguised-as-DELETE above. Charbel's
+    explicit call: admins need to actually remove test accounts, not
+    just deactivate them.
+
+    This is a real destructive action, so it cascades through every table
+    with a FK into learners.id in one transaction, in dependency order
+    (messages before their parent opportunity_matches, everything before
+    the learners row itself) rather than relying on ON DELETE CASCADE,
+    which isn't configured on any of these FKs. If any step still fails
+    (e.g. a table added later without being added here), the whole
+    transaction rolls back and a clear 409 is returned instead of a
+    half-deleted account.
+    """
+    result = await db.execute(select(Learner).where(Learner.id == learner_id))
+    learner = result.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(404, "Learner not found")
+
+    try:
+        await db.execute(text(
+            "DELETE FROM messages WHERE match_id IN "
+            "(SELECT id FROM opportunity_matches WHERE learner_id = :lid)"
+        ), {"lid": learner_id})
+        await db.execute(text("DELETE FROM opportunity_matches WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM refresh_tokens WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM activity_log WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM reflections WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM radar_snapshots WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM sessions WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM learner_streaks WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM learner_art_progress WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM learner_skill_progress WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM learner_preferences WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM bioregion_contributions WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM learner_admin_messages WHERE learner_id = :lid"), {"lid": learner_id})
+        await db.execute(text("DELETE FROM learners WHERE id = :lid"), {"lid": learner_id})
+        await db.commit()
+    except IntegrityError as e:
+        await db.rollback()
+        logger.error(f"Hard delete of learner {learner_id} failed: {e}")
+        raise HTTPException(409, f"Could not fully delete learner {learner_id} — a dependent row exists that this endpoint doesn't yet cascade. Nothing was deleted (rolled back). Detail: {e}")
+
+    return {"ok": True, "deleted": learner_id}
+
+
+@router.get("/learners/{learner_id}/messages")
+async def admin_list_learner_messages(
+    learner_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """History of admin-sent emails to this learner, most recent first."""
+    result = await db.execute(
+        select(LearnerAdminMessage)
+        .where(LearnerAdminMessage.learner_id == learner_id)
+        .order_by(desc(LearnerAdminMessage.sent_at))
+    )
+    msgs = result.scalars().all()
+    return [
+        {
+            "id": m.id,
+            "template": m.template,
+            "subject": m.subject,
+            "body": m.body,
+            "sent_at": m.sent_at.isoformat() if m.sent_at else None,
+        }
+        for m in msgs
+    ]
+
+
+@router.post("/learners/{learner_id}/message")
+async def admin_send_learner_message(
+    learner_id: int,
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Send a composed email to a learner and log it (P9.2). `data` needs
+    `subject` and `body`; `template` is an optional free-text label the
+    frontend sends for its own history display (e.g. "welcome",
+    "support", "congrats", "org_notify", "custom") — not validated
+    against an enum here, since new templates shouldn't need a migration.
+    """
+    subject = (data.get("subject") or "").strip()
+    body = (data.get("body") or "").strip()
+    template = (data.get("template") or "custom").strip()[:30]
+    if not subject or not body:
+        raise HTTPException(400, "subject and body are required")
+
+    result = await db.execute(select(Learner).where(Learner.id == learner_id))
+    learner = result.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(404, "Learner not found")
+
+    try:
+        send_mail(to=learner.email, subject=subject, body=body)
+    except Exception as e:
+        logger.error(f"Learner message send failed for learner {learner_id}: {e}")
+        raise HTTPException(502, f"Send failed: {e}")
+
+    msg = LearnerAdminMessage(
+        learner_id=learner_id,
+        template=template,
+        subject=subject,
+        body=body,
+        sent_at=datetime.now(timezone.utc),
+    )
+    db.add(msg)
+    await db.commit()
+    await db.refresh(msg)
+    return {"ok": True, "id": msg.id, "sent_at": msg.sent_at.isoformat()}
 
 
 # ── Organizations (admin CRUD) ────────────────────────────

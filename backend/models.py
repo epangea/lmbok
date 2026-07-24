@@ -348,6 +348,17 @@ class BioregionContribution(Base):
     created_at:     Mapped[datetime]      = mapped_column(DateTime, default=func.now())
 
 
+class LearnerAdminMessage(Base):
+    """Audit trail of admin-composed emails sent to a learner (P9.2)."""
+    __tablename__ = "learner_admin_messages"
+    id:         Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
+    learner_id: Mapped[int]      = mapped_column(ForeignKey("learners.id"), nullable=False)
+    template:   Mapped[str]      = mapped_column(String(30), default="custom")  # welcome | support | congrats | org_notify | custom
+    subject:    Mapped[str]      = mapped_column(String(500), nullable=False)
+    body:       Mapped[str]      = mapped_column(Text, nullable=False)
+    sent_at:    Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
 class OutreachDraft(Base):
     """An email draft in the admin Outreach review queue (P9)."""
     __tablename__ = "outreach_drafts"

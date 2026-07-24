@@ -94,7 +94,7 @@
 
   <!-- Main content -->
   <div class="admin-content" id="admin-main">
-    <!-- rendered by JS -->
+    <div style="padding:48px;text-align:center;color:var(--text3);font-size:13px">Loading admin panel…</div>
   </div>
 </div>
 
@@ -151,7 +151,7 @@ var SETTINGS = {
 var scavState = { listings: null, running: false };
 
 // ── Learners live state ───────────────────────────
-var learnersState = { learners: null };
+var learnersState = { learners: null, messagesByLearner: {}, composerOpenFor: null, messagesLoadingFor: null };
 
 // ── AI Engine live state ──────────────────────────
 var aiState  = { groq: null, library: null, coverage: null };
@@ -226,7 +226,7 @@ function submitAdminKey() {
     AS.authed = true;
     document.getElementById('auth-wall').style.display = 'none';
     document.getElementById('admin-main').style.display = '';
-    renderAdmin();
+    showAdmin(AS.section);
   }).catch(function(err) {
     if (!msg) return;
     msg.style.color = 'var(--coral)';
@@ -528,14 +528,29 @@ function learnersLoad() {
   });
 }
 
+function learnersToggleDetail(id) {
+  var detail = document.getElementById('learner-detail-' + id);
+  var toggle = document.getElementById('learner-toggle-' + id);
+  if (!detail) return;
+  var open = detail.style.display !== 'none';
+  detail.style.display = open ? 'none' : 'table-row';
+  if (toggle) toggle.textContent = open ? '›' : '⌄';
+}
+
+function learnerStatusBadge(status) {
+  if (status === 'pending')     return '<span class="badge badge-amber">Unverified</span>';
+  if (status === 'deactivated') return '<span class="badge badge-red">Deactivated</span>';
+  return '<span class="badge badge-green">Active</span>';
+}
+
 function AdminLearners() {
   var ll = learnersState.learners;
   var countLabel = ll === null ? '' : '<div style="font-size:13px;color:var(--text2)">' + ll.length + ' registered</div>';
   var body;
   if (ll === null) {
-    body = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">Loading…</td></tr>';
+    body = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">Loading…</td></tr>';
   } else if (!ll.length) {
-    body = '<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">No learners yet.</td></tr>';
+    body = '<tr><td colspan="8" style="text-align:center;padding:32px;color:var(--text3)">No learners yet.</td></tr>';
   } else {
     body = ll.map(function(l) {
       var joined   = l.created_at ? l.created_at.slice(0, 10) : '—';
@@ -551,14 +566,27 @@ function AdminLearners() {
         + '<div><span style="color:var(--text3)">Username:</span> ' + escH(l.username || '—') + '</div>'
         + '<div><span style="color:var(--text3)">Email:</span> ' + escH(l.email || '—') + '</div>'
         + '<div><span style="color:var(--text3)">Bioregion:</span> ' + escH(l.bioregion || '—') + '</div>'
-        + '<div><span style="color:var(--text3)">Status:</span> ' + (l.is_active ? '<span class="badge badge-green">Active</span>' : '<span class="badge badge-red">Inactive</span>') + '</div>'
+        + '<div><span style="color:var(--text3)">Status:</span> ' + learnerStatusBadge(l.status) + '</div>'
         + '<div><span style="color:var(--text3)">Total XP:</span> ' + l.total_xp + '</div>'
         + '<div><span style="color:var(--text3)">Total minutes:</span> ' + l.total_minutes + '</div>'
         + '<div><span style="color:var(--text3)">Longest streak:</span> ' + l.longest_streak + ' days</div>'
         + '<div><span style="color:var(--text3)">Last seen:</span> ' + (l.last_seen_at ? l.last_seen_at.slice(0,10) : '—') + '</div>'
-        + '</div>';
+        + '</div>'
+        + '<div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap">'
+        + (!l.email_verified
+            ? '<button class="btn btn-ghost btn-sm" onclick="learnersVerify(' + l.id + ')">Verify email (admin override)</button>'
+            : '')
+        + (l.is_active
+            ? '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="learnersDeactivate(' + l.id + ')">Deactivate</button>'
+            : '<button class="btn btn-ghost btn-sm" style="color:var(--wave)" onclick="learnersReactivate(' + l.id + ')">Reactivate</button>')
+        + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="learnersDelete(' + l.id + ')">Delete permanently</button>'
+        + '<button class="btn btn-ghost btn-sm" onclick="learnersToggleComposer(' + l.id + ')">'
+          + (learnersState.composerOpenFor === l.id ? 'Close message composer' : '✉ Send message') + '</button>'
+        + '</div>'
+        + (learnersState.composerOpenFor === l.id ? learnersRenderComposer(l) : '');
       return '<tr id="learner-row-' + l.id + '" style="cursor:pointer" onclick="learnersToggleDetail(' + l.id + ')">'
         + '<td style="font-weight:500;color:var(--text)">' + escH(l.name || '—') + '</td>'
+        + '<td>' + learnerStatusBadge(l.status) + '</td>'
         + '<td>' + topArt + '</td>'
         + '<td>' + l.total_sessions + '</td>'
         + '<td>' + streak + '</td>'
@@ -566,7 +594,7 @@ function AdminLearners() {
         + '<td style="font-size:18px;color:var(--text3);text-align:center" id="learner-toggle-' + l.id + '">›</td>'
         + '</tr>'
         + '<tr id="' + detailId + '" style="display:none">'
-        + '<td colspan="6" style="background:var(--bg3);padding:12px 14px 14px;border-bottom:1px solid var(--border)">'
+        + '<td colspan="7" style="background:var(--bg3);padding:12px 14px 14px;border-bottom:1px solid var(--border)">'
         + detailHtml + '</td></tr>';
     }).join('');
   }
@@ -575,8 +603,186 @@ function AdminLearners() {
     + '<h2>' + T('admin.learners') + '</h2>' + countLabel + '</div>'
     + '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);overflow:hidden">'
     + '<table class="data-table"><thead><tr>'
-    + '<th>Name</th><th>Top art</th><th>Sessions</th><th>Streak</th><th>Joined</th><th></th>'
+    + '<th>Name</th><th>Status</th><th>Top art</th><th>Sessions</th><th>Streak</th><th>Joined</th><th></th>'
     + '</tr></thead><tbody>' + body + '</tbody></table></div>';
+}
+
+function learnersFindById(id) {
+  return (learnersState.learners || []).filter(function(x) { return x.id === id; })[0] || null;
+}
+
+function learnersRefreshDetail(id) {
+  // Re-render just the learners page (cheap — table isn't huge) so the
+  // toggled detail row reflects new state, then re-open the same row.
+  var el = document.getElementById('admin-main');
+  if (!el || AS.section !== 'learners') return;
+  el.innerHTML = AdminLearners();
+  var detail = document.getElementById('learner-detail-' + id);
+  var toggle = document.getElementById('learner-toggle-' + id);
+  if (detail) detail.style.display = 'table-row';
+  if (toggle) toggle.textContent = '⌄';
+}
+
+function learnersVerify(id) {
+  var l = learnersFindById(id);
+  var name = l ? (l.name || l.username) : ('learner #' + id);
+  if (!confirm('Manually verify ' + name + '\'s email without them clicking a link? Use this for a stuck/support case, not as a routine shortcut.')) return;
+  adminFetch('/admin/learners/' + id, 'PATCH', { email_verified: true }).then(function() {
+    learnersLoad();
+  }).catch(function(e) {
+    alert('Verify failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function learnersDeactivate(id) {
+  var l = learnersFindById(id);
+  var name = l ? (l.name || l.username) : ('learner #' + id);
+  if (!confirm('Deactivate ' + name + '? They will be blocked from logging in until reactivated.')) return;
+  adminFetch('/admin/learners/' + id, 'PATCH', { is_active: false }).then(function() {
+    learnersLoad();
+  }).catch(function(e) {
+    alert('Deactivate failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function learnersReactivate(id) {
+  adminFetch('/admin/learners/' + id, 'PATCH', { is_active: true }).then(function() {
+    learnersLoad();
+  }).catch(function(e) {
+    alert('Reactivate failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function learnersDelete(id) {
+  var l = learnersFindById(id);
+  var name = l ? (l.name || l.username) : ('learner #' + id);
+  if (!confirm('Permanently delete ' + name + '? This removes their account, sessions, progress, matches and messages — everything. This cannot be undone from the UI. Type OK on the next prompt to confirm.')) return;
+  var typed = prompt('Type DELETE to permanently remove ' + name + ':');
+  if (typed !== 'DELETE') { alert('Cancelled — no changes made.'); return; }
+  adminFetch('/admin/learners/' + id, 'DELETE').then(function() {
+    learnersLoad();
+  }).catch(function(e) {
+    alert('Delete failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function learnersToggleComposer(id) {
+  learnersState.composerOpenFor = (learnersState.composerOpenFor === id) ? null : id;
+  if (learnersState.composerOpenFor === id && !learnersState.messagesByLearner[id]) {
+    learnersLoadMessages(id);
+  } else {
+    learnersRefreshDetail(id);
+  }
+}
+
+function learnersLoadMessages(id) {
+  learnersState.messagesLoadingFor = id;
+  adminFetch('/admin/learners/' + id + '/messages').then(function(data) {
+    learnersState.messagesByLearner[id] = data || [];
+    learnersState.messagesLoadingFor = null;
+    learnersRefreshDetail(id);
+  }).catch(function() {
+    learnersState.messagesByLearner[id] = [];
+    learnersState.messagesLoadingFor = null;
+    learnersRefreshDetail(id);
+  });
+}
+
+function learnerMsgTemplate(key, l) {
+  var name = l.name || l.username || 'there';
+  if (key === 'welcome') {
+    return {
+      subject: 'Welcome to Surfing the Frequencies!',
+      body: 'Hi ' + name + ',\n\nYour account is now verified and ready to go. Log back in any time at build.onehouse.top to pick up where you left off.\n\nWith respect,\nSurfing the Frequencies'
+    };
+  }
+  if (key === 'support') {
+    return {
+      subject: 'Checking in from Surfing the Frequencies',
+      body: 'Hi ' + name + ',\n\nWe noticed you might be running into something on the platform. Just reply to this email and let us know what is happening — we are glad to help you get unstuck.\n\nWith respect,\nSurfing the Frequencies'
+    };
+  }
+  if (key === 'congrats') {
+    return {
+      subject: 'Nice work, ' + name + '!',
+      body: 'Hi ' + name + ',\n\nJust wanted to say congratulations on your progress so far — a ' + (l.current_streak || 0) + '-day streak and ' + (l.total_xp || 0) + ' XP. Keep it up!\n\nWith respect,\nSurfing the Frequencies'
+    };
+  }
+  if (key === 'org_notify') {
+    return {
+      subject: 'An organization may be interested in your progress',
+      body: 'Hi ' + name + ',\n\nBased on the skills you have been building, an organization on our platform may have opportunities that fit you. Log in and check your matches at build.onehouse.top.\n\nWith respect,\nSurfing the Frequencies'
+    };
+  }
+  return { subject: '', body: '' };
+}
+
+function learnersApplyTemplate(id, key) {
+  var l = learnersFindById(id);
+  if (!l) return;
+  var t = learnerMsgTemplate(key, l);
+  var subjEl = document.getElementById('lm-subj-' + id);
+  var bodyEl = document.getElementById('lm-body-' + id);
+  if (subjEl) subjEl.value = t.subject;
+  if (bodyEl) bodyEl.value = t.body;
+}
+
+function learnersRenderComposer(l) {
+  var id = l.id;
+  var loading = learnersState.messagesLoadingFor === id;
+  var history = learnersState.messagesByLearner[id];
+
+  var historyHtml;
+  if (loading || history === undefined) {
+    historyHtml = '<div style="font-size:11px;color:var(--text3);margin-top:10px">Loading message history…</div>';
+  } else if (!history.length) {
+    historyHtml = '<div style="font-size:11px;color:var(--text3);margin-top:10px">No messages sent yet.</div>';
+  } else {
+    historyHtml = '<div style="margin-top:12px;font-size:11px;color:var(--text3)">Message history</div>'
+      + history.map(function(m) {
+          return '<div style="margin-top:6px;padding:8px 10px;background:var(--bg4);border-radius:var(--r-sm);font-size:12px">'
+            + '<div style="color:var(--text2);font-weight:500">' + escH(m.subject) + '</div>'
+            + '<div style="color:var(--text3);font-size:11px;margin-top:2px">' + escH(m.template) + ' · ' + escH((m.sent_at || '').replace('T', ' ').slice(0, 16)) + '</div>'
+            + '</div>';
+        }).join('');
+  }
+
+  return '<div style="background:var(--bg4);border-radius:var(--r-sm);padding:14px;margin-top:6px">'
+    + '<div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">'
+    + '<label style="font-size:12px;color:var(--text3)">Template:</label>'
+    + '<select class="form-input" style="font-size:12px;max-width:220px;padding:4px 8px" onchange="learnersApplyTemplate(' + id + ', this.value)">'
+    + '<option value="custom">Custom / blank</option>'
+    + '<option value="welcome">Welcome / verified</option>'
+    + '<option value="support">Support / troubleshooting</option>'
+    + '<option value="congrats">Congratulate progress</option>'
+    + '<option value="org_notify">Notify: org interest</option>'
+    + '</select></div>'
+    + '<input class="form-input" id="lm-subj-' + id + '" placeholder="Subject" style="width:100%;margin-bottom:8px" />'
+    + '<textarea class="form-input" id="lm-body-' + id + '" rows="6" placeholder="Message body" style="width:100%;font-size:13px;line-height:1.6;margin-bottom:10px"></textarea>'
+    + '<button class="btn btn-wave btn-sm" onclick="learnersSendMessage(' + id + ')">Send email ✓</button>'
+    + historyHtml
+    + '</div>';
+}
+
+function learnersSendMessage(id) {
+  var subjEl = document.getElementById('lm-subj-' + id);
+  var bodyEl = document.getElementById('lm-body-' + id);
+  var tmplEl = document.querySelector('#learner-detail-' + id + ' select');
+  if (!subjEl || !bodyEl || !subjEl.value.trim() || !bodyEl.value.trim()) {
+    alert('Subject and message body are both required.');
+    return;
+  }
+  if (!confirm('Send this email now?')) return;
+  adminFetch('/admin/learners/' + id + '/message', 'POST', {
+    subject: subjEl.value.trim(),
+    body: bodyEl.value.trim(),
+    template: tmplEl ? tmplEl.value : 'custom',
+  }).then(function() {
+    delete learnersState.messagesByLearner[id];
+    learnersLoadMessages(id);
+  }).catch(function(e) {
+    alert('Send failed: ' + (e.message || 'unknown'));
+  });
 }
 
 function AdminOrgs() {
@@ -944,29 +1150,6 @@ function lecsSave(leckoId) {
   }).catch(function(e) {
     alert('Could not save LECKO: ' + (e.message || 'unknown'));
   });
-}
-
-function learnersLoad() {
-  adminFetch('/admin/learners').then(function(data) {
-    learnersState.learners = data.learners || [];
-    var el = document.getElementById('admin-main');
-    if (el && AS.section === 'learners') el.innerHTML = AdminLearners();
-  }).catch(function(e) {
-    learnersState.learners = [];
-    var el = document.getElementById('admin-main');
-    if (el && AS.section === 'learners')
-      el.innerHTML = '<h2 style="margin-bottom:12px">' + T('admin.learners') + '</h2>'
-        + '<div style="color:var(--coral);font-size:13px">Could not load: ' + escH(e.message) + '</div>';
-  });
-}
-
-function learnersToggleDetail(id) {
-  var detail = document.getElementById('learner-detail-' + id);
-  var toggle = document.getElementById('learner-toggle-' + id);
-  if (!detail) return;
-  var open = detail.style.display !== 'none';
-  detail.style.display = open ? 'none' : 'table-row';
-  if (toggle) toggle.textContent = open ? '›' : '⌄';
 }
 
 // ── SCAVENGER AGENT (live) ────────────────────────
@@ -2428,7 +2611,17 @@ window.doAdminLogout = function() {
 
 // Boot — deferred so all DOM elements exist
 document.addEventListener('DOMContentLoaded', function() {
+  var bootSettled = false;
+  // Safety net: checkAuth() has clean .then/.catch handling for every
+  // known failure mode, but if a future change ever leaves it hanging
+  // (network stall, unhandled rejection), don't leave "Loading admin
+  // panel…" on screen forever — fall back to the auth wall.
+  setTimeout(function() {
+    if (!bootSettled) showAuthWall();
+  }, 10000);
+
   checkAuth().then(function(ok) {
+    bootSettled = true;
     if (!ok) {
       var inp = document.getElementById('auth-key-input');
       if (inp) inp.focus();
