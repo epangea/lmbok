@@ -55,9 +55,10 @@ from jose import jwt, JWTError
 from pydantic import BaseModel
 
 from db import get_db
-from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session
+from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft
 from routes.weekly_report import main as weekly_report_main
 from cookie_auth import ADMIN_ACCESS_COOKIE, set_admin_cookies, clear_admin_cookies
+from mail import send_mail
 
 logger = logging.getLogger("freqlearn.admin")
 
@@ -1300,3 +1301,111 @@ async def admin_delete_session(
     await db.delete(session)
     await db.commit()
     return {"ok": True, "deleted": session_id}
+
+# ============================================================
+# P9 — Outreach section (2026-07-24)
+# Real review/send/discard mechanics for the admin Outreach queue.
+# Charbel's call: placeholder seed data for now (see migration
+# 2026-07-24-outreach-drafts.sql) — real org/learner auto-matching
+# to populate this table is a separate, later scoping pass.
+#
+#   GET    /api/admin/outreach              — list drafts (pending first, then newest)
+#   PATCH  /api/admin/outreach/{id}         — edit subject/body before sending
+#   POST   /api/admin/outreach/{id}/send    — send via mail.send_mail(), mark sent
+#   PATCH  /api/admin/outreach/{id}/discard — mark discarded (no hard delete)
+# ============================================================
+
+@router.get("/outreach")
+async def admin_list_outreach(
+    db: AsyncSession = Depends(get_db),
+    _: None = Depends(require_admin),
+):
+    """List outreach drafts, pending first, then most recent."""
+    q = select(OutreachDraft).order_by(
+        (OutreachDraft.status != "pending"),
+        desc(OutreachDraft.created_at),
+    )
+    result = await db.execute(q)
+    drafts = result.scalars().all()
+    return [
+        {
+            "id": d.id,
+            "org_name": d.org_name,
+            "contact_email": d.contact_email,
+            "match_count": d.match_count,
+            "subject": d.subject,
+            "body": d.body,
+            "status": d.status,
+            "created_at": d.created_at.isoformat() if d.created_at else None,
+            "sent_at": d.sent_at.isoformat() if d.sent_at else None,
+        }
+        for d in drafts
+    ]
+
+
+@router.patch("/outreach/{draft_id}")
+async def admin_update_outreach(
+    draft_id: int,
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Edit a draft's subject/body before sending. Only pending drafts are editable."""
+    result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == draft_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(404, "Outreach draft not found")
+    if draft.status != "pending":
+        raise HTTPException(400, f"Cannot edit a draft that is already '{draft.status}'")
+
+    for key in ("subject", "body"):
+        if key in data:
+            setattr(draft, key, data[key])
+
+    await db.commit()
+    return {"ok": True, "id": draft_id}
+
+
+@router.post("/outreach/{draft_id}/send")
+async def admin_send_outreach(
+    draft_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send the draft's current subject/body to contact_email, then mark sent."""
+    result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == draft_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(404, "Outreach draft not found")
+    if draft.status != "pending":
+        raise HTTPException(400, f"Draft is already '{draft.status}'")
+
+    try:
+        send_mail(to=draft.contact_email, subject=draft.subject, body=draft.body)
+    except Exception as e:
+        logger.error(f"Outreach send failed for draft {draft_id}: {e}")
+        raise HTTPException(502, f"Send failed: {e}")
+
+    draft.status = "sent"
+    draft.sent_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"ok": True, "id": draft_id, "status": "sent"}
+
+
+@router.patch("/outreach/{draft_id}/discard")
+async def admin_discard_outreach(
+    draft_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a draft discarded. Soft — never hard-deleted."""
+    result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == draft_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(404, "Outreach draft not found")
+    if draft.status != "pending":
+        raise HTTPException(400, f"Draft is already '{draft.status}'")
+
+    draft.status = "discarded"
+    await db.commit()
+    return {"ok": True, "id": draft_id, "status": "discarded"}

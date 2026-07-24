@@ -173,6 +173,7 @@ var sessionsState = { sessions: null, total: 0, loading: false, error: null, off
 
 // ── Lecko moderation live state ──────────────────────────────
 var moderateState = { pending: null, loading: false, error: null };
+var outreachState = { drafts: null, loading: false, error: null };
 
 // ── Auth wall ────────────────────────────────────
 // P-SEC2 (2026-07-17): admin session now lives in an httpOnly cookie, not
@@ -310,6 +311,7 @@ function showAdmin(section) {
   if (section === 'settings') settingsLoad();
   if (section === 'sessions') sessionsLoad();
   if (section === 'moderate') moderateLoad();
+  if (section === 'outreach') outreachLoad();
 }
 
 // ── Admin sidebar toggle (mobile hamburger) ────────
@@ -1082,26 +1084,107 @@ function scavReject(id) {
 
 // ── OUTREACH ──────────────────────────────────────
 function AdminOutreach() {
-  return '<h2 style="margin-bottom:6px">Outreach queue</h2>'
-    + '<p style="margin-bottom:20px">Emails drafted by the scavenger agent, ready for review and sending. Each email notifies an organization that we have learners who have proven the skills they need.</p>'
-    + '<div class="card" style="margin-bottom:14px">'
-    + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
-    + '<div><h3>UNESCO — Youth Arts Facilitator</h3>'
-    + '<p style="font-size:12px;color:var(--text3);margin-top:2px">careers@unesco.org · 4 learner matches</p></div>'
-    + '<span class="badge badge-amber">Pending review</span></div>'
-    + '<div style="background:var(--bg3);border-radius:var(--r-sm);padding:14px;font-size:13px;line-height:1.8;color:var(--text2);margin-bottom:12px">'
-    + '<strong style="color:var(--text)">Subject: Qualified learners for your Youth Arts Facilitator role</strong><br><br>'
-    + 'Dear UNESCO Recruitment Team,<br><br>'
-    + 'I am writing on behalf of Surfing the Frequencies, a free global learning platform where learners develop and demonstrate human arts through structured, assessed practice.<br><br>'
-    + 'We have identified 4 learners whose demonstrated skills closely match the requirements of your Youth Arts Facilitator listing. Each has completed verified sessions in creativity, cultural competence and communication, and has consented to be introduced to potential opportunities.<br><br>'
-    + 'If you would like to review their portfolios and connect directly, please reply to this email or visit our organization portal at build.onehouse.top/org.<br><br>'
-    + 'With respect,<br>Charbel Haddad<br>Surfing the Frequencies'
-    + '</div>'
-    + '<div style="display:flex;gap:8px">'
-    + '<button class="btn btn-wave btn-sm" onclick="alert(\'Email sent!\')">Send email ✓</button>'
-    + '<button class="btn btn-ghost btn-sm">Edit draft</button>'
-    + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)">Discard</button>'
-    + '</div></div>';
+  var s = outreachState;
+  var body = '<h2 style="margin-bottom:6px">Outreach queue</h2>'
+    + '<p style="margin-bottom:20px;font-size:13px;color:var(--text3)">Email drafts ready for review and sending. Each email notifies an organization that we have learners who have proven the skills they need. Matching is placeholder for now — real org/learner auto-matching lands in a later pass.</p>';
+
+  body += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
+    + '<button class="btn btn-ghost btn-sm" onclick="outreachLoad()">&#8635; Refresh</button>'
+    + (s.loading ? '<span style="font-size:11px;color:var(--text3)">Loading...</span>' : '')
+    + (s.error ? '<span style="font-size:11px;color:var(--coral)">' + escH(s.error) + '</span>' : '')
+    + '</div>';
+
+  if (!s.drafts) {
+    body += '<div style="color:var(--text3);font-size:13px">Loading outreach drafts...</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  if (!s.drafts.length) {
+    body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No outreach drafts yet.</div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  body += s.drafts.map(function(d) {
+    var badge = d.status === 'pending'
+      ? '<span class="badge badge-amber">Pending review</span>'
+      : d.status === 'sent'
+        ? '<span class="badge badge-green">Sent ' + escH((d.sent_at || '').slice(0, 10)) + '</span>'
+        : '<span class="badge badge-red">Discarded</span>';
+    var editable = d.status === 'pending';
+    return '<div class="card" style="margin-bottom:14px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+      + '<div><h3>' + escH(d.org_name) + '</h3>'
+      + '<p style="font-size:12px;color:var(--text3);margin-top:2px">' + escH(d.contact_email) + ' · ' + d.match_count + ' learner match' + (d.match_count === 1 ? '' : 'es') + '</p></div>'
+      + badge + '</div>'
+      + (editable
+          ? '<input class="form-input" id="outreach-subj-' + d.id + '" value="' + escH(d.subject) + '" style="width:100%;margin-bottom:8px;font-weight:500" />'
+            + '<textarea class="form-input" id="outreach-body-' + d.id + '" rows="8" style="width:100%;font-size:13px;line-height:1.6;margin-bottom:12px">' + escH(d.body) + '</textarea>'
+          : '<div style="background:var(--bg3);border-radius:var(--r-sm);padding:14px;font-size:13px;line-height:1.8;color:var(--text2);margin-bottom:12px">'
+            + '<strong style="color:var(--text)">Subject: ' + escH(d.subject) + '</strong><br><br>'
+            + escH(d.body).replace(/\n/g, '<br>')
+            + '</div>')
+      + (editable
+          ? '<div style="display:flex;gap:8px">'
+            + '<button class="btn btn-wave btn-sm" onclick="outreachSend(' + d.id + ')">Send email ✓</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="outreachSaveDraft(' + d.id + ')">Save edits</button>'
+            + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="outreachDiscard(' + d.id + ')">Discard</button>'
+            + '</div>'
+          : '')
+      + '</div>';
+  }).join('');
+
+  return '<div class="page">' + body + '</div>';
+}
+
+function outreachLoad() {
+  outreachState.loading = true;
+  outreachState.error = null;
+  adminFetch('/admin/outreach').then(function(data) {
+    outreachState.drafts = data || [];
+    outreachState.loading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    outreachState.loading = false;
+    outreachState.error = e.message || 'Failed to load outreach drafts';
+    outreachState.drafts = outreachState.drafts || [];
+    renderAdmin();
+  });
+}
+
+function outreachSaveDraft(draftId) {
+  var subjEl = document.getElementById('outreach-subj-' + draftId);
+  var bodyEl = document.getElementById('outreach-body-' + draftId);
+  if (!subjEl || !bodyEl) return;
+  adminFetch('/admin/outreach/' + draftId, 'PATCH', { subject: subjEl.value, body: bodyEl.value }).then(function() {
+    outreachLoad();
+  }).catch(function(e) {
+    alert('Save failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function outreachSend(draftId) {
+  if (!confirm('Send this email now?')) return;
+  var subjEl = document.getElementById('outreach-subj-' + draftId);
+  var bodyEl = document.getElementById('outreach-body-' + draftId);
+  var save = (subjEl && bodyEl)
+    ? adminFetch('/admin/outreach/' + draftId, 'PATCH', { subject: subjEl.value, body: bodyEl.value })
+    : Promise.resolve();
+  save.then(function() {
+    return adminFetch('/admin/outreach/' + draftId + '/send', 'POST');
+  }).then(function() {
+    outreachLoad();
+  }).catch(function(e) {
+    alert('Send failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function outreachDiscard(draftId) {
+  if (!confirm('Discard this draft? This cannot be undone from the UI.')) return;
+  adminFetch('/admin/outreach/' + draftId + '/discard', 'PATCH').then(function() {
+    outreachLoad();
+  }).catch(function(e) {
+    alert('Discard failed: ' + (e.message || 'unknown'));
+  });
 }
 
 // ── AI ENGINE (live) ──────────────────────────────
@@ -2291,7 +2374,7 @@ function renderAdmin() {
     learners:  AdminLearners,
     orgs:      AdminOrgs,
     leckos:    AdminLecKos,
-    sessions:  function() { return '<h2>' + T('admin.sessions') + '</h2>' + '<p style="margin-top:8px;color:var(--text2)">Full session browser coming soon.</p>'; },
+    sessions:  AdminSessions,
     moderate:  AdminModerate,
     scavenger: AdminScavenger,
     outreach:  AdminOutreach,
@@ -2307,7 +2390,8 @@ function renderAdmin() {
 window.showAdmin             = showAdmin;
 window.learnersLoad          = learnersLoad;
 window.learnersToggleDetail  = learnersToggleDetail;
-window.saveAdminKey          = saveAdminKey;
+// saveAdminKey retired (P-SEC2, 2026-07-17) — window assignment removed 2026-07-24, was a dangling
+// reference to the deleted function, throwing ReferenceError on every admin page load.
 window.saveScavengerSettings = saveScavengerSettings;
 window.submitAdminKey        = submitAdminKey;
 window.scavRun               = scavRun;

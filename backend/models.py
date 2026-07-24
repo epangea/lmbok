@@ -348,6 +348,20 @@ class BioregionContribution(Base):
     created_at:     Mapped[datetime]      = mapped_column(DateTime, default=func.now())
 
 
+class OutreachDraft(Base):
+    """An email draft in the admin Outreach review queue (P9)."""
+    __tablename__ = "outreach_drafts"
+    id:             Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    org_name:       Mapped[str]           = mapped_column(String(200), nullable=False)
+    contact_email:  Mapped[str]           = mapped_column(String(255), nullable=False)
+    match_count:    Mapped[int]           = mapped_column(Integer, default=0)
+    subject:        Mapped[str]           = mapped_column(String(500), nullable=False)
+    body:           Mapped[str]           = mapped_column(Text, nullable=False)
+    status:         Mapped[str]           = mapped_column(String(20), default="pending")  # pending | sent | discarded
+    created_at:     Mapped[datetime]      = mapped_column(DateTime, default=func.now())
+    sent_at:        Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
 class BioregionPortrait(Base):
     """AI-synthesised collective portrait for a geographic cluster."""
     __tablename__ = "bioregion_portraits"
