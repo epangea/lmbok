@@ -92,6 +92,21 @@ for ep in "/api/learners/me" "/api/sessions/today"; do
 done
 
 echo ""
+echo "-- P11 endpoints require org auth (no credentials, expect 401) --"
+# Structural check only — confirms these new routes exist and are gated,
+# same as the learner block above. The actual behavior of the flow (parse
+# -> generate -> notify -> accept -> reveal) is covered end-to-end in
+# scripts/e2e_org_polis.sh, not here — smoke.sh stays fast and stateless.
+for ep in "/api/orgs/listings/1/parse-needs" "/api/orgs/listings/1/generate-matches" "/api/orgs/listings/1/matches/1/notify"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}${ep}" -H "Content-Type: application/json" -d '{}' --max-time 8)
+  pass "$ep" "$code" "401"
+done
+for ep in "/api/matching/1/accept" "/api/matching/1/decline"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}${ep}" -H "Content-Type: application/json" -d '{}' --max-time 8)
+  pass "$ep" "$code" "401"
+done
+
+echo ""
 echo "-- Admin cookie/CSRF checks (P-SEC2, 2026-07-17) --"
 # ADMIN_KEY is only ever sent once now, in this login call, over HTTPS, to
 # establish a session — never again as a header on every request. Runs

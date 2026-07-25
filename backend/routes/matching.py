@@ -197,17 +197,72 @@ async def get_my_matches(
         .where(OpportunityMatch.learner_id == learner.id)
         .order_by(OpportunityMatch.matched_at.desc())
     )).scalars().all()
+    # P11: a 'suggested' ai_suggested match is a candidate the org hasn't
+    # invited yet — the learner shouldn't see it at all until notify_ai_match
+    # moves it to 'invited'. Everything else (learner_initiated, or an
+    # ai_suggested match already invited/accepted/declined) is visible.
+    rows = [m for m in rows if not (m.origin == "ai_suggested" and m.learner_status == "suggested")]
     return [
         {
             "id":             m.id,
             "listing_id":     m.listing_id,
+            "origin":         m.origin,
             "match_score":    m.match_score,
             "learner_status": m.learner_status,
             "org_status":     m.org_status,
             "matched_at":     m.matched_at.isoformat() if m.matched_at else None,
+            "notified_at":    m.notified_at.isoformat() if m.notified_at else None,
         }
         for m in rows
     ]
+
+
+@router.post("/{match_id}/accept")
+async def accept_ai_match(
+    match_id: int,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """P11: learner accepts an org-invited AI match. Moves learner_status to
+    'interested' — the same value that already means "mutual/visible" for
+    learner_initiated matches, so the org's existing get_listing_matches
+    reveal logic picks this up with no further change needed."""
+    match = (await db.execute(
+        select(OpportunityMatch).where(
+            OpportunityMatch.id == match_id,
+            OpportunityMatch.learner_id == learner.id,
+        )
+    )).scalar_one_or_none()
+    if not match:
+        raise HTTPException(404, "Match not found")
+    if match.origin != "ai_suggested" or match.learner_status != "invited":
+        raise HTTPException(400, "This match isn't a pending AI invitation")
+    match.learner_status = "interested"
+    await db.commit()
+    return {"ok": True}
+
+
+@router.post("/{match_id}/decline")
+async def decline_ai_match(
+    match_id: int,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """P11: learner declines an org-invited AI match. Identity was never
+    shared with the org, so nothing further to unwind on their side."""
+    match = (await db.execute(
+        select(OpportunityMatch).where(
+            OpportunityMatch.id == match_id,
+            OpportunityMatch.learner_id == learner.id,
+        )
+    )).scalar_one_or_none()
+    if not match:
+        raise HTTPException(404, "Match not found")
+    if match.origin != "ai_suggested" or match.learner_status != "invited":
+        raise HTTPException(400, "This match isn't a pending AI invitation")
+    match.learner_status = "declined"
+    await db.commit()
+    return {"ok": True}
 
 
 @router.post("/")

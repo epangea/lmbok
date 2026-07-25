@@ -20,9 +20,12 @@
 #   POST /api/orgs/listings              — create a listing
 #   PATCH /api/orgs/listings/{id}        — update a listing
 #   DELETE /api/orgs/listings/{id}       — delete a listing
-#   GET  /api/orgs/listings/{id}/matches — who expressed interest
+#   GET  /api/orgs/listings/{id}/matches — who expressed interest (+ anonymized AI candidates)
 #   GET  /api/orgs/messages/{match_id}   — Pnyx thread (org side)
 #   POST /api/orgs/messages/{match_id}   — send message to learner
+#   POST /api/orgs/listings/{id}/parse-needs      — P11: AI parses needs_text -> skill targets
+#   POST /api/orgs/listings/{id}/generate-matches — P11: rank learners, create top-10 ai_suggested matches
+#   POST /api/orgs/listings/{id}/matches/{mid}/notify — P11: invite one anonymized candidate
 # ============================================================
 
 import os
@@ -40,6 +43,7 @@ import jwt
 from db import get_db
 from models import Organization, OpportunityListing, OpportunityMatch, Learner, Message
 from cookie_auth import ORG_ACCESS_COOKIE, set_org_cookies, clear_org_cookies
+from mail import send_mail
 
 router = APIRouter()
 
@@ -118,12 +122,14 @@ class OrgUpdate(BaseModel):
     website:       Optional[str] = None
     contact_email: Optional[str] = None
     org_type:      Optional[str] = None
+    bioregion:     Optional[str] = None  # P11: self-service bioregion (auto-detected client-side)
 
 class ListingCreate(BaseModel):
     title:         str
     description:   Optional[str] = None
     listing_type:  str = "project"  # volunteer | job | project | internship
     required_arts: list[str] = []   # list of art slugs
+    needs_text:    Optional[str] = None  # P11: free-text needs, parsed into skill targets separately
     source_url:    Optional[str] = None
     phase_min:     Optional[int] = None
     phase_max:     Optional[int] = None
@@ -133,6 +139,8 @@ class ListingUpdate(BaseModel):
     description:   Optional[str] = None
     listing_type:  Optional[str] = None
     required_arts: Optional[list[str]] = None
+    needs_text:    Optional[str] = None
+    needs_skill_targets: Optional[list[dict]] = None
     source_url:    Optional[str] = None
     is_active:     Optional[bool] = None
 
@@ -151,6 +159,7 @@ def _org_dict(org: Organization) -> dict:
         "website":       org.website,
         "contact_email": org.contact_email,
         "org_type":      org.org_type,
+        "bioregion":     org.bioregion,
         "is_verified":   org.is_verified,
         "created_at":    org.created_at.isoformat() if org.created_at else None,
     }
@@ -165,6 +174,8 @@ def _listing_dict(listing: OpportunityListing) -> dict:
         "description":     listing.description,
         "listing_type":    listing.listing_type,
         "required_arts":   required,
+        "needs_text":      listing.needs_text,
+        "needs_skill_targets": listing.needs_skill_targets or [],
         "source_url":      listing.source_url,
         "is_active":       listing.is_active,
         "pending_approval": not listing.is_active and not listing.scavenged,
@@ -280,6 +291,7 @@ async def update_me(
     if req.website:       org.website        = req.website
     if req.contact_email: org.contact_email  = req.contact_email.strip().lower()
     if req.org_type:      org.org_type       = req.org_type
+    if req.bioregion:     org.bioregion      = req.bioregion.strip()
     await db.commit()
     return _org_dict(org)
 
@@ -328,6 +340,7 @@ async def create_listing(
         listing_type=req.listing_type,
         required_skills={},
         required_arts=req.required_arts,
+        needs_text=req.needs_text,
         phase_min=req.phase_min,
         phase_max=req.phase_max,
         source_url=req.source_url,
@@ -362,6 +375,8 @@ async def update_listing(
     if req.description   is not None: listing.description   = req.description
     if req.listing_type  is not None: listing.listing_type  = req.listing_type
     if req.required_arts is not None: listing.required_arts = req.required_arts
+    if req.needs_text    is not None: listing.needs_text    = req.needs_text
+    if req.needs_skill_targets is not None: listing.needs_skill_targets = req.needs_skill_targets
     if req.source_url    is not None: listing.source_url    = req.source_url
     if req.is_active     is not None: listing.is_active     = req.is_active
 
@@ -416,8 +431,34 @@ async def get_listing_matches(
     )
     matches = matches_q.scalars().all()
 
+    # P11 consent model: an ai_suggested match stays anonymous to the org
+    # until the learner has accepted (learner_status moves to 'interested').
+    # 'suggested' = ranked, not yet notified. 'invited' = notified, awaiting
+    # the learner's response. Neither reveals identity. Everything else
+    # (learner_initiated matches, or ai_suggested ones the learner accepted)
+    # is fully visible, same as before.
     out = []
+    anon_i = 0
     for m in matches:
+        anon = m.origin == "ai_suggested" and m.learner_status in ("suggested", "invited")
+        if anon:
+            anon_i += 1
+            out.append({
+                "match_id":      m.id,
+                "learner_id":    None,
+                "display_name":  f"Candidate {anon_i}",
+                "avatar_emoji":  "❔",
+                "avatar_color":  "#8892a0",
+                "anonymized":    True,
+                "origin":        m.origin,
+                "learner_status": m.learner_status,
+                "org_status":    m.org_status,
+                "match_score":   m.match_score,
+                "arts_met":      m.arts_met,
+                "matched_at":    m.matched_at.isoformat() if m.matched_at else None,
+                "notified_at":   m.notified_at.isoformat() if m.notified_at else None,
+            })
+            continue
         learner_q = await db.execute(
             select(Learner).where(Learner.id == m.learner_id)
         )
@@ -428,10 +469,14 @@ async def get_listing_matches(
             "display_name":  learner.display_name if learner else "—",
             "avatar_emoji":  learner.avatar_emoji if learner else "🌱",
             "avatar_color":  learner.avatar_color if learner else "#1D9E75",
+            "anonymized":    False,
+            "origin":        m.origin,
             "learner_status": m.learner_status,
             "org_status":    m.org_status,
             "match_score":   m.match_score,
+            "arts_met":      m.arts_met,
             "matched_at":    m.matched_at.isoformat() if m.matched_at else None,
+            "notified_at":   m.notified_at.isoformat() if m.notified_at else None,
         })
     return out
 
@@ -473,6 +518,224 @@ async def update_match_status(
     match.org_status = new_status
     await db.commit()
     return {"ok": True, "org_status": new_status}
+
+
+# ── P11: AI needs-matching ──────────────────────────────────
+# Added 2026-07-24. Full spec: PROJECT_MASTER PART 18.
+#   POST /listings/{id}/parse-needs      — AI parses needs_text into skill targets
+#   POST /listings/{id}/generate-matches — ranks learners, creates top-10 ai_suggested matches
+#   POST /listings/{id}/matches/{mid}/notify — org invites one anonymized candidate
+
+@router.post("/listings/{listing_id}/parse-needs")
+async def parse_listing_needs(
+    listing_id: int,
+    org: Organization = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Parses needs_text against the closed vocabulary of active skills, returns
+    a candidate needs_skill_targets list for the org to review — does NOT save
+    it; the org confirms via PATCH /listings/{id} with the reviewed list."""
+    listing_q = await db.execute(
+        select(OpportunityListing).where(
+            OpportunityListing.id == listing_id,
+            OpportunityListing.org_id == org.id,
+        )
+    )
+    listing = listing_q.scalar_one_or_none()
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    if not listing.needs_text or not listing.needs_text.strip():
+        raise HTTPException(400, "needs_text is empty — write what you're looking for first")
+
+    from models import Skill
+    skills = (await db.execute(select(Skill).where(Skill.is_active == True))).scalars().all()
+    vocab = "\n".join(f"- {s.slug}: {s.name}" + (f" ({s.subcategory})" if s.subcategory else "") for s in skills)
+
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
+        raise HTTPException(503, "GROQ_API_KEY not configured")
+
+    system_prompt = f"""You are matching an organization's stated needs to a fixed catalog of learner skills for "Surfing the Frequencies", a free lifelong learning platform.
+
+CLOSED VOCABULARY — you may ONLY use skill slugs from this list, never invent new ones:
+{vocab}
+
+The organization wrote this free-text description of what they need:
+\"\"\"{listing.needs_text.strip()}\"\"\"
+
+Pick the skill slugs (from the list above only) that best match what they're looking for, and a minimum proficiency level for each (levels run 0-3, use 1 for "some experience", 2 for "solid", 3 for "advanced").
+
+Respond with ONLY a JSON array, no preamble, no markdown fences, in this exact shape:
+[{{"slug": "skill-slug", "min_level": 1}}, ...]
+Include at most 6 skills — the ones most central to the need, not every tangential match."""
+
+    import httpx, json as _json
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                "https://api.groq.com/openai/v1/chat/completions",
+                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
+                json={
+                    "model": "llama-3.3-70b-versatile",
+                    "messages": [{"role": "system", "content": system_prompt}],
+                    "max_tokens": 400,
+                    "temperature": 0.2,
+                },
+            )
+        resp.raise_for_status()
+        raw = resp.json()["choices"][0]["message"]["content"].strip()
+        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = _json.loads(raw)
+    except Exception as e:
+        raise HTTPException(503, f"Needs-parsing unavailable: {str(e)[:120]}")
+
+    valid_slugs = {s.slug: s for s in skills}
+    targets = []
+    for item in parsed if isinstance(parsed, list) else []:
+        slug = item.get("slug") if isinstance(item, dict) else None
+        if slug in valid_slugs:
+            s = valid_slugs[slug]
+            targets.append({
+                "skill_id":  s.id,
+                "slug":      s.slug,
+                "name":      s.name,
+                "min_level": max(0, min(3, int(item.get("min_level", 1) or 1))),
+            })
+    return {"needs_skill_targets": targets}
+
+
+@router.post("/listings/{listing_id}/generate-matches")
+async def generate_ai_matches(
+    listing_id: int,
+    org: Organization = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Ranks all active learners against listing.needs_skill_targets and creates
+    (or refreshes) the top 10 as ai_suggested matches, anonymized to the org
+    until the learner is notified and accepts. Does not touch existing
+    learner_initiated matches or matches the learner has already acted on."""
+    from models import LearnerSkillProgress
+
+    listing_q = await db.execute(
+        select(OpportunityListing).where(
+            OpportunityListing.id == listing_id,
+            OpportunityListing.org_id == org.id,
+        )
+    )
+    listing = listing_q.scalar_one_or_none()
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    targets = listing.needs_skill_targets or []
+    if not targets:
+        raise HTTPException(400, "No needs_skill_targets set — run parse-needs and save it first")
+
+    learners = (await db.execute(select(Learner).where(Learner.is_active == True))).scalars().all()
+    progress_rows = (await db.execute(select(LearnerSkillProgress))).scalars().all()
+    by_learner: dict[int, dict[int, LearnerSkillProgress]] = {}
+    for p in progress_rows:
+        by_learner.setdefault(p.learner_id, {})[p.skill_id] = p
+
+    ranked = []
+    for learner in learners:
+        prog = by_learner.get(learner.id, {})
+        met, gap, surplus = [], [], 0
+        for t in targets:
+            level = (prog[t["skill_id"]].current_level or 0) if t["skill_id"] in prog else 0
+            if level >= t["min_level"]:
+                met.append(t["slug"])
+                surplus += (level - t["min_level"])
+            else:
+                gap.append(t["slug"])
+        if not met:
+            continue
+        score = round((len(met) / len(targets)) * 100 + surplus * 3)
+        ranked.append((min(score, 100), learner, met, gap))
+
+    ranked.sort(key=lambda x: -x[0])
+    top10 = ranked[:10]
+
+    created, refreshed = 0, 0
+    for score, learner, met, gap in top10:
+        existing = (await db.execute(
+            select(OpportunityMatch).where(
+                OpportunityMatch.learner_id == learner.id,
+                OpportunityMatch.listing_id == listing_id,
+            )
+        )).scalar_one_or_none()
+        if existing:
+            # Don't clobber a match the learner already acted on themselves
+            # (learner_initiated, or an ai_suggested one already invited/answered).
+            if existing.origin == "ai_suggested" and existing.learner_status == "suggested":
+                existing.match_score = score
+                existing.arts_met = met
+                refreshed += 1
+            continue
+        db.add(OpportunityMatch(
+            learner_id=learner.id, listing_id=listing_id,
+            origin="ai_suggested", match_score=score,
+            arts_met=met, skills_gap=gap,
+            learner_status="suggested", org_status="pending",
+        ))
+        created += 1
+    await db.commit()
+    return {"ok": True, "created": created, "refreshed": refreshed, "considered": len(ranked)}
+
+
+@router.post("/listings/{listing_id}/matches/{match_id}/notify")
+async def notify_ai_match(
+    listing_id: int,
+    match_id: int,
+    org: Organization = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Org invites one anonymized AI-suggested candidate — sends an email,
+    moves them from 'suggested' to 'invited'. Identity stays hidden from the
+    org until the learner accepts."""
+    listing_q = await db.execute(
+        select(OpportunityListing).where(
+            OpportunityListing.id == listing_id,
+            OpportunityListing.org_id == org.id,
+        )
+    )
+    listing = listing_q.scalar_one_or_none()
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+
+    match_q = await db.execute(
+        select(OpportunityMatch).where(
+            OpportunityMatch.id == match_id,
+            OpportunityMatch.listing_id == listing_id,
+        )
+    )
+    match = match_q.scalar_one_or_none()
+    if not match:
+        raise HTTPException(404, "Match not found")
+    if match.origin != "ai_suggested" or match.learner_status != "suggested":
+        raise HTTPException(400, "This match has already been notified or isn't an AI suggestion")
+
+    learner_q = await db.execute(select(Learner).where(Learner.id == match.learner_id))
+    learner = learner_q.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(404, "Learner not found")
+
+    subject = f"{org.name} thinks you'd be a great fit for \"{listing.title}\""
+    body = (
+        f"Hi {learner.display_name or 'there'},\n\n"
+        f"{org.name} is looking for help with \"{listing.title}\" and your skills "
+        f"on Surfing the Frequencies came up as a strong match.\n\n"
+        f"Sign in and visit the Koinonia to see the details and accept or decline — "
+        f"your name and profile stay private to them unless you accept.\n\n"
+        f"— Surfing the Frequencies"
+    )
+    try:
+        send_mail(to=learner.email, subject=subject, body=body)
+    except Exception:
+        pass  # best-effort — the in-app 'invited' status is the source of truth either way
+
+    match.learner_status = "invited"
+    match.notified_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"ok": True}
 
 
 # ── Pnyx (org side) ────────────────────────────────────────

@@ -100,17 +100,26 @@ async def csrf_protect(request: Request, call_next):
     if request.url.path in _CSRF_EXEMPT_PATHS:
         return await call_next(request)
 
-    # Admin session cookie is checked by presence, not path prefix, because
-    # admin-gated routes live under two different prefixes (/api/admin/* and
-    # /api/bioregions/admin/*) — see cookie_auth.py's ADMIN_ACCESS_COOKIE_PATH
-    # comment. Added 2026-07-17 as part of P-SEC2 (admin moved off the old
-    # X-Admin-Key-header-only auth that fell through this middleware entirely).
-    if request.cookies.get(ADMIN_ACCESS_COOKIE):
-        cookie_name = ADMIN_CSRF_COOKIE
-        session_cookie = ADMIN_ACCESS_COOKIE
-    elif request.url.path.startswith("/api/orgs"):
+    # /api/orgs is an unambiguous, org-only prefix — check it before the
+    # admin-cookie fallback below. ADMIN_ACCESS_COOKIE is deliberately
+    # scoped to all of /api (see cookie_auth.py), so it rides along on
+    # /api/orgs/* requests too whenever the same browser also has an admin
+    # session open (a very normal thing for a solo operator testing both
+    # roles) — checking cookie-presence first would then validate the CSRF
+    # header against the wrong cookie and 403 every org action. Path first,
+    # cookie-presence fallback second — apply the same principle if any
+    # other unambiguous top-level prefix needs its own branch later.
+    if request.url.path.startswith("/api/orgs"):
         cookie_name = ORG_CSRF_COOKIE
         session_cookie = ORG_ACCESS_COOKIE
+    # Admin session cookie is otherwise checked by presence, not path prefix,
+    # because admin-gated routes live under two different prefixes (/api/admin/*
+    # and /api/bioregions/admin/*) — see cookie_auth.py's ADMIN_ACCESS_COOKIE_PATH
+    # comment. Added 2026-07-17 as part of P-SEC2 (admin moved off the old
+    # X-Admin-Key-header-only auth that fell through this middleware entirely).
+    elif request.cookies.get(ADMIN_ACCESS_COOKIE):
+        cookie_name = ADMIN_CSRF_COOKIE
+        session_cookie = ADMIN_ACCESS_COOKIE
     else:
         cookie_name = CSRF_COOKIE
         session_cookie = ACCESS_COOKIE

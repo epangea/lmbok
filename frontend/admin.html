@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="app.css?v=20260719b"/>
+<script src="bioregion-utils.js"></script>
 </head>
 <body>
 
@@ -73,14 +74,16 @@
     <div class="sidebar-item" onclick="showAdmin('scavenger')" id="si-scavenger">
       <span class="sidebar-icon">🕷️</span> Scavenger
     </div>
-    <div class="sidebar-item" onclick="showAdmin('outreach')" id="si-outreach">
-      <span class="sidebar-icon">📨</span> Outreach
-    </div>
     <div class="sidebar-item" onclick="showAdmin('ai')" id="si-ai">
       <span class="sidebar-icon">🤖</span> AI Engine
     </div>
     <div class="sidebar-item" onclick="showAdmin('promptmap')" id="si-promptmap">
       <span class="sidebar-icon">🧩</span> Prompt Anatomy
+    </div>
+
+    <div class="sidebar-section">Synergy</div>
+    <div class="sidebar-item" onclick="showAdmin('outreach')" id="si-outreach">
+      <span class="sidebar-icon">📨</span> Outreach
     </div>
 
     <div class="sidebar-section">System</div>
@@ -251,6 +254,16 @@ function adminFetch(path, methodOrOpts, body) {
     if (body) opts.body = JSON.stringify(body);
   } else {
     opts = methodOrOpts || {};
+    // Legacy style passes body as a raw object (e.g. { method:'PATCH', body:{...} }).
+    // fetch() does NOT stringify objects for you — it calls .toString() on
+    // anything that isn't already a string/Blob/etc, which for a plain
+    // object produces the literal text "[object Object]". That's not valid
+    // JSON, so the server's pydantic/dict body parsing 422s. Every caller
+    // using this style (orgsCreate, orgsUpdate, scavenger/run, seed
+    // dry-run/run) was silently broken until now.
+    if (opts.body && typeof opts.body !== 'string') {
+      opts.body = JSON.stringify(opts.body);
+    }
   }
   opts.headers = Object.assign({
     'Content-Type': 'application/json',
@@ -893,13 +906,29 @@ function orgsNewDialog() {
     + '<div><label class="form-label">Name *</label><input class="form-input" id="org-new-name"></div>'
     + '<div><label class="form-label">Contact email *</label><input class="form-input" id="org-new-email" type="email"></div>'
     + '<div><label class="form-label">Org type</label><input class="form-input" id="org-new-type" value="other"></div>'
-    + '<div><label class="form-label">Bioregion</label><input class="form-input" id="org-new-bioregion"></div>'
+    + '<div><label class="form-label">Bioregion</label><select class="form-input" id="org-new-bioregion"><option value="">Loading regions…</option></select></div>'
     + '<div><label class="form-label">Password (optional)</label><input class="form-input" id="org-new-pw" type="password"></div>'
     + '<div><label class=\"form-label\">Website (optional)</label><input class="form-input" id="org-new-website"></div>'
     + '<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:4px">'
     + '<button class="btn btn-ghost" onclick="adminCloseModal()">Cancel</button>'
     + '<button class="btn" onclick="orgsCreate()">Create</button></div></div>';
   adminShowModal('Create organization', html);
+  orgsFillBioregionSelect('org-new-bioregion');
+}
+
+// P11: bioregion is a dropdown of the same seed profiles used for
+// auto-detection elsewhere (org self-service, learner onboarding) — admin
+// has no location to auto-detect from, so this is the closest equivalent:
+// consistent, canonical values instead of freetext.
+function orgsFillBioregionSelect(selectId, current) {
+  BioregionUtils.listNames(function(names) {
+    var sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">— none —</option>'
+      + names.map(function(n) {
+          return '<option value="' + escH(n) + '"' + (current === n ? ' selected' : '') + '>' + escH(n) + '</option>';
+        }).join('');
+  });
 }
 
 function orgsCreate() {
@@ -935,7 +964,7 @@ function orgsEditDialog(orgId) {
     + '<div><label class="form-label">Name *</label><input class="form-input" id="org-edit-name" value="' + escH(org.name) + '"></div>'
     + '<div><label class="form-label">Contact email</label><input class="form-input" id="org-edit-email" value="' + escH(org.contact_email||'') + '"></div>'
     + '<div><label class="form-label">Org type</label><input class="form-input" id="org-edit-type" value="' + escH(org.org_type||'other') + '"></div>'
-    + '<div><label class="form-label">Bioregion</label><input class="form-input" id="org-edit-bioregion" value="' + escH(org.bioregion||'') + '"></div>'
+    + '<div><label class="form-label">Bioregion</label><select class="form-input" id="org-edit-bioregion"><option value="">Loading regions…</option></select></div>'
     + '<div><label class="form-label">Website</label><input class="form-input" id="org-edit-website" value="' + escH(org.website||'') + '"></div>'
     + '<div style="display:flex;align-items:center;gap:8px">'
     + '<input type="checkbox" id="org-edit-verified" ' + (org.is_verified ? 'checked' : '') + '>'
@@ -947,6 +976,7 @@ function orgsEditDialog(orgId) {
     + '<button class="btn btn-ghost" onclick="adminCloseModal()">Cancel</button>'
     + '<button class="btn" onclick="orgsUpdate(' + orgId + ')">Save</button></div></div>';
   adminShowModal('Edit organization', html);
+  orgsFillBioregionSelect('org-edit-bioregion', org.bioregion || '');
 }
 
 function orgsUpdate(orgId) {

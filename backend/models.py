@@ -262,6 +262,14 @@ class OpportunityListing(Base):
     org_id:          Mapped[int]            = mapped_column(ForeignKey("organizations.id"), nullable=False)
     title:           Mapped[str]            = mapped_column(String(200), nullable=False)
     description:     Mapped[Optional[str]]  = mapped_column(Text)
+    # P11 (2026-07-24, migration scripts/2026-07-24-p11-synergy-matching.sql):
+    # needs_text is the org's own free-text needs box; needs_skill_targets is
+    # what the AI parses out of it (list of {skill_id, slug, min_level}).
+    # required_arts is still auto-derived (rollup via arts_skills) from
+    # needs_skill_targets so the existing public listings/matching scoring
+    # in routes/matching.py keeps working unchanged.
+    needs_text:      Mapped[Optional[str]]  = mapped_column(Text)
+    needs_skill_targets: Mapped[Optional[dict]] = mapped_column(JSON)
     listing_type:    Mapped[str]            = mapped_column(String(30), default="project")
     required_skills: Mapped[dict]           = mapped_column(JSON, nullable=False)
     required_arts:   Mapped[Optional[dict]] = mapped_column(JSON)
@@ -278,13 +286,24 @@ class OpportunityMatch(Base):
     id:             Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
     learner_id:     Mapped[int]            = mapped_column(ForeignKey("learners.id"), nullable=False)
     listing_id:     Mapped[int]            = mapped_column(ForeignKey("opportunity_listings.id"), nullable=False)
+    # P11 (2026-07-24): 'learner_initiated' = learner expressed interest on a
+    # public listing (original flow, unchanged). 'ai_suggested' = the org's
+    # AI needs-matching ranked this learner into its top 10 — org sees them
+    # anonymized until notified_at is set and the learner accepts.
+    origin:         Mapped[str]            = mapped_column(String(20), default="learner_initiated")
     match_score:    Mapped[Optional[int]]  = mapped_column(Integer)
     skills_met:     Mapped[Optional[dict]] = mapped_column(JSON)
     skills_gap:     Mapped[Optional[dict]] = mapped_column(JSON)
     arts_met:       Mapped[Optional[dict]] = mapped_column(JSON)
+    # learner_status values: pending | interested | declined | connected |
+    # withdrawn (original 5) + suggested | invited (P11, ai_suggested only —
+    # 'suggested' = ranked but not yet notified, 'invited' = org notified,
+    # awaiting response. Accepting an invite moves straight to 'interested',
+    # the same value that already means "mutual/visible" everywhere else.)
     learner_status: Mapped[str]            = mapped_column(String(20), default="pending")
     org_status:     Mapped[str]            = mapped_column(String(20), default="pending")
     matched_at:     Mapped[datetime]       = mapped_column(DateTime, default=func.now())
+    notified_at:    Mapped[Optional[datetime]] = mapped_column(DateTime)
     __table_args__ = (UniqueConstraint("learner_id", "listing_id", name="uq_match"),)
 
 

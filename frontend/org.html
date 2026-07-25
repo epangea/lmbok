@@ -9,6 +9,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
 <link rel="stylesheet" href="app.css?v=20260719b">
+<script src="bioregion-utils.js"></script>
 </head>
 <body class="page-org">
 
@@ -142,6 +143,7 @@
     <div class="tab on" data-t="odash"  onclick="otab('odash')"><span>⚡</span> Dashboard</div>
     <div class="tab" data-t="olist"   onclick="otab('olist')"><span>🏛️</span> Ekklesia</div>
     <div class="tab" data-t="opnyx"   onclick="otab('opnyx')"><span>✉</span> Pnyx</div>
+    <div class="tab" data-t="osettings" onclick="otab('osettings')"><span>⚙️</span> Settings</div>
   </div>
   <main>
     <div class="sec on" id="s-odash"><div id="odi"><div class="spin"></div></div></div>
@@ -150,6 +152,7 @@
       <div class="sh"><div class="st">The Pnyx</div><div class="ss">Messages with matched learners</div></div>
       <div id="opi"><div class="spin"></div></div>
     </div>
+    <div class="sec" id="s-osettings"><div id="osi"><div class="spin"></div></div></div>
   </main>
 </div>
 
@@ -186,6 +189,17 @@ const OA={
     if(b!==undefined)o.body=JSON.stringify(b);
     const r=await fetch('/api/orgs'+p,o);
     if(r.status===401){S.org=null;if(!S._booting)showGate();return null;}
+    if(r.status===403){
+      // The only way a /api/orgs/* POST/PATCH 403s is the CSRF double-submit
+      // check (get_current_org only ever raises 401s) — meaning fl_org_access
+      // and fl_org_csrf have gotten out of sync (e.g. a stale/partial cookie
+      // clear). No amount of retrying fixes that; only a fresh login re-issues
+      // both cookies together. Surface it the same way a 401 does, rather
+      // than silently returning null and leaving every action after this one
+      // failing with a cryptic "not sent"/"could not save" toast.
+      S.org=null;if(!S._booting){toast('Session out of sync — please sign in again',true);showGate();}
+      return null;
+    }
     return r.ok?r.json().catch(()=>null):null;
   },
   get:p=>OA.c('GET',p),post:(p,b)=>OA.c('POST',p,b),patch:(p,b)=>OA.c('PATCH',p,b),del:p=>OA.c('DELETE',p)
@@ -256,15 +270,34 @@ function drawKoinonia(){
         ${ring(tm.match_score,68)}
       </div></div>`;
   }
+  const invites=S.myMatches.filter(m=>m.origin==='ai_suggested'&&m.learner_status==='invited');
+  const expressed=S.myMatches.filter(m=>!(m.origin==='ai_suggested'&&m.learner_status==='invited'));
+  if(invites.length){
+    h+=`<hr><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px">Invitations (${invites.length})</div>`;
+    invites.forEach(m=>{
+      const l=S.allListings.find(x=>x.id===m.listing_id);if(!l)return;
+      h+=`<div class="card" style="margin-bottom:10px">
+        <div class="corg">${orgLine(l)}</div>
+        <div class="ctitle">${e(l.title)}</div>
+        <div style="font-size:13px;color:var(--mu);margin:6px 0 12px">An organization thinks you'd be a great fit — accepting shares your profile with them so they can reach out.</div>
+        <div style="display:flex;gap:8px">
+          <button class="btn bp sm" onclick="aiAccept(${m.id})">Accept</button>
+          <button class="btn bd2 sm" onclick="aiDecline(${m.id})">Decline</button>
+        </div>
+      </div>`;
+    });
+  }
   h+='<hr>';
-  if(!S.myMatches.length){
+  if(!expressed.length){
     h+=`<div class="empty" style="padding:32px 0"><div class="ei">🏺</div><h3>No interests yet</h3><p>Visit the <strong>Stoa</strong> to browse listings.</p></div>`;
   }else{
-    h+=`<div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px">Interests Expressed (${S.myMatches.length})</div>`;
-    S.myMatches.forEach(m=>{const l=S.allListings.find(x=>x.id===m.listing_id);if(l)h+=lcard(l,m);});
+    h+=`<div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px">Interests Expressed (${expressed.length})</div>`;
+    expressed.forEach(m=>{const l=S.allListings.find(x=>x.id===m.listing_id);if(l)h+=lcard(l,m);});
   }
   el.innerHTML=h;
 }
+async function aiAccept(mid){const r=await LA.post(`/matching/${mid}/accept`,{});if(r&&r.ok){toast('Accepted ✓ — they can now see your profile');await loadLearner();}else toast('Could not accept',true);}
+async function aiDecline(mid){if(!confirm('Decline this invitation?'))return;const r=await LA.post(`/matching/${mid}/decline`,{});if(r&&r.ok){toast('Declined');await loadLearner();}}
 
 // ── STOA ──────────────────────────────────────────────────
 function drawStoa(){
@@ -340,6 +373,49 @@ function drawODash(){
   el.innerHTML=h;
 }
 
+// ── ORG SETTINGS (P11: bioregion self-service) ─────────────
+function drawOSettings(){
+  const el=document.getElementById('osi');
+  el.innerHTML=`<div class="sh"><div class="st">Settings</div><div class="ss">Your organization's profile</div></div>
+    <div class="card" style="padding:18px;max-width:480px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px">Bioregion</div>
+      <div style="font-size:12px;color:var(--mu);margin-bottom:12px">Used to boost matches with learners in your area. Detect it from your browser's location, or pick one manually.</div>
+      <div id="obr-current" style="font-size:14px;margin-bottom:12px">Current: <strong>${e(S.org.bioregion||'not set')}</strong></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="btn bp sm" id="obr-detect-btn" onclick="obrDetect()">📍 Detect my bioregion</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select id="obr-manual" style="max-width:220px"><option value="">Loading regions…</option></select>
+        <button class="btn bgh sm" onclick="obrSaveManual()">Set manually</button>
+      </div>
+      <div id="obr-status" style="font-size:12px;color:var(--mu);margin-top:10px"></div>
+    </div>`;
+  BioregionUtils.listNames(function(names){
+    const sel=document.getElementById('obr-manual');if(!sel)return;
+    sel.innerHTML='<option value="">Choose a bioregion…</option>'+names.map(n=>`<option value="${e(n)}"${S.org.bioregion===n?' selected':''}>${e(n)}</option>`).join('');
+  });
+}
+function obrDetect(){
+  const btn=document.getElementById('obr-detect-btn'),st=document.getElementById('obr-status');
+  if(btn)btn.disabled=true;if(st)st.textContent='Detecting…';
+  BioregionUtils.detect(function(res){
+    if(btn)btn.disabled=false;
+    if(!res.ok||!res.name){if(st)st.textContent='Could not detect — try setting manually below.';return;}
+    obrSave(res.name, res.placeName);
+  });
+}
+async function obrSaveManual(){
+  const v=document.getElementById('obr-manual')?.value;
+  if(!v){toast('Choose a bioregion first',true);return;}
+  await obrSave(v,null);
+}
+async function obrSave(name,placeName){
+  const st=document.getElementById('obr-status');
+  const r=await OA.patch('/me',{bioregion:name});
+  if(r){S.org.bioregion=name;toast('Bioregion set: '+name+' ✓');drawOSettings();document.getElementById('odn').textContent=S.org.name;}
+  else if(st)st.textContent='Could not save bioregion.';
+}
+
 // ── ORG LISTINGS ──────────────────────────────────────────
 function drawOList(){
   const el=document.getElementById('oli');
@@ -362,6 +438,7 @@ function drawOList(){
         <button class="btn bgh sm" onclick="editL(${l.id})">Edit</button>
         <button class="btn bgh sm" onclick="togAct(${l.id},${l.is_active})">${l.is_active?'Deactivate':'Activate'}</button>
         <button class="btn bgh sm" onclick="otab('olist')">Matches (${l.match_count||0})</button>
+        ${(l.needs_skill_targets&&l.needs_skill_targets.length)?`<button class="btn bgh sm" onclick="lfGenMatches(${l.id})">✨ Find AI Matches</button>`:''}
         <button class="btn bd2 sm" onclick="delL(${l.id})">Delete</button>
       </div>
     </div>`).join('');
@@ -374,7 +451,17 @@ function drawOList(){
     Object.values(_byL).forEach(function(g){
       h+='<div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin-bottom:8px">'+e(g.t)+'</div>';
       h+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:14px">';
-      g.ms.forEach(function(m){h+='<div class="mrow"><div class="mav">'+(m.avatar_emoji||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span><button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';});
+      g.ms.forEach(function(m){
+        if(m.anonymized){
+          var artsBadges=(m.arts_met||[]).map(function(a){return '<span class="badge bm" style="font-size:10px">'+e(a)+'</span>';}).join('');
+          var action=m.learner_status==='invited'
+            ?'<span class="badge bt">Invited — awaiting response</span>'
+            :'<button class="btn bp sm" onclick="notifyMatch('+m._lid+','+m.match_id+')">Notify candidate</button>';
+          h+='<div class="mrow"><div class="mav">❔</div><div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--mu)">'+e(m.display_name)+'</div><div style="font-size:12px;color:var(--mu)">AI match · score '+(m.match_score||0)+' '+artsBadges+'</div></div>'+action+'</div>';
+          return;
+        }
+        h+='<div class="mrow"><div class="mav">'+(m.avatar_emoji||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span><button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';
+      });
       h+='</div>';
     });
   }
@@ -398,11 +485,48 @@ function listingFormHtml(ex=null){
       <label style="margin-bottom:8px">Required Arts</label>
       <div class="ag">${ARTS.map(a=>`<label class="ac"><input type="checkbox" name="art" value="${a.s}"${ex&&(ex.required_arts||[]).includes(a.s)?' checked':''}> ${a.n}</label>`).join('')}</div>
     </div>
+    <div class="fg full" style="margin-bottom:8px">
+      <label>What are you looking for? (P11 — AI matches learners against this)</label>
+      <textarea id="lfn" rows="3" placeholder="e.g. someone comfortable facilitating group discussions and with basic first aid knowledge">${ex&&ex.needs_text?e(ex.needs_text):''}</textarea>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+      <button class="btn bgh sm" onclick="lfParseNeeds(${ex?ex.id:'null'})">✨ Suggest skill targets</button>
+      <span id="lfn-status" style="font-size:12px;color:var(--mu)"></span>
+    </div>
+    <div id="lfn-targets" style="margin-bottom:16px">${(ex&&ex.needs_skill_targets&&ex.needs_skill_targets.length)?lfnTargetsHtml(ex.needs_skill_targets):''}</div>
     <div class="fa">
       <button class="btn bp" onclick="saveL()">${ex?'Save Changes':'Create Listing'}</button>
       <button class="btn bgh" onclick="cancelForm()">Cancel</button>
     </div>
   </div>`;
+}
+function lfnTargetsHtml(targets){
+  return '<div style="font-size:11px;color:var(--mu);margin-bottom:6px">Skill targets (saved with the listing):</div>'
+    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+    + targets.map(t=>`<span class="badge bm">${e(t.name||t.slug)} · lvl ${t.min_level}</span>`).join('')
+    + '</div>';
+}
+let _lfnTargets=null;
+async function lfParseNeeds(existingId){
+  const ta=document.getElementById('lfn'),st=document.getElementById('lfn-status');
+  const text=ta?.value.trim();
+  if(!text){toast('Write what you need first',true);return;}
+  // Needs an existing listing to parse against (needs_text is read server-side from the saved row).
+  // Save the draft first (creates or updates), then parse.
+  if(st)st.textContent='Saving draft…';
+  const payload={title:document.getElementById('lft')?.value.trim()||'Untitled listing',listing_type:document.getElementById('lfy')?.value,description:document.getElementById('lfd')?.value.trim()||null,required_arts:Array.from(document.querySelectorAll('[name="art"]:checked')).map(c=>c.value),needs_text:text};
+  const saved=existingId?await OA.patch(`/listings/${existingId}`,payload):await OA.post('/listings',payload);
+  const listing=saved?.listing;
+  if(!listing){if(st)st.textContent='Could not save draft.';return;}
+  S.editId=listing.id;
+  if(st)st.textContent='Asking the AI…';
+  const r=await OA.post(`/listings/${listing.id}/parse-needs`,{});
+  if(!r){if(st)st.textContent='AI parsing unavailable — try again shortly.';return;}
+  _lfnTargets=r.needs_skill_targets||[];
+  await OA.patch(`/listings/${listing.id}`,{needs_skill_targets:_lfnTargets});
+  const box=document.getElementById('lfn-targets');if(box)box.innerHTML=_lfnTargets.length?lfnTargetsHtml(_lfnTargets):'<div style="font-size:12px;color:var(--mu)">No matching skills found — try describing the need differently.</div>';
+  if(st)st.textContent=_lfnTargets.length?'✓ Skill targets saved.':'';
+  await reloadOL();
 }
 
 function toggleForm(){
@@ -421,11 +545,17 @@ function cancelForm(){S.editId=null;const w=document.getElementById('ofw');if(w)
 async function saveL(){
   const title=document.getElementById('lft')?.value.trim();
   if(!title){toast('Title required',true);return;}
-  const payload={title,listing_type:document.getElementById('lfy')?.value,description:document.getElementById('lfd')?.value.trim()||null,source_url:document.getElementById('lfu')?.value.trim()||null,required_arts:Array.from(document.querySelectorAll('[name="art"]:checked')).map(c=>c.value)};
+  const payload={title,listing_type:document.getElementById('lfy')?.value,description:document.getElementById('lfd')?.value.trim()||null,source_url:document.getElementById('lfu')?.value.trim()||null,required_arts:Array.from(document.querySelectorAll('[name="art"]:checked')).map(c=>c.value),needs_text:document.getElementById('lfn')?.value.trim()||null};
   const r=S.editId?await OA.patch(`/listings/${S.editId}`,payload):await OA.post('/listings',payload);
   if(r){toast(S.editId?'Updated ✓':'Created ✓');cancelForm();await reloadOL();}else toast('Save failed',true);
 }
 async function togAct(id,cur){const r=await OA.patch(`/listings/${id}`,{is_active:!cur});if(r){toast(cur?'Deactivated':'Activated');await reloadOL();}}
+async function lfGenMatches(id){
+  toast('Finding matches…');
+  const r=await OA.post(`/listings/${id}/generate-matches`,{});
+  if(r){toast(`Found ${r.created} new candidate${r.created!==1?'s':''} ✓`);await reloadOL();}
+  else toast('Could not generate matches',true);
+}
 async function delL(id){if(!confirm('Delete this listing?'))return;const r=await OA.del(`/listings/${id}`);if(r){toast('Deleted');await reloadOL();}}
 async function reloadOL(){
   const ls=await OA.get('/me/listings');S.orgListings=ls||[];
@@ -455,6 +585,10 @@ function drawOMatch(){
   el.innerHTML=h;
 }
 
+async function notifyMatch(lid,mid){
+  const r=await OA.post(`/listings/${lid}/matches/${mid}/notify`,{});
+  if(r){toast('Candidate notified ✓');await reloadOL();}else toast('Could not notify',true);
+}
 const STC={pending:'reviewing',reviewing:'connected',connected:'declined',declined:'pending'};
 function cycStEl(el){ cycSt(+el.dataset.mid, +el.dataset.lid, el.dataset.st); }
 async function cycSt(mid,lid,cur){
@@ -633,6 +767,7 @@ function otab(t){
   document.querySelector(`#AO [data-t="${t}"]`).classList.add('on');
   document.getElementById(`s-${t}`).classList.add('on');
   if(t==='opnyx')drawOPnyx();
+  if(t==='osettings')drawOSettings();
 }
 function sf(f,btn){S.filter=f;document.querySelectorAll('.fp').forEach(b=>b.classList.remove('on'));btn.classList.add('on');drawStoa();}
 function toggleTheme(){const n=document.documentElement.dataset.theme==='dark'?'light':'dark';document.documentElement.dataset.theme=n;localStorage.setItem('fl_theme',n);}

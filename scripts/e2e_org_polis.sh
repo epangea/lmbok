@@ -12,6 +12,12 @@
 #          match -> two-way Pnyx messaging -> org updates match
 #          status -> learner withdraws -> org deactivates listing.
 #
+#   P11:   org writes needs_text -> AI parses skill targets -> org
+#          generates AI-suggested matches (anonymized) -> learner
+#          can't see an un-notified match -> org notifies -> learner
+#          sees 'invited' -> learner accepts -> org's view reveals
+#          the real identity. Re-notify-after-invite is rejected.
+#
 #   Polis: my-access -> referenda read (incl. scope filter + bad
 #          scope 400) -> proposals read -> Grove+ write checks
 #          (submit local proposal, support/unsupport toggle, scope
@@ -79,6 +85,25 @@ if [ -z "$TEST_ORG_EMAIL" ] || [ -z "$TEST_ORG_PASSWORD" ]; then
   echo "SKIP  TEST_ORG_EMAIL/TEST_ORG_PASSWORD not set in $ENV_FILE — nothing to test"
   exit 0
 fi
+
+# Same source of truth db.py reads from — used ONLY by Part C, to look up
+# which learner an anonymized ai_suggested match belongs to. This is
+# legitimate test-infra access (the script already runs as root on the
+# server), not an API consumer bypassing the P11 consent model — the org
+# and learner sessions above never see this, only the test assertions do.
+DB_USER=$(env_or_file DB_USER); DB_USER="${DB_USER:-freqlearn}"
+DB_PASSWORD=$(env_or_file DB_PASSWORD); DB_PASSWORD="${DB_PASSWORD:-changeme}"
+DB_HOST=$(env_or_file DB_HOST); DB_HOST="${DB_HOST:-127.0.0.1}"
+DB_PORT=$(env_or_file DB_PORT); DB_PORT="${DB_PORT:-3306}"
+DB_NAME=$(env_or_file DB_NAME); DB_NAME="${DB_NAME:-freqlearn}"
+MYSQL_BIN=$(command -v mariadb || command -v mysql || true)
+
+db_query() {
+  # db_query "SELECT ..." -> single value, or '' if MYSQL_BIN missing / no rows
+  [ -z "$MYSQL_BIN" ] && { echo ""; return 0; }
+  "$MYSQL_BIN" -N -B -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" \
+    -e "$1" 2>/dev/null | head -1
+}
 
 fail=0
 pass() {
@@ -184,6 +209,10 @@ call POST "${API_BASE}/api/auth/login" "$LJAR" "" \
 pass "learner login" "$HTTP_CODE" "200"
 LCSRF=$(csrf_from_jar "$LJAR" fl_csrf)
 
+call GET "${API_BASE}/api/learners/me" "$LJAR"
+pass "learner GET /me" "$HTTP_CODE" "200"
+TEST_LEARNER_ID=$(echo "$HTTP_BODY" | json_get "id")
+
 call GET "${API_BASE}/api/matching/listings" "$LJAR"
 pass "learner GET listings" "$HTTP_CODE" "200"
 VISIBLE=$(echo "$HTTP_BODY" | python3 -c "
@@ -251,6 +280,152 @@ pass "learner withdraws interest (cleanup)" "$HTTP_CODE" "200"
 
 call DELETE "${API_BASE}/api/orgs/listings/${LISTING_ID}" "$OJAR" "$OCSRF"
 pass "org deactivates test listing (cleanup)" "$HTTP_CODE" "200"
+
+echo ""
+
+# ------------------------------------------------------------
+# PART C — P11: AI needs-matching (Synergy)
+# ------------------------------------------------------------
+# Added 2026-07-24 alongside the P11 build. Covers the whole consent-model
+# flow: org writes needs_text -> AI parses it into skill targets -> org
+# generates AI-suggested matches -> those matches stay anonymized to the org
+# AND invisible to the learner until the org notifies -> learner sees
+# 'invited' -> learner accepts -> BOTH sides now see the real match (org
+# gets identity, learner already saw the listing). Re-run this after any
+# change to orgs.py's P11 endpoints or matching.py's accept/decline.
+#
+# Uses parse-needs' own real skill_id (rather than guessing one) so this
+# stays valid against whatever the skills table actually contains, then
+# overrides min_level to 0 before generate-matches — that makes every
+# active learner trivially "meet" the target, so the test doesn't depend
+# on TEST_LEARNER having practiced any particular skill.
+echo "-- P11: AI needs-matching --"
+
+P11_LISTING_TITLE="[E2E TEST] AI-matched need ${TS}"
+call POST "${API_BASE}/api/orgs/listings" "$OJAR" "$OCSRF" \
+  "{\"title\":\"${P11_LISTING_TITLE}\",\"description\":\"Automated e2e test listing for P11 — safe to ignore/delete.\",\"listing_type\":\"project\",\"required_arts\":[],\"needs_text\":\"Someone comfortable facilitating group discussions and basic first aid.\"}"
+pass "org creates P11 test listing" "$HTTP_CODE" "200"
+P11_LISTING_ID=$(echo "$HTTP_BODY" | json_get "listing.id")
+
+TARGET_COUNT=0
+call POST "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/parse-needs" "$OJAR" "$OCSRF"
+if [ "$HTTP_CODE" = "200" ]; then
+  echo "OK    parse-needs"
+  TARGET_COUNT=$(echo "$HTTP_BODY" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('needs_skill_targets',[])))")
+  if [ "$TARGET_COUNT" -gt 0 ]; then
+    echo "OK    parse-needs returned ${TARGET_COUNT} skill target(s)"
+    FIRST_SKILL_ID=$(echo "$HTTP_BODY" | json_get "needs_skill_targets.0.skill_id")
+    FIRST_SKILL_SLUG=$(echo "$HTTP_BODY" | json_get "needs_skill_targets.0.slug")
+    call PATCH "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}" "$OJAR" "$OCSRF" \
+      "{\"needs_skill_targets\":[{\"skill_id\":${FIRST_SKILL_ID},\"slug\":\"${FIRST_SKILL_SLUG}\",\"name\":\"${FIRST_SKILL_SLUG}\",\"min_level\":0}]}"
+    pass "org saves forced (min_level=0) skill target for deterministic test" "$HTTP_CODE" "200"
+  else
+    warn "parse-needs returned zero targets against the current skills table — skipping the rest of the P11 flow test"
+  fi
+elif [ "$HTTP_CODE" = "503" ]; then
+  warn "parse-needs returned 503 (GROQ_API_KEY likely not configured) — skipping the rest of the P11 flow test"
+else
+  pass "parse-needs" "$HTTP_CODE" "200"
+fi
+
+if [ "$TARGET_COUNT" -gt 0 ]; then
+  call POST "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/generate-matches" "$OJAR" "$OCSRF"
+  pass "org generates AI matches" "$HTTP_CODE" "200"
+  CREATED=$(echo "$HTTP_BODY" | json_get "created")
+  note "generate-matches created ${CREATED} candidate(s) (min_level=0, so every active learner should qualify)"
+
+  call GET "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/matches" "$OJAR"
+  pass "org sees candidate list" "$HTTP_CODE" "200"
+
+  # NOTE: generate-matches ranks ALL active learners, and with min_level=0
+  # everyone ties at the same score — so "top 10" isn't guaranteed to
+  # include TEST_LEARNER specifically if there are more than 10 active
+  # learners on this deployment. The org's own view is anonymized by design
+  # (that's the whole point of P11), so we can't identify "which candidate
+  # is TEST_LEARNER" from that endpoint — we look it up directly in the DB
+  # instead, the same way a human operator debugging this would.
+  P11_MATCH_ID=$(db_query "SELECT id FROM opportunity_matches WHERE listing_id=${P11_LISTING_ID} AND learner_id=${TEST_LEARNER_ID};")
+
+  if [ -z "$P11_MATCH_ID" ]; then
+    warn "TEST_LEARNER (id ${TEST_LEARNER_ID}) wasn't selected into this run's top 10 — likely more than 10 active learners tied at the forced score. Skipping the rest of the P11 flow test (not a failure, just can't verify this run)."
+  else
+    ANON_NAME=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if str(r.get('match_id')) == '${P11_MATCH_ID}':
+        print(r.get('display_name')); break
+")
+    if [[ "$ANON_NAME" == Candidate* ]]; then
+      echo "OK    org sees TEST_LEARNER as an anonymized candidate (${ANON_NAME}), identity hidden"
+    else
+      echo "FAIL  expected TEST_LEARNER's match to appear anonymized as 'Candidate N', got '${ANON_NAME}'"; fail=$((fail+1))
+    fi
+  fi
+
+  if [ -n "$P11_MATCH_ID" ]; then
+    # Learner must NOT see this match yet — org hasn't notified them.
+    call GET "${API_BASE}/api/matching/" "$LJAR"
+    pass "learner GET my matches (pre-notify)" "$HTTP_CODE" "200"
+    PRE_NOTIFY_VISIBLE=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+print('yes' if any(str(r.get('id')) == '${P11_MATCH_ID}' for r in rows) else 'no')
+")
+    if [ "$PRE_NOTIFY_VISIBLE" = "no" ]; then
+      echo "OK    learner does not see the un-notified AI match (consent model holds)"
+    else
+      echo "FAIL  learner sees an AI match the org hasn't notified them about yet"; fail=$((fail+1))
+    fi
+
+    call POST "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/matches/${P11_MATCH_ID}/notify" "$OJAR" "$OCSRF"
+    pass "org notifies the candidate" "$HTTP_CODE" "200"
+
+    # Notifying twice must be rejected — the endpoint requires learner_status=='suggested'.
+    call POST "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/matches/${P11_MATCH_ID}/notify" "$OJAR" "$OCSRF"
+    pass "re-notifying an already-invited candidate is rejected" "$HTTP_CODE" "400"
+
+    call GET "${API_BASE}/api/matching/" "$LJAR"
+    pass "learner GET my matches (post-notify)" "$HTTP_CODE" "200"
+    INVITED_STATUS=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if str(r.get('id')) == '${P11_MATCH_ID}':
+        print(r.get('learner_status')); break
+")
+    if [ "$INVITED_STATUS" = "invited" ]; then
+      echo "OK    learner now sees the match with status=invited"
+    else
+      echo "FAIL  expected learner_status=invited after notify, got '${INVITED_STATUS}'"; fail=$((fail+1))
+    fi
+
+    call POST "${API_BASE}/api/matching/${P11_MATCH_ID}/accept" "$LJAR" "$LCSRF"
+    pass "learner accepts the AI match" "$HTTP_CODE" "200"
+
+    call GET "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/matches" "$OJAR"
+    pass "org re-fetches candidate list after accept" "$HTTP_CODE" "200"
+    REVEALED_NAME=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+for r in rows:
+    if str(r.get('match_id')) == '${P11_MATCH_ID}':
+        print(r.get('display_name')); break
+")
+    if [ -n "$REVEALED_NAME" ] && [[ "$REVEALED_NAME" != Candidate* ]]; then
+      echo "OK    org now sees the real learner identity (${REVEALED_NAME}) after acceptance"
+    else
+      echo "FAIL  org still sees an anonymized/candidate placeholder after acceptance"; fail=$((fail+1))
+    fi
+
+    # Cleanup — same pattern as PART A
+    call DELETE "${API_BASE}/api/matching/${P11_MATCH_ID}" "$LJAR" "$LCSRF"
+    pass "learner withdraws AI match (cleanup)" "$HTTP_CODE" "200"
+  fi
+fi
+
+call DELETE "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}" "$OJAR" "$OCSRF"
+pass "org deactivates P11 test listing (cleanup)" "$HTTP_CODE" "200"
 
 echo ""
 
