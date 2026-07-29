@@ -107,6 +107,26 @@ for ep in "/api/matching/1/accept" "/api/matching/1/decline"; do
 done
 
 echo ""
+echo "-- P8 validation endpoints require auth (no credentials, expect 401) --"
+# Structural check only, same rationale as the P11 block above.
+for ep in "/api/orgs/matches/1/validation"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" --max-time 8)
+  pass "$ep" "$code" "401"
+done
+for ep in "/api/orgs/matches/1/tasks/0/verify" "/api/orgs/matches/1/skills/1/verify"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}${ep}" -H "Content-Type: application/json" -d '{}' --max-time 8)
+  pass "$ep" "$code" "401"
+done
+for ep in "/api/matching/1/validation"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" --max-time 8)
+  pass "$ep" "$code" "401"
+done
+for ep in "/api/matching/1/tasks/0/submit"; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}${ep}" -H "Content-Type: application/json" -d '{}' --max-time 8)
+  pass "$ep" "$code" "401"
+done
+
+echo ""
 echo "-- Admin cookie/CSRF checks (P-SEC2, 2026-07-17) --"
 # ADMIN_KEY is only ever sent once now, in this login call, over HTTPS, to
 # establish a session — never again as a header on every request. Runs
@@ -143,6 +163,12 @@ ACSRF=$(awk -F'\t' '$6=="fl_admin_csrf"{print $7}' "$AJAR")
 # A plain GET should work off the cookie alone, no header needed
 code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/stats" --max-time 8)
 pass "/api/admin/stats (cookie only)" "$code" "200"
+
+# P8 — Validation section read endpoints, same cookie-only pattern
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/verified-skills" --max-time 8)
+pass "/api/admin/verified-skills (cookie only)" "$code" "200"
+code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/task-completions" --max-time 8)
+pass "/api/admin/task-completions (cookie only)" "$code" "200"
 
 # State-changing request WITHOUT the CSRF header must be rejected. Body is a
 # genuine no-op (writes ai_provider back to its own current value — see

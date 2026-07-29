@@ -18,6 +18,14 @@
 #          sees 'invited' -> learner accepts -> org's view reveals
 #          the real identity. Re-notify-after-invite is rejected.
 #
+#   P8:    org writes needs_text -> AI parses skill targets AND task
+#          line items -> learner expresses interest -> validation is
+#          blocked until org marks the match 'connected' (checked both
+#          ways) -> learner submits a task -> org verifies the task and
+#          a skill demonstration (developing/proficient/master) -> both
+#          sides' own validation views reflect it -> learner's aggregate
+#          /me/verified-skills and admin's Validation page both see it.
+#
 #   Polis: my-access -> referenda read (incl. scope filter + bad
 #          scope 400) -> proposals read -> Grove+ write checks
 #          (submit local proposal, support/unsupport toggle, scope
@@ -426,6 +434,141 @@ fi
 
 call DELETE "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}" "$OJAR" "$OCSRF"
 pass "org deactivates P11 test listing (cleanup)" "$HTTP_CODE" "200"
+
+echo ""
+
+# ------------------------------------------------------------
+# PART D — P8: org validation (task line items + skill demonstrations)
+# ------------------------------------------------------------
+# Added 2026-07-25, using PART C above as the template per Charbel's own
+# request. Covers: parse-needs now also returns needs_tasks -> org forces
+# deterministic needs_skill_targets/needs_tasks (same override trick PART C
+# uses for min_level, here so submit/verify steps reference a known
+# task_index/skill_id rather than whatever Groq happened to generate) ->
+# learner expresses interest (plain learner-initiated match, P8 doesn't care
+# whether a match is ai_suggested or learner_initiated) -> validation is
+# gated on org_status=='connected' (checked BOTH ways: 400 before, 200
+# after) -> learner submits a task -> org verifies it -> org verifies a
+# skill demonstration -> learner's own view reflects both -> the learner's
+# aggregate /me/verified-skills and admin's two oversight endpoints both
+# see it. Re-run this after any change to orgs.py/matching.py/learners.py's
+# P8 endpoints or admin.py's Validation section.
+echo "-- P8: org validation --"
+
+P8_LISTING_TITLE="[E2E TEST] Validation flow ${TS}"
+call POST "${API_BASE}/api/orgs/listings" "$OJAR" "$OCSRF" \
+  "{\"title\":\"${P8_LISTING_TITLE}\",\"description\":\"Automated e2e test listing for P8 — safe to ignore/delete.\",\"listing_type\":\"project\",\"required_arts\":[],\"needs_text\":\"Someone comfortable facilitating group discussions and basic first aid.\"}"
+pass "org creates P8 test listing" "$HTTP_CODE" "200"
+P8_LISTING_ID=$(echo "$HTTP_BODY" | json_get "listing.id")
+
+P8_TARGET_COUNT=0
+call POST "${API_BASE}/api/orgs/listings/${P8_LISTING_ID}/parse-needs" "$OJAR" "$OCSRF"
+if [ "$HTTP_CODE" = "200" ]; then
+  echo "OK    parse-needs (P8 listing)"
+  P8_TARGET_COUNT=$(echo "$HTTP_BODY" | python3 -c "import json,sys; print(len(json.load(sys.stdin).get('needs_skill_targets',[])))")
+  if [ "$P8_TARGET_COUNT" -gt 0 ]; then
+    P8_SKILL_ID=$(echo "$HTTP_BODY" | json_get "needs_skill_targets.0.skill_id")
+    P8_SKILL_SLUG=$(echo "$HTTP_BODY" | json_get "needs_skill_targets.0.slug")
+    P8_TASK_TEXT="Facilitate one group discussion with a written recap"
+    # Force deterministic needs_skill_targets + needs_tasks — same override
+    # trick PART C uses for min_level, here so the submit/verify steps below
+    # reference a known task_index (0) and skill_id regardless of what Groq
+    # actually returned for this run.
+    call PATCH "${API_BASE}/api/orgs/listings/${P8_LISTING_ID}" "$OJAR" "$OCSRF" \
+      "{\"needs_skill_targets\":[{\"skill_id\":${P8_SKILL_ID},\"slug\":\"${P8_SKILL_SLUG}\",\"name\":\"${P8_SKILL_SLUG}\",\"min_level\":0}],\"needs_tasks\":[\"${P8_TASK_TEXT}\"]}"
+    pass "org saves forced skill target + task line item for deterministic test" "$HTTP_CODE" "200"
+  else
+    warn "parse-needs returned zero targets against the current skills table — skipping the rest of the P8 flow test"
+  fi
+elif [ "$HTTP_CODE" = "503" ]; then
+  warn "parse-needs returned 503 (GROQ_API_KEY likely not configured) — skipping the rest of the P8 flow test"
+else
+  pass "parse-needs (P8 listing)" "$HTTP_CODE" "200"
+fi
+
+if [ "$P8_TARGET_COUNT" -gt 0 ]; then
+  call POST "${API_BASE}/api/matching/" "$LJAR" "$LCSRF" "{\"listing_id\":${P8_LISTING_ID}}"
+  pass "learner expresses interest (P8 listing)" "$HTTP_CODE" "200"
+  P8_MATCH_ID=$(echo "$HTTP_BODY" | json_get "id")
+
+  # Gate check: validation must be closed before the org marks the match connected.
+  call GET "${API_BASE}/api/orgs/matches/${P8_MATCH_ID}/validation" "$OJAR"
+  pass "org validation blocked before match is connected" "$HTTP_CODE" "400"
+  call GET "${API_BASE}/api/matching/${P8_MATCH_ID}/validation" "$LJAR"
+  pass "learner validation blocked before match is connected" "$HTTP_CODE" "400"
+
+  call PATCH "${API_BASE}/api/orgs/listings/${P8_LISTING_ID}/matches/${P8_MATCH_ID}" "$OJAR" "$OCSRF" \
+    '{"org_status":"connected"}'
+  pass "org marks match connected" "$HTTP_CODE" "200"
+
+  call GET "${API_BASE}/api/orgs/matches/${P8_MATCH_ID}/validation" "$OJAR"
+  pass "org validation opens once connected" "$HTTP_CODE" "200"
+  TASK0_STATUS=$(echo "$HTTP_BODY" | json_get "tasks.0.status")
+  [ "$TASK0_STATUS" = "open" ] && echo "OK    task line item starts as 'open'" || { echo "FAIL  expected task status 'open', got '${TASK0_STATUS}'"; fail=$((fail+1)); }
+
+  call POST "${API_BASE}/api/matching/${P8_MATCH_ID}/tasks/0/submit" "$LJAR" "$LCSRF" \
+    '{"note":"[E2E TEST] Ran the discussion and wrote up a recap doc."}'
+  pass "learner submits task line item" "$HTTP_CODE" "200"
+
+  call GET "${API_BASE}/api/orgs/matches/${P8_MATCH_ID}/validation" "$OJAR"
+  pass "org re-fetches validation after learner submission" "$HTTP_CODE" "200"
+  TASK0_STATUS2=$(echo "$HTTP_BODY" | json_get "tasks.0.status")
+  [ "$TASK0_STATUS2" = "submitted" ] && echo "OK    task line item now 'submitted'" || { echo "FAIL  expected task status 'submitted', got '${TASK0_STATUS2}'"; fail=$((fail+1)); }
+
+  call POST "${API_BASE}/api/orgs/matches/${P8_MATCH_ID}/tasks/0/verify" "$OJAR" "$OCSRF" \
+    '{"status":"verified","verified_by":"[E2E TEST] rep"}'
+  pass "org verifies the task line item" "$HTTP_CODE" "200"
+
+  call POST "${API_BASE}/api/orgs/matches/${P8_MATCH_ID}/skills/${P8_SKILL_ID}/verify" "$OJAR" "$OCSRF" \
+    '{"level":"proficient","session_ids":[],"note":"[E2E TEST] facilitated well","verified_by":"[E2E TEST] rep"}'
+  pass "org verifies the skill demonstration" "$HTTP_CODE" "200"
+
+  call GET "${API_BASE}/api/matching/${P8_MATCH_ID}/validation" "$LJAR"
+  pass "learner sees both verifications" "$HTTP_CODE" "200"
+  LEARNER_TASK_STATUS=$(echo "$HTTP_BODY" | json_get "tasks.0.status")
+  LEARNER_SKILL_LEVEL=$(echo "$HTTP_BODY" | json_get "skills.0.level")
+  [ "$LEARNER_TASK_STATUS" = "verified" ] && echo "OK    learner's own view shows task 'verified'" || { echo "FAIL  expected learner-side task status 'verified', got '${LEARNER_TASK_STATUS}'"; fail=$((fail+1)); }
+  [ "$LEARNER_SKILL_LEVEL" = "proficient" ] && echo "OK    learner's own view shows skill level 'proficient'" || { echo "FAIL  expected learner-side skill level 'proficient', got '${LEARNER_SKILL_LEVEL}'"; fail=$((fail+1)); }
+
+  call GET "${API_BASE}/api/learners/me/verified-skills" "$LJAR"
+  pass "learner's aggregate verified-skills list" "$HTTP_CODE" "200"
+  AGG_HAS_IT=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+print('yes' if any(r.get('listing_title') == '${P8_LISTING_TITLE}' and r.get('level') == 'proficient' for r in rows) else 'no')
+")
+  [ "$AGG_HAS_IT" = "yes" ] && echo "OK    org-verified skill appears in learner's aggregate list" || { echo "FAIL  org-verified skill missing from learner's aggregate list"; fail=$((fail+1)); }
+
+  call GET "${API_BASE}/api/admin/verified-skills" "$AJAR"
+  pass "admin sees the verified skill" "$HTTP_CODE" "200"
+  ADMIN_SKILL_SEEN=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+print('yes' if any(r.get('match_id') == ${P8_MATCH_ID} for r in rows) else 'no')
+")
+  [ "$ADMIN_SKILL_SEEN" = "yes" ] && echo "OK    admin Validation page lists this match's verified skill" || { echo "FAIL  admin does not see this match's verified skill"; fail=$((fail+1)); }
+
+  call GET "${API_BASE}/api/admin/task-completions" "$AJAR"
+  pass "admin sees the task completion" "$HTTP_CODE" "200"
+  ADMIN_TASK_SEEN=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+rows = json.load(sys.stdin)
+print('yes' if any(r.get('match_id') == ${P8_MATCH_ID} and r.get('status') == 'verified' for r in rows) else 'no')
+")
+  [ "$ADMIN_TASK_SEEN" = "yes" ] && echo "OK    admin Validation page lists this match's verified task, status=verified" || { echo "FAIL  admin does not see this match's task completion as verified"; fail=$((fail+1)); }
+
+  # Cleanup — same pattern as PART A/C. task_completions/verified_skills rows
+  # are left in place (harmless, tagged [E2E TEST] via the listing title they
+  # join back to) since withdraw is a soft-delete (learner_status='withdrawn',
+  # the match row itself isn't removed) and there's no delete endpoint for
+  # these two tables — deleting them isn't part of what P8 exposes to either
+  # side, by design (an org's validation is meant to be a durable record).
+  call DELETE "${API_BASE}/api/matching/${P8_MATCH_ID}" "$LJAR" "$LCSRF"
+  pass "learner withdraws P8 test match (cleanup)" "$HTTP_CODE" "200"
+fi
+
+call DELETE "${API_BASE}/api/orgs/listings/${P8_LISTING_ID}" "$OJAR" "$OCSRF"
+pass "org deactivates P8 test listing (cleanup)" "$HTTP_CODE" "200"
 
 echo ""
 

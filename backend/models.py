@@ -270,6 +270,10 @@ class OpportunityListing(Base):
     # in routes/matching.py keeps working unchanged.
     needs_text:      Mapped[Optional[str]]  = mapped_column(Text)
     needs_skill_targets: Mapped[Optional[dict]] = mapped_column(JSON)
+    # P8 (2026-07-25, migration scripts/2026-07-25-p8-org-validation.sql):
+    # AI-derived discrete task line items, same parse-needs pass as
+    # needs_skill_targets above. JSON array of plain description strings.
+    needs_tasks:     Mapped[Optional[dict]] = mapped_column(JSON)
     listing_type:    Mapped[str]            = mapped_column(String(30), default="project")
     required_skills: Mapped[dict]           = mapped_column(JSON, nullable=False)
     required_arts:   Mapped[Optional[dict]] = mapped_column(JSON)
@@ -305,6 +309,41 @@ class OpportunityMatch(Base):
     matched_at:     Mapped[datetime]       = mapped_column(DateTime, default=func.now())
     notified_at:    Mapped[Optional[datetime]] = mapped_column(DateTime)
     __table_args__ = (UniqueConstraint("learner_id", "listing_id", name="uq_match"),)
+
+
+# P8 (2026-07-25, migration scripts/2026-07-25-p8-org-validation.sql):
+# org validation system — task line-item completions + org-verified skill
+# demonstrations. See PROJECT_MASTER PART 22 for the full spec. Both tables
+# key off match_id (opportunity_matches.id), and both are only ever reachable
+# once a match's org_status == "connected" (routes enforce this, not the DB).
+class TaskCompletion(Base):
+    __tablename__ = "task_completions"
+    id:           Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    match_id:     Mapped[int]            = mapped_column(ForeignKey("opportunity_matches.id"), nullable=False)
+    task_index:   Mapped[int]            = mapped_column(SmallInteger, nullable=False)  # index into the listing's needs_tasks array at submission time
+    task_text:    Mapped[str]            = mapped_column(String(300), nullable=False)   # snapshot — later needs_tasks edits don't relabel a completed item
+    status:       Mapped[str]            = mapped_column(String(20), default="submitted")  # submitted | verified | rejected
+    learner_note: Mapped[Optional[str]]  = mapped_column(Text)
+    session_ids:  Mapped[Optional[dict]] = mapped_column(JSON)   # sessions/LECKOs the learner points to as evidence
+    submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    verified_at:  Mapped[Optional[datetime]] = mapped_column(DateTime)
+    verified_by:  Mapped[Optional[str]]  = mapped_column(String(160))  # free-text org rep name — orgs have no per-rep login
+    org_note:     Mapped[Optional[str]]  = mapped_column(Text)
+    created_at:   Mapped[datetime]       = mapped_column(DateTime, default=func.now())
+    __table_args__ = (UniqueConstraint("match_id", "task_index", name="uq_match_task"),)
+
+
+class VerifiedSkill(Base):
+    __tablename__ = "verified_skills"
+    id:          Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
+    match_id:    Mapped[int]            = mapped_column(ForeignKey("opportunity_matches.id"), nullable=False)
+    skill_id:    Mapped[int]            = mapped_column(ForeignKey("skills.id"), nullable=False)
+    level:       Mapped[str]            = mapped_column(String(20), nullable=False)  # developing | proficient | master
+    session_ids: Mapped[Optional[dict]] = mapped_column(JSON)
+    note:        Mapped[Optional[str]]  = mapped_column(Text)
+    verified_by: Mapped[Optional[str]]  = mapped_column(String(160))
+    verified_at: Mapped[datetime]       = mapped_column(DateTime, default=func.now())
+    __table_args__ = (UniqueConstraint("match_id", "skill_id", name="uq_match_skill"),)
 
 
 class Message(Base):

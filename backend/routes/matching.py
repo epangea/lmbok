@@ -14,6 +14,7 @@ from db import get_db
 from models import (
     Organization, OpportunityListing, OpportunityMatch, Message,
     LearnerSkillProgress, ArtsSkills, Arts, Learner,
+    TaskCompletion, VerifiedSkill,
 )
 from routes.auth import get_current_learner
 from utils import get_learner_stage
@@ -374,3 +375,110 @@ async def send_message(
     await db.refresh(msg)
     return {"ok":True,"id":msg.id,"sender_type":"learner","body":msg.body,
             "created_at":msg.created_at.isoformat()}
+
+
+# ── P8: learner-side validation (task submissions + skill visibility) ────
+# Added 2026-07-25. Full spec: PROJECT_MASTER PART 22. Mirrors orgs.py's
+# _require_connected_match gate — the learner can only see/submit against a
+# match the org has marked 'connected'.
+
+async def _require_connected_learner_match(match_id: int, learner: Learner, db: AsyncSession):
+    row = (await db.execute(
+        select(OpportunityMatch, OpportunityListing)
+        .join(OpportunityListing, OpportunityListing.id == OpportunityMatch.listing_id)
+        .where(OpportunityMatch.id == match_id, OpportunityMatch.learner_id == learner.id)
+    )).first()
+    if not row:
+        raise HTTPException(404, "Match not found")
+    match, listing = row
+    if match.org_status != "connected":
+        raise HTTPException(400, "Validation opens once this organization marks you as connected")
+    return match, listing
+
+
+@router.get("/{match_id}/validation")
+async def get_learner_validation(
+    match_id: int,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Learner's own view of a connected match: task line items (with their
+    own submission state) and skill targets (with any org-verified level —
+    read-only from the learner's side, org rep is the one who sets it)."""
+    match, listing = await _require_connected_learner_match(match_id, learner, db)
+
+    tc_rows = (await db.execute(
+        select(TaskCompletion).where(TaskCompletion.match_id == match_id)
+    )).scalars().all()
+    tc_by_idx = {t.task_index: t for t in tc_rows}
+    tasks = []
+    for i, text in enumerate(listing.needs_tasks or []):
+        t = tc_by_idx.get(i)
+        tasks.append({
+            "task_index":   i,
+            "task_text":    text,
+            "status":       t.status if t else "open",
+            "learner_note": t.learner_note if t else None,
+            "session_ids":  t.session_ids if t else None,
+            "submitted_at": t.submitted_at.isoformat() if t and t.submitted_at else None,
+            "org_note":     t.org_note if t and t.status == "rejected" else None,
+        })
+
+    vs_rows = (await db.execute(
+        select(VerifiedSkill).where(VerifiedSkill.match_id == match_id)
+    )).scalars().all()
+    vs_by_skill = {v.skill_id: v for v in vs_rows}
+    skills_out = []
+    for target in listing.needs_skill_targets or []:
+        sid = target.get("skill_id")
+        v = vs_by_skill.get(sid)
+        skills_out.append({
+            "skill_id":    sid,
+            "name":        target.get("name") or target.get("slug"),
+            "level":       v.level if v else None,
+            "verified_by": v.verified_by if v else None,
+            "verified_at": v.verified_at.isoformat() if v else None,
+        })
+
+    return {"tasks": tasks, "skills": skills_out}
+
+
+class TaskSubmitIn(BaseModel):
+    note:        Optional[str] = None
+    session_ids: Optional[list[int]] = None
+
+@router.post("/{match_id}/tasks/{task_index}/submit")
+async def submit_task(
+    match_id: int,
+    task_index: int,
+    req: TaskSubmitIn,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Learner declares a task line item complete, optionally pointing to
+    which sessions/LECKOs they used — org rep reviews and verifies/rejects."""
+    match, listing = await _require_connected_learner_match(match_id, learner, db)
+    tasks = listing.needs_tasks or []
+    if task_index < 0 or task_index >= len(tasks):
+        raise HTTPException(404, "Task line item not found")
+
+    row = (await db.execute(
+        select(TaskCompletion).where(
+            TaskCompletion.match_id == match_id,
+            TaskCompletion.task_index == task_index,
+        )
+    )).scalar_one_or_none()
+    if not row:
+        row = TaskCompletion(match_id=match_id, task_index=task_index, task_text=tasks[task_index],
+                              created_at=datetime.now(timezone.utc))
+        db.add(row)
+    elif row.status == "verified":
+        raise HTTPException(400, "This task is already verified")
+
+    row.status       = "submitted"
+    row.learner_note = req.note
+    row.session_ids  = req.session_ids
+    row.submitted_at = datetime.now(timezone.utc)
+    await db.commit()
+    return {"ok": True}
+

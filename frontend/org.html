@@ -40,6 +40,10 @@
     </div>
   </div>
 </div>
+<!-- P8 VALIDATION MODAL — shared by org rep + learner views, content differs by S.valMode -->
+<div id="val-modal" class="org-modal" style="display:none" onclick="if(event.target===this)closeValModal()">
+  <div class="org-modal-box val-modal-box" id="val-modal-box"><div class="spin"></div></div>
+</div>
 <!-- GATE -->
 <div id="gate" style="display:none">
   <div class="gw">
@@ -460,7 +464,7 @@ function drawOList(){
           h+='<div class="mrow"><div class="mav">❔</div><div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--mu)">'+e(m.display_name)+'</div><div style="font-size:12px;color:var(--mu)">AI match · score '+(m.match_score||0)+' '+artsBadges+'</div></div>'+action+'</div>';
           return;
         }
-        h+='<div class="mrow"><div class="mav">'+(m.avatar_emoji||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span><button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';
+        h+='<div class="mrow"><div class="mav">'+(m.avatar_emoji||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span>'+(m.org_status==='connected'?'<button class="btn bgh sm" onclick="openOrgValidation('+m.match_id+')">✅ Validate</button>':'')+'<button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';
       });
       h+='</div>';
     });
@@ -493,18 +497,24 @@ function listingFormHtml(ex=null){
       <button class="btn bgh sm" onclick="lfParseNeeds(${ex?ex.id:'null'})">✨ Suggest skill targets</button>
       <span id="lfn-status" style="font-size:12px;color:var(--mu)"></span>
     </div>
-    <div id="lfn-targets" style="margin-bottom:16px">${(ex&&ex.needs_skill_targets&&ex.needs_skill_targets.length)?lfnTargetsHtml(ex.needs_skill_targets):''}</div>
+    <div id="lfn-targets" style="margin-bottom:16px">${(ex&&ex.needs_skill_targets&&ex.needs_skill_targets.length)?lfnTargetsHtml(ex.needs_skill_targets,ex.needs_tasks):''}</div>
     <div class="fa">
       <button class="btn bp" onclick="saveL()">${ex?'Save Changes':'Create Listing'}</button>
       <button class="btn bgh" onclick="cancelForm()">Cancel</button>
     </div>
   </div>`;
 }
-function lfnTargetsHtml(targets){
-  return '<div style="font-size:11px;color:var(--mu);margin-bottom:6px">Skill targets (saved with the listing):</div>'
+function lfnTargetsHtml(targets,tasks){
+  tasks=tasks||[];
+  let h='<div style="font-size:11px;color:var(--mu);margin-bottom:6px">Skill targets (saved with the listing):</div>'
     + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
     + targets.map(t=>`<span class="badge bm">${e(t.name||t.slug)} · lvl ${t.min_level}</span>`).join('')
     + '</div>';
+  if(tasks.length){
+    h+='<div style="font-size:11px;color:var(--mu);margin:10px 0 6px">Task line items (what a rep will check off, P8):</div>'
+      +'<ul style="margin:0;padding-left:18px;font-size:13px;color:var(--tx)">'+tasks.map(t=>`<li>${e(t)}</li>`).join('')+'</ul>';
+  }
+  return h;
 }
 let _lfnTargets=null;
 async function lfParseNeeds(existingId){
@@ -523,9 +533,10 @@ async function lfParseNeeds(existingId){
   const r=await OA.post(`/listings/${listing.id}/parse-needs`,{});
   if(!r){if(st)st.textContent='AI parsing unavailable — try again shortly.';return;}
   _lfnTargets=r.needs_skill_targets||[];
-  await OA.patch(`/listings/${listing.id}`,{needs_skill_targets:_lfnTargets});
-  const box=document.getElementById('lfn-targets');if(box)box.innerHTML=_lfnTargets.length?lfnTargetsHtml(_lfnTargets):'<div style="font-size:12px;color:var(--mu)">No matching skills found — try describing the need differently.</div>';
-  if(st)st.textContent=_lfnTargets.length?'✓ Skill targets saved.':'';
+  const _lfnTasks=r.needs_tasks||[];
+  await OA.patch(`/listings/${listing.id}`,{needs_skill_targets:_lfnTargets,needs_tasks:_lfnTasks});
+  const box=document.getElementById('lfn-targets');if(box)box.innerHTML=(_lfnTargets.length||_lfnTasks.length)?lfnTargetsHtml(_lfnTargets,_lfnTasks):'<div style="font-size:12px;color:var(--mu)">No matching skills found — try describing the need differently.</div>';
+  if(st)st.textContent=_lfnTargets.length?'✓ Skill targets & tasks saved.':'';
   await reloadOL();
 }
 
@@ -719,6 +730,7 @@ function lcard(l,match=null){
       ${had
         ?`<button class="btn bd2 sm" onclick="wInt(${mid},${l.id})">Withdraw</button>
           <button class="btn bgh sm" onclick="openLP(${mid})">Messages ✉</button>
+          ${match.org_status==='connected'?`<button class="btn bgh sm" onclick="openLearnerValidation(${mid})">✅ Validate</button>`:''}
           <span class="badge ${stCls(match.org_status)}">${match.org_status}</span>`
         :`<button class="btn bp sm" onclick="xInt(${l.id})">Express Interest</button>`}
       ${l.source_url?`<a href="${l.source_url}" target="_blank" class="btn bgh sm">View ↗</a>`:''}
@@ -748,6 +760,114 @@ function renderMsgs(ms,pov){
 }
 
 function stCls(s){return{pending:'sp',reviewing:'sr',connected:'sc',declined:'sd'}[s]||'sp';}
+
+// ── P8: VALIDATION MODAL ─────────────────────────────────────
+// Shared by both the org-rep view and the learner view — S.valMode picks
+// which action buttons render. Full spec: PROJECT_MASTER PART 22.
+function closeValModal(){document.getElementById('val-modal').style.display='none';S.valMode=null;S.valMid=null;S.valData=null;}
+
+async function openOrgValidation(mid){
+  S.valMode='org';S.valMid=mid;
+  document.getElementById('val-modal').style.display='flex';
+  document.getElementById('val-modal-box').innerHTML='<div class="spin"></div>';
+  const r=await OA.get(`/matches/${mid}/validation`);
+  if(!r){toast('Could not load validation',true);closeValModal();return;}
+  S.valData=r;drawValModal();
+}
+async function openLearnerValidation(mid){
+  S.valMode='learner';S.valMid=mid;
+  document.getElementById('val-modal').style.display='flex';
+  document.getElementById('val-modal-box').innerHTML='<div class="spin"></div>';
+  const r=await LA.get(`/matching/${mid}/validation`);
+  if(!r){toast('Could not load validation',true);closeValModal();return;}
+  S.valData=r;drawValModal();
+}
+function valStatusBadge(status){
+  const map={open:'sp',submitted:'sr',verified:'sc',rejected:'sd'};
+  return `<span class="badge ${map[status]||'sp'}">${status}</span>`;
+}
+function drawValModal(){
+  const box=document.getElementById('val-modal-box');
+  const d=S.valData;if(!d){box.innerHTML='';return;}
+  const mode=S.valMode;
+  let h=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:15px;font-weight:700">✅ Validation</div>
+    <button class="ibtn" onclick="closeValModal()" style="font-size:18px;line-height:1">×</button>
+  </div>`;
+  h+='<div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin-bottom:8px">Task line items</div>';
+  if(!d.tasks.length){
+    h+='<div style="font-size:13px;color:var(--mu);margin-bottom:16px">This listing has no task line items yet.</div>';
+  }else{
+    d.tasks.forEach(t=>{
+      h+=`<div class="val-row"><div class="val-row-head"><div style="font-size:13px;flex:1">${e(t.task_text)}</div>${valStatusBadge(t.status)}</div>`;
+      if(t.learner_note)h+=`<div style="font-size:12px;color:var(--mu);margin-top:6px">"${e(t.learner_note)}"</div>`;
+      if(t.org_note)h+=`<div style="font-size:12px;color:var(--re);margin-top:6px">Rep note: ${e(t.org_note)}</div>`;
+      if(mode==='learner'&&t.status!=='verified'){
+        h+=`<div style="margin-top:8px"><textarea id="valtn-${t.task_index}" rows="2" placeholder="How did you complete this?" style="width:100%;font-size:12px">${t.learner_note?e(t.learner_note):''}</textarea>
+        <button class="btn bp sm" style="margin-top:6px" onclick="learnerSubmitTask(${t.task_index})">${t.status==='open'?'Submit':'Resubmit'}</button></div>`;
+      }else if(mode==='org'&&t.status!=='verified'){
+        h+=`<div style="display:flex;gap:6px;margin-top:8px">
+          <button class="btn bp sm" onclick="orgVerifyTask(${t.task_index},'verified')">✓ Verify</button>
+          <button class="btn bd2 sm" onclick="orgVerifyTask(${t.task_index},'rejected')">✕ Reject</button>
+        </div>`;
+      }
+      h+='</div>';
+    });
+  }
+  h+='<div style="font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mu);margin:16px 0 8px">Skill demonstrations</div>';
+  if(!d.skills.length){
+    h+='<div style="font-size:13px;color:var(--mu)">No skill targets set on this listing.</div>';
+  }else{
+    d.skills.forEach(s=>{
+      h+=`<div class="val-row"><div class="val-row-head"><div style="font-size:13px;font-weight:600;flex:1">${e(s.name)}</div>${s.level?`<span class="badge ba">${s.level}</span>`:'<span class="badge bi">not verified</span>'}</div>`;
+      if(s.level&&s.verified_by)h+=`<div style="font-size:12px;color:var(--mu);margin-top:6px">Verified by ${e(s.verified_by)} · ${fmt(s.verified_at)}</div>`;
+      if(mode==='org'){
+        const sessAll=d.learner_sessions||[];
+        const sessOpts=sessAll.filter(x=>x.primary_skill_id===s.skill_id);
+        const sessList=(sessOpts.length?sessOpts:sessAll).slice(0,8);
+        h+=`<div id="valskf-${s.skill_id}" style="margin-top:8px">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+            ${['developing','proficient','master'].map(L=>`<button type="button" class="val-level-btn${s.level===L?' on':''}" onclick="valPickLevel(${s.skill_id},'${L}',this)">${L}</button>`).join('')}
+          </div>
+          ${sessList.length?`<div style="margin-bottom:6px">${sessList.map(sess=>`<span class="val-sess-chip" data-sid="${sess.id}" onclick="this.classList.toggle('on')">${e(sess.title||('Session #'+sess.id))}</span>`).join('')}</div>`:'<div style="font-size:11px;color:var(--mu);margin-bottom:6px">No completed sessions to cite yet.</div>'}
+          <textarea id="valskn-${s.skill_id}" rows="2" placeholder="Note (optional)" style="width:100%;font-size:12px"></textarea>
+          <button class="btn bp sm" style="margin-top:6px" onclick="orgVerifySkill(${s.skill_id})">Save verification</button>
+        </div>`;
+      }
+      h+='</div>';
+    });
+  }
+  box.innerHTML=h;
+}
+let _valPickedLevel={};
+function valPickLevel(skillId,level,btn){
+  _valPickedLevel[skillId]=level;
+  btn.parentElement.querySelectorAll('.val-level-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+async function orgVerifyTask(idx,status){
+  const r=await OA.post(`/matches/${S.valMid}/tasks/${idx}/verify`,{status});
+  if(r){toast(status==='verified'?'Verified ✓':'Rejected');const rr=await OA.get(`/matches/${S.valMid}/validation`);if(rr){S.valData=rr;drawValModal();}}
+  else toast('Could not save',true);
+}
+async function learnerSubmitTask(idx){
+  const ta=document.getElementById(`valtn-${idx}`);
+  const note=ta?ta.value.trim():'';
+  const r=await LA.post(`/matching/${S.valMid}/tasks/${idx}/submit`,{note:note||null});
+  if(r){toast('Submitted ✓ — awaiting review');const rr=await LA.get(`/matching/${S.valMid}/validation`);if(rr){S.valData=rr;drawValModal();}}
+  else toast('Could not submit',true);
+}
+async function orgVerifySkill(skillId){
+  const level=_valPickedLevel[skillId];
+  if(!level){toast('Pick a level first',true);return;}
+  const chips=document.querySelectorAll(`#valskf-${skillId} .val-sess-chip.on`);
+  const session_ids=Array.from(chips).map(c=>+c.dataset.sid);
+  const noteEl=document.getElementById(`valskn-${skillId}`);
+  const note=noteEl?noteEl.value.trim():'';
+  const r=await OA.post(`/matches/${S.valMid}/skills/${skillId}/verify`,{level,session_ids,note:note||null});
+  if(r){toast('Skill verified ✓');const rr=await OA.get(`/matches/${S.valMid}/validation`);if(rr){S.valData=rr;drawValModal();}}
+  else toast('Could not save',true);
+}
 
 // ── Actions ───────────────────────────────────────────────
 async function xInt(id){const r=await LA.post('/matching/',{listing_id:id});if(r&&r.ok){toast('Interest expressed ✓');await loadLearner();}else toast('Could not express interest',true);}

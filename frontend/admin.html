@@ -85,6 +85,9 @@
     <div class="sidebar-item" onclick="showAdmin('outreach')" id="si-outreach">
       <span class="sidebar-icon">📨</span> Outreach
     </div>
+    <div class="sidebar-item" onclick="showAdmin('validation')" id="si-validation">
+      <span class="sidebar-icon">✅</span> Validation
+    </div>
 
     <div class="sidebar-section">System</div>
     <div class="sidebar-item" onclick="showAdmin('settings')" id="si-settings">
@@ -177,6 +180,7 @@ var sessionsState = { sessions: null, total: 0, loading: false, error: null, off
 // ── Lecko moderation live state ──────────────────────────────
 var moderateState = { pending: null, loading: false, error: null };
 var outreachState = { drafts: null, loading: false, error: null };
+var validationState = { tab: 'skills', skills: null, tasks: null, loading: false, error: null };
 
 // ── Auth wall ────────────────────────────────────
 // P-SEC2 (2026-07-17): admin session now lives in an httpOnly cookie, not
@@ -325,6 +329,7 @@ function showAdmin(section) {
   if (section === 'sessions') sessionsLoad();
   if (section === 'moderate') moderateLoad();
   if (section === 'outreach') outreachLoad();
+  if (section === 'validation') validationLoad();
 }
 
 // ── Admin sidebar toggle (mobile hamburger) ────────
@@ -1397,6 +1402,86 @@ function outreachDiscard(draftId) {
     outreachLoad();
   }).catch(function(e) {
     alert('Discard failed: ' + (e.message || 'unknown'));
+  });
+}
+
+// ── P8: VALIDATION (Synergy) ───────────────────────
+// Read-only site-admin oversight of org-verified skill demonstrations and
+// task line-item completions across every org. Admin never writes here —
+// verification itself happens from the org-rep side (org.html), same
+// division of labor Outreach draws between admin review and org action.
+// Full spec: PROJECT_MASTER PART 22.
+function AdminValidation() {
+  var s = validationState;
+  var body = '<h2 style="margin-bottom:6px">Validation</h2>'
+    + '<p style="margin-bottom:20px;font-size:13px;color:var(--text3)">Org-verified skill demonstrations and task line-item completions (P8) — read-only here; org reps validate from their own portal.</p>';
+
+  body += '<div style="display:flex;gap:4px;margin-bottom:16px;background:var(--bg3);border-radius:10px;padding:4px;max-width:340px">'
+    + ['skills', 'tasks'].map(function(t) {
+        var active = s.tab === t;
+        return '<button onclick="validationSetTab(\'' + t + '\')" style="flex:1;padding:7px 4px;font-size:12px;font-weight:' + (active ? '700' : '400') + ';border-radius:7px;border:none;cursor:pointer;background:' + (active ? 'var(--card)' : 'transparent') + ';color:' + (active ? 'var(--text)' : 'var(--text3)') + '">' + (t === 'skills' ? '✅ Verified Skills' : '📋 Task Completions') + '</button>';
+      }).join('')
+    + '</div>';
+
+  body += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
+    + '<button class="btn btn-ghost btn-sm" onclick="validationLoad()">&#8635; Refresh</button>'
+    + (s.loading ? '<span style="font-size:11px;color:var(--text3)">Loading...</span>' : '')
+    + (s.error ? '<span style="font-size:11px;color:var(--coral)">' + escH(s.error) + '</span>' : '')
+    + '</div>';
+
+  if (s.tab === 'skills') {
+    if (!s.skills) { body += '<div style="color:var(--text3);font-size:13px">Loading...</div>'; return '<div class="page">' + body + '</div>'; }
+    if (!s.skills.length) { body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No org-verified skill demonstrations yet.</div>'; return '<div class="page">' + body + '</div>'; }
+    body += '<div class="card" style="padding:0;overflow:hidden">'
+      + s.skills.map(function(v) {
+          var lvlBadge = v.level === 'master' ? 'badge-green' : v.level === 'proficient' ? 'badge-amber' : 'badge-blue';
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">'
+            + '<div><div style="font-size:13px;font-weight:600">' + escH(v.skill_name) + ' — ' + escH(v.learner_name) + '</div>'
+            + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escH(v.org_name) + ' · ' + escH(v.listing_title) + (v.verified_by ? ' · verified by ' + escH(v.verified_by) : '') + ' · ' + escH((v.verified_at || '').slice(0, 10)) + '</div></div>'
+            + '<span class="badge ' + lvlBadge + '">' + escH(v.level) + '</span>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+  } else {
+    if (!s.tasks) { body += '<div style="color:var(--text3);font-size:13px">Loading...</div>'; return '<div class="page">' + body + '</div>'; }
+    if (!s.tasks.length) { body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No task submissions yet.</div>'; return '<div class="page">' + body + '</div>'; }
+    body += '<div class="card" style="padding:0;overflow:hidden">'
+      + s.tasks.map(function(t) {
+          var stBadge = t.status === 'verified' ? 'badge-green' : t.status === 'rejected' ? 'badge-red' : 'badge-amber';
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">'
+            + '<div><div style="font-size:13px;font-weight:600">' + escH(t.task_text) + ' — ' + escH(t.learner_name) + '</div>'
+            + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escH(t.org_name) + ' · ' + escH(t.listing_title) + (t.verified_by ? ' · reviewed by ' + escH(t.verified_by) : '') + '</div></div>'
+            + '<span class="badge ' + stBadge + '">' + escH(t.status) + '</span>'
+            + '</div>';
+        }).join('')
+      + '</div>';
+  }
+
+  return '<div class="page">' + body + '</div>';
+}
+
+function validationSetTab(tab) {
+  validationState.tab = tab;
+  renderAdmin();
+}
+
+function validationLoad() {
+  validationState.loading = true;
+  validationState.error = null;
+  Promise.all([
+    adminFetch('/admin/verified-skills'),
+    adminFetch('/admin/task-completions'),
+  ]).then(function(results) {
+    validationState.skills = results[0] || [];
+    validationState.tasks  = results[1] || [];
+    validationState.loading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    validationState.loading = false;
+    validationState.error = e.message || 'Failed to load validation data';
+    validationState.skills = validationState.skills || [];
+    validationState.tasks  = validationState.tasks  || [];
+    renderAdmin();
   });
 }
 
@@ -2591,6 +2676,7 @@ function renderAdmin() {
     moderate:  AdminModerate,
     scavenger: AdminScavenger,
     outreach:  AdminOutreach,
+    validation: AdminValidation,
     ai:        AdminAI,
     promptmap: AdminPromptMap,
     bioregions: AdminBioregions,

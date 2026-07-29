@@ -26,9 +26,13 @@
 #   POST /api/orgs/listings/{id}/parse-needs      — P11: AI parses needs_text -> skill targets
 #   POST /api/orgs/listings/{id}/generate-matches — P11: rank learners, create top-10 ai_suggested matches
 #   POST /api/orgs/listings/{id}/matches/{mid}/notify — P11: invite one anonymized candidate
+#   GET  /api/orgs/matches/{mid}/validation                  — P8: task/skill validation state for a connected match
+#   POST /api/orgs/matches/{mid}/tasks/{idx}/verify           — P8: org rep verifies/rejects a task line item
+#   POST /api/orgs/matches/{mid}/skills/{skill_id}/verify     — P8: org rep verifies a skill demonstration level
 # ============================================================
 
 import os
+import logging
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 
@@ -41,11 +45,15 @@ import bcrypt
 import jwt
 
 from db import get_db
-from models import Organization, OpportunityListing, OpportunityMatch, Learner, Message
+from models import (
+    Organization, OpportunityListing, OpportunityMatch, Learner, Message,
+    TaskCompletion, VerifiedSkill, Skill, Session,
+)
 from cookie_auth import ORG_ACCESS_COOKIE, set_org_cookies, clear_org_cookies
 from mail import send_mail
 
 router = APIRouter()
+logger = logging.getLogger("freqlearn.orgs")
 
 ORG_JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production")
 ORG_JWT_ALG    = "HS256"
@@ -141,6 +149,7 @@ class ListingUpdate(BaseModel):
     required_arts: Optional[list[str]] = None
     needs_text:    Optional[str] = None
     needs_skill_targets: Optional[list[dict]] = None
+    needs_tasks:   Optional[list[str]] = None
     source_url:    Optional[str] = None
     is_active:     Optional[bool] = None
 
@@ -176,6 +185,7 @@ def _listing_dict(listing: OpportunityListing) -> dict:
         "required_arts":   required,
         "needs_text":      listing.needs_text,
         "needs_skill_targets": listing.needs_skill_targets or [],
+        "needs_tasks":     listing.needs_tasks or [],
         "source_url":      listing.source_url,
         "is_active":       listing.is_active,
         "pending_approval": not listing.is_active and not listing.scavenged,
@@ -377,6 +387,7 @@ async def update_listing(
     if req.required_arts is not None: listing.required_arts = req.required_arts
     if req.needs_text    is not None: listing.needs_text    = req.needs_text
     if req.needs_skill_targets is not None: listing.needs_skill_targets = req.needs_skill_targets
+    if req.needs_tasks   is not None: listing.needs_tasks   = req.needs_tasks
     if req.source_url    is not None: listing.source_url    = req.source_url
     if req.is_active     is not None: listing.is_active     = req.is_active
 
@@ -563,11 +574,14 @@ CLOSED VOCABULARY — you may ONLY use skill slugs from this list, never invent 
 The organization wrote this free-text description of what they need:
 \"\"\"{listing.needs_text.strip()}\"\"\"
 
-Pick the skill slugs (from the list above only) that best match what they're looking for, and a minimum proficiency level for each (levels run 0-3, use 1 for "some experience", 2 for "solid", 3 for "advanced").
+Do two things with this text:
 
-Respond with ONLY a JSON array, no preamble, no markdown fences, in this exact shape:
-[{{"slug": "skill-slug", "min_level": 1}}, ...]
-Include at most 6 skills — the ones most central to the need, not every tangential match."""
+1. Pick the skill slugs (from the list above only) that best match what they're looking for, and a minimum proficiency level for each (levels run 0-3, use 1 for "some experience", 2 for "solid", 3 for "advanced").
+2. Break the need down into a short list of concrete, checkable tasks a learner could actually complete and an org rep could later verify happened (e.g. "Facilitate two group discussions", "Draft a first-aid checklist") — not restatements of the skills, actual deliverables/actions.
+
+Respond with ONLY a JSON object, no preamble, no markdown fences, in this exact shape:
+{{"needs_skill_targets": [{{"slug": "skill-slug", "min_level": 1}}, ...], "needs_tasks": ["task description", ...]}}
+Include at most 6 skills — the ones most central to the need, not every tangential match. Include at most 5 tasks."""
 
     import httpx, json as _json
     try:
@@ -578,20 +592,36 @@ Include at most 6 skills — the ones most central to the need, not every tangen
                 json={
                     "model": "llama-3.3-70b-versatile",
                     "messages": [{"role": "system", "content": system_prompt}],
-                    "max_tokens": 400,
+                    "max_tokens": 700,
                     "temperature": 0.2,
+                    "response_format": {"type": "json_object"},  # forces Groq to emit strictly valid JSON rather than trusting free-form text-stripping
                 },
             )
         resp.raise_for_status()
         raw = resp.json()["choices"][0]["message"]["content"].strip()
         raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        parsed = _json.loads(raw)
+        # Defensive: even in JSON mode, models occasionally wrap the object in
+        # a stray sentence — grab the outermost {...} span before parsing.
+        brace_start, brace_end = raw.find("{"), raw.rfind("}")
+        if brace_start != -1 and brace_end > brace_start:
+            raw = raw[brace_start:brace_end + 1]
+        try:
+            parsed = _json.loads(raw)
+        except _json.JSONDecodeError as je:
+            # Log the actual raw text so a future failure is debuggable from
+            # /var/log/freqlearn/api-error.log without needing a manual curl
+            # (same pattern as admin.py's Scavenger JSON-parse-failure log).
+            logger.error(f"parse-needs JSON parse failed: {je}\nRaw: {raw[:500]}")
+            raise
     except Exception as e:
         raise HTTPException(503, f"Needs-parsing unavailable: {str(e)[:120]}")
 
+    if not isinstance(parsed, dict):
+        parsed = {}
+
     valid_slugs = {s.slug: s for s in skills}
     targets = []
-    for item in parsed if isinstance(parsed, list) else []:
+    for item in parsed.get("needs_skill_targets") or []:
         slug = item.get("slug") if isinstance(item, dict) else None
         if slug in valid_slugs:
             s = valid_slugs[slug]
@@ -601,7 +631,13 @@ Include at most 6 skills — the ones most central to the need, not every tangen
                 "name":      s.name,
                 "min_level": max(0, min(3, int(item.get("min_level", 1) or 1))),
             })
-    return {"needs_skill_targets": targets}
+
+    tasks = [
+        t.strip()[:300] for t in (parsed.get("needs_tasks") or [])
+        if isinstance(t, str) and t.strip()
+    ][:5]
+
+    return {"needs_skill_targets": targets, "needs_tasks": tasks}
 
 
 @router.post("/listings/{listing_id}/generate-matches")
@@ -736,6 +772,190 @@ async def notify_ai_match(
     match.notified_at = datetime.now(timezone.utc)
     await db.commit()
     return {"ok": True}
+
+
+# ── P8: org validation (task line items + skill demonstrations) ──────
+# Added 2026-07-25. Full spec: PROJECT_MASTER PART 22. Both endpoints below
+# only work on a match the org has explicitly marked 'connected' (the same
+# org_status PATCH /listings/{id}/matches/{id} already sets) — validation is
+# scoped to matches that have become a real, ongoing working relationship,
+# not every candidate that ever crossed the org's screen.
+
+async def _require_connected_match(match_id: int, org: Organization, db: AsyncSession) -> tuple[OpportunityMatch, OpportunityListing]:
+    match_q = await db.execute(
+        select(OpportunityMatch, OpportunityListing)
+        .join(OpportunityListing, OpportunityListing.id == OpportunityMatch.listing_id)
+        .where(OpportunityMatch.id == match_id, OpportunityListing.org_id == org.id)
+    )
+    row = match_q.first()
+    if not row:
+        raise HTTPException(404, "Match not found")
+    match, listing = row
+    if match.org_status != "connected":
+        raise HTTPException(400, "Validation is only available once this match is marked 'connected'")
+    return match, listing
+
+
+@router.get("/matches/{match_id}/validation")
+async def get_org_validation(
+    match_id: int,
+    org: Organization = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Org rep's view of a connected match: the listing's task line items
+    (with any learner submission / org verification state) and skill targets
+    (with any org-verified level)."""
+    match, listing = await _require_connected_match(match_id, org, db)
+
+    tc_rows = (await db.execute(
+        select(TaskCompletion).where(TaskCompletion.match_id == match_id)
+    )).scalars().all()
+    tc_by_idx = {t.task_index: t for t in tc_rows}
+    tasks = []
+    for i, text in enumerate(listing.needs_tasks or []):
+        t = tc_by_idx.get(i)
+        tasks.append({
+            "task_index":   i,
+            "task_text":    text,
+            "status":       t.status if t else "open",
+            "learner_note": t.learner_note if t else None,
+            "session_ids":  t.session_ids if t else None,
+            "submitted_at": t.submitted_at.isoformat() if t and t.submitted_at else None,
+            "verified_at":  t.verified_at.isoformat() if t and t.verified_at else None,
+            "verified_by":  t.verified_by if t else None,
+            "org_note":     t.org_note if t else None,
+        })
+
+    vs_rows = (await db.execute(
+        select(VerifiedSkill).where(VerifiedSkill.match_id == match_id)
+    )).scalars().all()
+    vs_by_skill = {v.skill_id: v for v in vs_rows}
+    skills_out = []
+    for target in listing.needs_skill_targets or []:
+        sid = target.get("skill_id")
+        v = vs_by_skill.get(sid)
+        skills_out.append({
+            "skill_id":    sid,
+            "name":        target.get("name") or target.get("slug"),
+            "min_level":   target.get("min_level"),
+            "level":       v.level if v else None,
+            "session_ids": v.session_ids if v else None,
+            "note":        v.note if v else None,
+            "verified_by": v.verified_by if v else None,
+            "verified_at": v.verified_at.isoformat() if v else None,
+        })
+
+    # Learner's session/LECKO history, light summary only (no prompt/response
+    # content) — org rep uses this alongside whatever session_ids the learner
+    # cited to judge the skill demonstration, without exposing full session
+    # transcripts the learner never explicitly submitted as evidence.
+    sess_q = await db.execute(
+        select(Session)
+        .where(Session.learner_id == match.learner_id, Session.status == "completed")
+        .order_by(Session.completed_at.desc())
+        .limit(50)
+    )
+    sessions_out = [
+        {
+            "id":            s.id,
+            "title":         s.title,
+            "primary_skill_id": s.primary_skill_id,
+            "lecko_id":      s.lecko_id,
+            "xp_earned":     s.xp_earned,
+            "completed_at":  s.completed_at.isoformat() if s.completed_at else None,
+        }
+        for s in sess_q.scalars().all()
+    ]
+
+    return {"tasks": tasks, "skills": skills_out, "learner_sessions": sessions_out}
+
+
+class TaskVerifyIn(BaseModel):
+    status:      str            # verified | rejected
+    note:        Optional[str] = None
+    verified_by: Optional[str] = None
+
+@router.post("/matches/{match_id}/tasks/{task_index}/verify")
+async def verify_task(
+    match_id: int,
+    task_index: int,
+    req: TaskVerifyIn,
+    org: Organization = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Org rep checks off (or rejects) a task line item — works whether or
+    not the learner submitted first (P8 scoping: org can validate proactively
+    off the learner's session history, not only review a learner submission)."""
+    if req.status not in ("verified", "rejected"):
+        raise HTTPException(400, "status must be 'verified' or 'rejected'")
+    match, listing = await _require_connected_match(match_id, org, db)
+    tasks = listing.needs_tasks or []
+    if task_index < 0 or task_index >= len(tasks):
+        raise HTTPException(404, "Task line item not found")
+
+    row = (await db.execute(
+        select(TaskCompletion).where(
+            TaskCompletion.match_id == match_id,
+            TaskCompletion.task_index == task_index,
+        )
+    )).scalar_one_or_none()
+    if not row:
+        row = TaskCompletion(
+            match_id=match_id, task_index=task_index, task_text=tasks[task_index],
+            status="submitted", created_at=datetime.now(timezone.utc),
+        )
+        db.add(row)
+
+    row.status      = req.status
+    row.verified_at = datetime.now(timezone.utc)
+    row.verified_by = req.verified_by
+    row.org_note     = req.note
+    await db.commit()
+    return {"ok": True, "status": row.status}
+
+
+class SkillVerifyIn(BaseModel):
+    level:       str            # developing | proficient | master
+    session_ids: Optional[list[int]] = None
+    note:        Optional[str] = None
+    verified_by: Optional[str] = None
+
+@router.post("/matches/{match_id}/skills/{skill_id}/verify")
+async def verify_skill(
+    match_id: int,
+    skill_id: int,
+    req: SkillVerifyIn,
+    org: Organization = Depends(get_current_org),
+    db: AsyncSession = Depends(get_db),
+):
+    """Org rep confirms a skill demonstration at developing/proficient/master.
+    Writes to verified_skills only — deliberately NOT learner_skill_progress
+    (see PART 22): this is a citable credential tied to this Need, not an
+    automatic write to the learner's self-paced global skill level."""
+    if req.level not in ("developing", "proficient", "master"):
+        raise HTTPException(400, "level must be developing | proficient | master")
+    match, listing = await _require_connected_match(match_id, org, db)
+    target_skill_ids = {t.get("skill_id") for t in (listing.needs_skill_targets or [])}
+    if skill_id not in target_skill_ids:
+        raise HTTPException(400, "That skill isn't one of this listing's needs_skill_targets")
+
+    row = (await db.execute(
+        select(VerifiedSkill).where(
+            VerifiedSkill.match_id == match_id,
+            VerifiedSkill.skill_id == skill_id,
+        )
+    )).scalar_one_or_none()
+    if not row:
+        row = VerifiedSkill(match_id=match_id, skill_id=skill_id)
+        db.add(row)
+
+    row.level       = req.level
+    row.session_ids = req.session_ids
+    row.note         = req.note
+    row.verified_by  = req.verified_by
+    row.verified_at  = datetime.now(timezone.utc)
+    await db.commit()
+    return {"ok": True, "level": row.level}
 
 
 # ── Pnyx (org side) ────────────────────────────────────────

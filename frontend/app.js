@@ -517,18 +517,20 @@ async function loadProgress() {
   if (!API.isLoggedIn()) return;
   set({progressLoading: true});
   try {
-    const [history, activity] = await Promise.all([
+    const [history, activity, verifiedSkills] = await Promise.all([
       API.get('/sessions/history?limit=30').catch(() => null),
       API.get('/sessions/activity?days=30').catch(() => null),
+      API.get('/learners/me/verified-skills').catch(() => null),
     ]);
     set({
       progressHistory:  history  || [],
       progressActivity: activity || [],
+      verifiedSkills:   verifiedSkills || [],
       progressLoading:  false,
     });
   } catch(e) {
     console.log('Progress load:', e.message);
-    set({progressLoading: false, progressHistory: [], progressActivity: []});
+    set({progressLoading: false, progressHistory: [], progressActivity: [], verifiedSkills: []});
   }
 }
 
@@ -3298,6 +3300,23 @@ function Portfolio() {
         </div>
         `}
       </div>
+
+      <!-- P8: Org-Verified Skills — read-only credentials an org rep confirmed
+           while working with this learner on a Need. Deliberately shown as its
+           own card, separate from self-paced skill progress above, since these
+           are org-vouched, not platform-computed. Only rendered when non-empty. -->
+      ${(S.verifiedSkills && S.verifiedSkills.length) ? `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">✅ Org-Verified Skills</div>
+        ${S.verifiedSkills.map(function(v) {
+          var lvlColor = v.level === 'master' ? 'var(--wave)' : v.level === 'proficient' ? '#6AB0FF' : 'var(--text3)';
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">'
+            + '<div><div style="font-size:13px;font-weight:600">' + v.skill_name + '</div>'
+            + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + v.org_name + ' · ' + v.listing_title + '</div></div>'
+            + '<span style="font-size:11px;font-weight:700;text-transform:capitalize;color:' + lvlColor + '">' + v.level + '</span>'
+            + '</div>';
+        }).join('')}
+      </div>` : ''}
 
       <!-- Portfolio companion -->
       <div style="background:var(--bg2);border:1px solid rgba(0,229,200,0.2);border-radius:var(--r);padding:18px">

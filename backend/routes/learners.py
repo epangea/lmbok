@@ -162,3 +162,37 @@ async def seed_initial_progress(
 
     await db.commit()
     return {"seeded": seeded}
+
+
+# ── P8: org-verified skills, learner's own aggregate view ────────────
+# Added 2026-07-25. Full spec: PROJECT_MASTER PART 22. Every VerifiedSkill
+# row across every one of this learner's matches — the citable "org vouches
+# for this" credentials, separate from (and not written into) their global
+# learner_skill_progress.current_level.
+@router.get("/me/verified-skills")
+async def get_my_verified_skills(
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    from models import VerifiedSkill, OpportunityMatch, OpportunityListing, Organization, Skill
+    rows = (await db.execute(
+        select(VerifiedSkill, OpportunityListing, Organization, Skill)
+        .join(OpportunityMatch, OpportunityMatch.id == VerifiedSkill.match_id)
+        .join(OpportunityListing, OpportunityListing.id == OpportunityMatch.listing_id)
+        .join(Organization, Organization.id == OpportunityListing.org_id)
+        .join(Skill, Skill.id == VerifiedSkill.skill_id)
+        .where(OpportunityMatch.learner_id == learner.id)
+        .order_by(VerifiedSkill.verified_at.desc())
+    )).all()
+    return [
+        {
+            "skill_name":    sk.name,
+            "level":         v.level,
+            "org_name":      org.name,
+            "listing_title": listing.title,
+            "verified_by":   v.verified_by,
+            "verified_at":   v.verified_at.isoformat() if v.verified_at else None,
+        }
+        for v, listing, org, sk in rows
+    ]
+

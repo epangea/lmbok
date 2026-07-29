@@ -985,6 +985,14 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .page-org .logo{font-family:"Syne",sans-serif;font-size:1.05rem;font-weight:800;background:linear-gradient(135deg,#00E5C8,#3D7BFF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;letter-spacing:-0.5px;text-decoration:none;flex-shrink:0}
 .page-org .org-modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center}
 .page-org .org-modal-box{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:26px 24px;max-width:360px;width:calc(100% - 32px)}
+/* P8 — validation modal: wider variant of .org-modal-box, scrollable body */
+.page-org .val-modal-box{max-width:560px;max-height:82vh;overflow-y:auto}
+.page-org .val-row{border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.page-org .val-row-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.page-org .val-sess-chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;border:1px solid var(--bd);border-radius:20px;padding:3px 9px;margin:3px 4px 0 0;cursor:pointer}
+.page-org .val-sess-chip.on{background:var(--gr);color:#04231b;border-color:var(--gr)}
+.page-org .val-level-btn{font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--bd);background:transparent;color:var(--mu);cursor:pointer}
+.page-org .val-level-btn.on{background:var(--gr);color:#04231b;border-color:var(--gr);font-weight:600}
 /* Header */
 .page-org header{background:var(--sf);border-bottom:1px solid var(--bd);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:58px;position:sticky;top:0;z-index:100}
 .page-org .brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:inherit}

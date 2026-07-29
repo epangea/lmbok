@@ -56,7 +56,7 @@ from pydantic import BaseModel
 
 from db import get_db
 from sqlalchemy.exc import IntegrityError
-from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft, Learner, LearnerAdminMessage
+from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft, Learner, LearnerAdminMessage, TaskCompletion, VerifiedSkill, OpportunityMatch, Skill
 from routes.weekly_report import main as weekly_report_main
 from cookie_auth import ADMIN_ACCESS_COOKIE, set_admin_cookies, clear_admin_cookies
 from mail import send_mail
@@ -1593,3 +1593,75 @@ async def admin_discard_outreach(
     draft.status = "discarded"
     await db.commit()
     return {"ok": True, "id": draft_id, "status": "discarded"}
+
+
+# ── P8 — Validation section (2026-07-25) ────────────────────
+# Site-admin visibility into org-verified skill demonstrations and task
+# line-item completions across every org — the "Synergy" sidebar group's
+# read-only oversight page. Full spec: PROJECT_MASTER PART 22. Writes only
+# happen via the org rep (orgs.py) or learner (matching.py) endpoints; this
+# is deliberately read-only from the admin side, same as Outreach's approach
+# to org-authored content — admin observes, doesn't author.
+#   GET /api/admin/verified-skills — every org-verified skill demonstration
+#   GET /api/admin/task-completions — every task line-item submission/verification
+
+@router.get("/verified-skills")
+async def admin_list_verified_skills(
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(
+        select(VerifiedSkill, OpportunityMatch, OpportunityListing, Organization, Learner, Skill)
+        .join(OpportunityMatch, OpportunityMatch.id == VerifiedSkill.match_id)
+        .join(OpportunityListing, OpportunityListing.id == OpportunityMatch.listing_id)
+        .join(Organization, Organization.id == OpportunityListing.org_id)
+        .join(Learner, Learner.id == OpportunityMatch.learner_id)
+        .join(Skill, Skill.id == VerifiedSkill.skill_id)
+        .order_by(desc(VerifiedSkill.verified_at))
+    )).all()
+    return [
+        {
+            "id":            v.id,
+            "match_id":      v.match_id,
+            "level":         v.level,
+            "note":          v.note,
+            "verified_by":   v.verified_by,
+            "verified_at":   v.verified_at.isoformat() if v.verified_at else None,
+            "skill_name":    sk.name,
+            "org_name":      org.name,
+            "listing_title": listing.title,
+            "learner_name":  learner.display_name or learner.username,
+        }
+        for v, match, listing, org, learner, sk in rows
+    ]
+
+
+@router.get("/task-completions")
+async def admin_list_task_completions(
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = (await db.execute(
+        select(TaskCompletion, OpportunityMatch, OpportunityListing, Organization, Learner)
+        .join(OpportunityMatch, OpportunityMatch.id == TaskCompletion.match_id)
+        .join(OpportunityListing, OpportunityListing.id == OpportunityMatch.listing_id)
+        .join(Organization, Organization.id == OpportunityListing.org_id)
+        .join(Learner, Learner.id == OpportunityMatch.learner_id)
+        .order_by(desc(TaskCompletion.created_at))
+    )).all()
+    return [
+        {
+            "id":            t.id,
+            "match_id":      t.match_id,
+            "task_text":     t.task_text,
+            "status":        t.status,
+            "verified_by":   t.verified_by,
+            "submitted_at":  t.submitted_at.isoformat() if t.submitted_at else None,
+            "verified_at":   t.verified_at.isoformat() if t.verified_at else None,
+            "org_name":      org.name,
+            "listing_title": listing.title,
+            "learner_name":  learner.display_name or learner.username,
+        }
+        for t, match, listing, org, learner in rows
+    ]
+
