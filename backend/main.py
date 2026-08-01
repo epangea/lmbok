@@ -32,6 +32,7 @@ from routes.polis           import router as polis_router
 from routes.reflections     import router as reflections_router
 from routes.ollama_generate import router as ollama_router
 from routes.groq_generate   import router as groq_router
+from routes.gemini_generate import router as gemini_router
 from routes.orgs            import router as orgs_router
 from routes.admin           import router as admin_router
 from routes.bioregions      import router as bioregions_router
@@ -152,6 +153,7 @@ app.include_router(polis_router,       prefix="/api/polis",       tags=["polis"]
 app.include_router(reflections_router, prefix="/api/reflections", tags=["reflections"])
 app.include_router(ollama_router,      prefix="/api/ollama",      tags=["ollama"])
 app.include_router(groq_router,        prefix="/api/groq",        tags=["groq"])
+app.include_router(gemini_router,      prefix="/api/gemini",      tags=["gemini"])
 app.include_router(orgs_router,        prefix="/api/orgs",        tags=["orgs"])
 app.include_router(admin_router,       prefix="/api/admin",       tags=["admin"])
 app.include_router(bioregions_router,  prefix="/api/bioregions",  tags=["bioregions"])

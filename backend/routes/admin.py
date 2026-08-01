@@ -44,7 +44,6 @@ import json
 import secrets
 import asyncio
 import logging
-import httpx
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -55,6 +54,7 @@ from jose import jwt, JWTError
 from pydantic import BaseModel
 
 from db import get_db
+import ai_client
 from sqlalchemy.exc import IntegrityError
 from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft, Learner, LearnerAdminMessage, TaskCompletion, VerifiedSkill, OpportunityMatch, Skill
 from routes.weekly_report import main as weekly_report_main
@@ -75,9 +75,6 @@ JWT_SECRET       = os.getenv("JWT_SECRET", "change-this-in-production-please")
 JWT_ALG          = "HS256"
 ADMIN_SESSION_EXP_MIN = 8 * 60   # 8 hours — admin re-logs-in after this, no refresh token (single trusted operator, not worth the complexity)
 SCAVENGER_ORG_ID = 18   # organizations.id for 'freqlearn-scavenger'
-GROQ_API_KEY     = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL       = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
-GROQ_URL         = "https://api.groq.com/openai/v1/chat/completions"
 
 # Valid art slugs for the platform
 VALID_ARTS = [
@@ -229,70 +226,27 @@ For each listing return a JSON object with these exact keys:
 
 Return ONLY a JSON array of {count} objects. No preamble, no markdown, no explanation."""
 
-    if not GROQ_API_KEY:
-        raise HTTPException(503, "GROQ_API_KEY not configured — add it to .env")
-
-    headers = {
-        "Authorization": f"Bearer {GROQ_API_KEY}",
-        "Content-Type":  "application/json",
-    }
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": [
-            {
-                "role": "system",
-                "content": (
-                    "You are a scout for Surfing the Frequencies, a free lifelong learning platform. "
-                    "You always respond with valid JSON only. No preamble, no markdown, no explanation."
-                )
-            },
-            {"role": "user", "content": prompt}
-        ],
-        "temperature": 0.8,
-        "max_tokens":  2000,
-    }
+    system_prompt = (
+        "You are a scout for Surfing the Frequencies, a free lifelong learning platform. "
+        "You always respond with valid JSON only. No preamble, no markdown, no explanation."
+    )
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(GROQ_URL, headers=headers, json=payload)
-            response.raise_for_status()
-    except httpx.ConnectError:
-        logger.error("Scavenger: cannot reach Groq API")
-        raise HTTPException(502, "Cannot reach Groq API")
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Scavenger Groq HTTP error: {e.response.status_code}")
-        if e.response.status_code == 401:
-            raise HTTPException(502, "Invalid GROQ_API_KEY")
-        if e.response.status_code == 429:
-            raise HTTPException(429, "Groq rate limit — try again in a minute")
-        raise HTTPException(502, f"Groq API error: {e.response.status_code}")
-    except Exception as e:
-        logger.error(f"Scavenger Groq call failed: {e}")
-        raise HTTPException(502, f"AI call failed: {str(e)}")
+        ai_resp = await ai_client.ai_complete(
+            "scavenger",
+            db=db,
+            system_msg=system_prompt,
+            prompt=prompt,
+            tier="small",
+            response_format="json_array",
+            max_tokens=2000,
+            temperature=0.8,
+        )
+    except HTTPException as e:
+        logger.error(f"Scavenger AI call failed: {e.detail}")
+        raise
 
-    data = response.json()
-    raw  = data["choices"][0]["message"]["content"].strip()
-
-    # Strip markdown fences if present
-    if raw.startswith("```"):
-        raw = raw.split("\n", 1)[-1]
-        raw = raw.rsplit("```", 1)[0]
-    raw = raw.strip()
-
-    # Extract JSON array if wrapped in object
-    start = raw.find("[")
-    end   = raw.rfind("]") + 1
-    if start != -1 and end > start:
-        raw = raw[start:end]
-
-    try:
-        listings_data = json.loads(raw)
-    except json.JSONDecodeError as e:
-        logger.error(f"Scavenger JSON parse failed: {e}\nRaw: {raw[:500]}")
-        raise HTTPException(502, "AI returned malformed JSON — try again")
-
-    if not isinstance(listings_data, list):
-        raise HTTPException(502, "AI returned unexpected format")
+    listings_data = ai_resp.content
 
     inserted = []
     for item in listings_data:

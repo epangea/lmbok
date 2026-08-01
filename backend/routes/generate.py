@@ -1,18 +1,25 @@
 # ============================================================
 # FreqLearn — routes/generate.py
-# AI-powered session content generation
-# Provider priority: Groq (free) → Ollama (local) → HTTPException
-# Every generated session is stored in the DB before serving.
+# AI-powered session content generation.
+#
+# P41 (2026-07-29): all actual AI calls now go through ai_client.ai_complete(),
+# which reads the admin-configured provider/model from platform_settings and
+# handles Groq<->Ollama fallback + circuit breaking itself. This file used to
+# have its own duplicate settings-loader, its own duplicate CircuitBreaker
+# class, and four more inline hardcoded-model Groq calls further down (the
+# Socratic companions, learner-profile scaffolding, guiding star) -- all of
+# that AI-calling machinery has moved into ai_client.py. See its module
+# docstring for the full story. What stays here is app-specific: session
+# persistence, the stored-session library reuse path, and the request/
+# response shapes for each endpoint.
 # ============================================================
 
-import os
 import json
 import random
-import time
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text as sql_text
+from sqlalchemy import select
 from pydantic import BaseModel
 from db import get_db
 # FIX: ArtsSkills added here — it was missing from this import,
@@ -20,145 +27,9 @@ from db import get_db
 from models import Session, Arts, DevPhase, Skill, Learner, Lecko, ArtsSkills
 from routes.auth import get_current_learner
 from prior_session_context import get_prior_session_context
-
-# Default values for the AI platform settings.
-# If the platform_settings table is empty (fresh DB, migration not run),
-# we fall back to these so the route still works.
-#
-# 2026-07-15: added ai_inline_reuse_enabled (default "false"),
-# ai_library_failure_threshold, and ai_library_mode_ttl. These back out the
-# 2026-06-27 regression where the old "serve a stored session if >=3 exist"
-# inline-reuse branch (below) was silently shadowing the AI-first path for
-# every art that already had a handful of stored sessions -- see BRIEFING
-# 2026-07-09. AI is now tried first unconditionally; inline reuse only runs
-# if an admin explicitly re-enables it via ai_inline_reuse_enabled=true.
-_AI_SETTINGS_DEFAULTS = {
-    "ai_circuit_breaker_enabled":    "true",
-    "ai_include_prior_context":      "true",
-    "ai_library_recall_limit":       "200",
-    "ai_inline_reuse_enabled":       "false",
-    "ai_library_failure_threshold":  "3",
-    "ai_library_mode_ttl":           "600",
-}
-
-_AI_SETTINGS_KEYS = tuple(_AI_SETTINGS_DEFAULTS.keys())
-
-
-async def _load_ai_settings(db: AsyncSession) -> dict[str, str]:
-    """Read the AI platform settings from the DB. Read on every /session call
-    so admin can flip the flags without a process restart. Falls back to
-    _AI_SETTINGS_DEFAULTS for any missing key (covers pre-migration DBs).
-    """
-    try:
-        placeholders = ", ".join(f"'{k}'" for k in _AI_SETTINGS_KEYS)
-        rows = await db.execute(
-            sql_text(
-                f"SELECT key_name, value FROM platform_settings "
-                f"WHERE key_name IN ({placeholders})"
-            )
-        )
-        out = dict(_AI_SETTINGS_DEFAULTS)
-        for k, v in rows.all():
-            if v is not None:
-                out[k] = str(v)
-        return out
-    except Exception:
-        # If platform_settings doesn't exist (pre-migration), return defaults.
-        return dict(_AI_SETTINGS_DEFAULTS)
-
-
-def _bool_setting(ai_settings: dict[str, str], key: str) -> bool:
-    return ai_settings.get(key, _AI_SETTINGS_DEFAULTS[key]).strip().lower() in ("true", "1", "yes", "on")
-
-
-def _int_setting(ai_settings: dict[str, str], key: str) -> int:
-    try:
-        return int(ai_settings.get(key, _AI_SETTINGS_DEFAULTS[key]))
-    except (TypeError, ValueError):
-        return int(_AI_SETTINGS_DEFAULTS[key])
+import ai_client
 
 router = APIRouter()
-
-
-# ============================================================
-# Circuit breaker (in-process)
-# Spec (2026-06-28, reconfirmed 2026-07-01):
-#   - Track consecutive AI failures on the /session route.
-#   - < 3 consecutive failures  -> return 503 (caller sees "AI is sick").
-#   - >= 3 consecutive failures -> enter LIBRARY MODE for 10 minutes:
-#       serve from the stored session library; do not attempt AI.
-#   - After 10 minutes in library mode, reset the counter and try AI again.
-#   - A successful AI call resets the counter.
-# In-process state is intentional: a process restart clears the breaker,
-# which is the right behavior (a fresh process should retry the upstream).
-# ============================================================
-class CircuitBreaker:
-    """Tiny in-memory breaker for the /session AI chain.
-
-    2026-07-15: threshold/TTL are now configurable per-call via configure()
-    (backed by platform_settings ai_library_failure_threshold /
-    ai_library_mode_ttl) instead of being fixed class constants. Defaults
-    below match the original spec (3 failures / 10 minutes) and are used
-    whenever the settings table doesn't override them.
-    """
-
-    # Trips after this many consecutive AI failures.
-    FAILURE_THRESHOLD = 3
-    # How long library mode lasts once tripped (seconds).
-    LIBRARY_MODE_TTL = 600   # 10 minutes
-
-    def __init__(self):
-        self.consecutive_failures: int = 0
-        self.library_mode_until: float = 0.0   # epoch seconds; 0 = not in library mode
-        self.last_failure_at: float = 0.0
-        self.last_failure_reason: str = ""
-        # Runtime-configurable (see configure()); start at class defaults.
-        self.failure_threshold: int = self.FAILURE_THRESHOLD
-        self.library_mode_ttl: int = self.LIBRARY_MODE_TTL
-
-    def configure(self, failure_threshold: int, library_mode_ttl: int) -> None:
-        """Apply the latest platform_settings values. Cheap -- call every request."""
-        self.failure_threshold = max(1, failure_threshold)
-        self.library_mode_ttl = max(1, library_mode_ttl)
-
-    def is_library_mode(self) -> bool:
-        if self.library_mode_until == 0.0:
-            return False
-        if time.monotonic() >= self.library_mode_until:
-            # TTL elapsed -- exit library mode, reset counter, next call will
-            # try the AI again.
-            self.library_mode_until = 0.0
-            self.consecutive_failures = 0
-            return False
-        return True
-
-    def record_success(self) -> None:
-        self.consecutive_failures = 0
-        self.library_mode_until = 0.0
-        self.last_failure_reason = ""
-
-    def record_failure(self, reason: str) -> None:
-        self.consecutive_failures += 1
-        self.last_failure_at = time.monotonic()
-        self.last_failure_reason = reason[:200]
-        if self.consecutive_failures >= self.failure_threshold:
-            self.library_mode_until = time.monotonic() + self.library_mode_ttl
-
-    def status(self) -> dict:
-        return {
-            "consecutive_failures": self.consecutive_failures,
-            "library_mode":         self.is_library_mode(),
-            "library_mode_seconds_remaining": (
-                max(0, int(self.library_mode_until - time.monotonic()))
-                if self.library_mode_until else 0
-            ),
-            "last_failure_reason":  self.last_failure_reason,
-            "failure_threshold":    self.failure_threshold,
-            "library_mode_ttl":     self.library_mode_ttl,
-        }
-
-
-session_breaker = CircuitBreaker()
 
 
 class GenerateRequest(BaseModel):
@@ -223,12 +94,13 @@ async def generate_session(
     # `ai_include_prior_context` is true. The block lists the learner's
     # last 3 sessions for this (art, phase) so each generation builds on
     # prior work rather than repeating themes.
-    ai_settings = await _load_ai_settings(db)
-    include_prior = _bool_setting(ai_settings, "ai_include_prior_context")
-    breaker_enabled = _bool_setting(ai_settings, "ai_circuit_breaker_enabled")
+    ai_settings = await ai_client.get_ai_settings(db)
+    include_prior = ai_client.bool_setting(ai_settings, "ai_include_prior_context")
+    breaker_enabled = ai_client.bool_setting(ai_settings, "ai_circuit_breaker_enabled")
+    session_breaker = ai_client.get_breaker("session")
     session_breaker.configure(
-        failure_threshold=_int_setting(ai_settings, "ai_library_failure_threshold"),
-        library_mode_ttl=_int_setting(ai_settings, "ai_library_mode_ttl"),
+        failure_threshold=ai_client.int_setting(ai_settings, "ai_library_failure_threshold"),
+        library_mode_ttl=ai_client.int_setting(ai_settings, "ai_library_mode_ttl"),
     )
     continuity_block = ""
     if include_prior:
@@ -323,7 +195,7 @@ async def generate_session(
     # runs if an admin explicitly flips ai_inline_reuse_enabled=true in
     # Settings (e.g. to cut AI spend during a traffic spike). The circuit
     # breaker below remains the sole automatic AI→library fallback.
-    inline_reuse_enabled = _bool_setting(ai_settings, "ai_inline_reuse_enabled")
+    inline_reuse_enabled = ai_client.bool_setting(ai_settings, "ai_inline_reuse_enabled")
     if inline_reuse_enabled and not req.skill_context and len(reusable) >= 3:
         stored = random.choice(reusable[:30])  # wider random pool
 
@@ -663,50 +535,24 @@ Return ONLY a valid JSON object with exactly these keys:
 The assess_correct field is the 0-based index of the correct answer in assess_options.
 Return only the JSON. No preamble, no explanation, no markdown code blocks.{lang_instruction}"""
 
-    # ── Provider chain: Groq → Ollama → fail ────────────────
-    # Decision 2026-05-31: Anthropic removed. Groq free tier is primary.
-    # Ollama reactivates automatically if reinstalled (see MAINTENANCE.md).
-    # Circuit breaker (added 2026-07-01):
-    #   - config errors (HTTPException from Groq) are NOT counted -- they are
-    #     caller-actionable, not transient, and would mask the real problem.
-    #   - any other failure (network, timeout, parse) is counted.
-    #   - on the first 1-2 failures, we return 503 to the client (so they
-    #     know to back off and retry) and DO NOT fall through to a quiet
-    #     library serve.
-    #   - on the 3rd consecutive failure the route-level pre-check above
-    #     will engage library mode for 10 minutes.
-    try:
-        from routes.groq_generate import generate_with_groq
-        ai_t0 = time.monotonic()
-        data, ai_model = await generate_with_groq(prompt)
-        ai_latency_ms = int((time.monotonic() - ai_t0) * 1000)
-        session_breaker.record_success()
-    except HTTPException:
-        # Config error (missing key, rate-limited) -- surface directly, do
-        # not let the breaker hide it.
-        raise
-    except Exception as groq_err:
-        # Groq failed (network, timeout, parse) -- try local Ollama
-        try:
-            from routes.ollama_generate import generate_with_ollama
-            ai_t0 = time.monotonic()
-            data, ai_model = await generate_with_ollama(prompt)
-            ai_latency_ms = int((time.monotonic() - ai_t0) * 1000)
-            session_breaker.record_success()
-        except Exception as ollama_err:
-            # Both providers failed this round. Record it; the next request
-            # will see the counter and either return 503 (if still under
-            # threshold) or flip into library mode (once threshold is hit).
-            session_breaker.record_failure(
-                f"groq: {str(groq_err)[:80]} | ollama: {str(ollama_err)[:80]}"
-            )
-            raise HTTPException(
-                503,
-                f"All AI providers failed. "
-                f"Groq: {str(groq_err)[:120]}. "
-                f"Ollama: {str(ollama_err)[:120]}. "
-                f"(Consecutive failures: {session_breaker.consecutive_failures})"
-            )
+    # ── AI call ──────────────────────────────────────────────
+    # Provider (Groq/Ollama/Library), model, and fallback ordering all come
+    # from ai_client.ai_complete(), which honours the admin's ai_provider
+    # setting and its own per-purpose circuit breaker ("session"). If both
+    # providers fail here, ai_complete() raises the 503 itself and also
+    # records the failure on the same breaker instance checked above.
+    ai_resp = await ai_client.ai_complete(
+        "session",
+        db=db,
+        prompt=prompt,
+        tier="large",
+        response_format="json_object",
+        max_tokens=1200,
+        temperature=0.8,
+    )
+    data          = ai_resp.content
+    ai_model      = ai_resp.model
+    ai_latency_ms = ai_resp.latency_ms
 
     # ── Validate required fields ──────────────────────────────
     required = ["title","warmup","explore","challenge","reflect",
@@ -975,13 +821,14 @@ async def _serve_from_library(
 @router.get("/breaker-status")
 async def get_breaker_status():
     """Diagnostic endpoint for the /session circuit breaker state."""
-    return session_breaker.status()
+    return ai_client.get_breaker("session").status()
 
 
 @router.post("/scaffold", response_model=ScaffoldResponse)
 async def scaffold_companion(
     req: ScaffoldRequest,
     learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
 ):
     # ── Build system prompt ───────────────────────────────────
     ctx = req.context
@@ -1063,39 +910,27 @@ TONE AND STYLE:
 
 Respond only with your reply to the learner. No preamble, no meta-commentary."""
 
-    # ── Build message list for Groq ───────────────────────────
-    groq_messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    chat_messages = [{"role": m.role, "content": m.content} for m in req.messages]
 
-    # ── Call Groq directly (chat/completions) ─────────────────
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(503, "GROQ_API_KEY not configured")
-    import httpx
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "system", "content": system_prompt}] + groq_messages,
-        "max_tokens": 300,
-        "temperature": 0.75,
-    }
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json=payload,
-            )
-        resp.raise_for_status()
-        reply_text = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        raise HTTPException(503, f"Scaffold companion unavailable: {str(e)[:120]}")
+    ai_resp = await ai_client.ai_complete(
+        "companion",
+        db=db,
+        system_msg=system_prompt,
+        messages=chat_messages,
+        tier="large",
+        response_format="text",
+        max_tokens=300,
+        temperature=0.75,
+    )
 
-    return ScaffoldResponse(reply=reply_text)
+    return ScaffoldResponse(reply=ai_resp.content)
 
 
 @router.post("/assess-companion", response_model=AssessCompanionResponse)
 async def assess_companion(
     req: AssessCompanionRequest,
     learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
 ):
     ctx = req.context
     options_lines = "\n".join(
@@ -1142,29 +977,24 @@ Respond with ONLY a JSON object, no preamble, no markdown fences, no other text:
 
 Only set "resolved": true and a non-null "score_update" once you have genuinely evaluated their reasoning (through actual back-and-forth, not on the very first message) and reached a real conclusion — either that their answer holds up, that more than one answer is valid, or that the answer key's option is indeed the best one and they now understand why. Keep "score_update" null and "resolved": false while the conversation is still open."""
 
-    groq_messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    chat_messages = [{"role": m.role, "content": m.content} for m in req.messages]
 
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(503, "GROQ_API_KEY not configured")
-    import httpx
-    payload = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": [{"role": "system", "content": system_prompt}] + groq_messages,
-        "max_tokens": 400,
-        "temperature": 0.6,
-    }
-    try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json=payload,
-            )
-        resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        raise HTTPException(503, f"Assess companion unavailable: {str(e)[:120]}")
+    # response_format="text" here rather than "json_object": ai_client would
+    # otherwise raise a hard 503 on any malformed-JSON reply from either
+    # provider. This route has always preferred to fail soft -- show the
+    # model's raw reply to the learner rather than error the conversation
+    # out -- so JSON parsing happens locally, same as before.
+    ai_resp = await ai_client.ai_complete(
+        "assess_companion",
+        db=db,
+        system_msg=system_prompt,
+        messages=chat_messages,
+        tier="large",
+        response_format="text",
+        max_tokens=400,
+        temperature=0.6,
+    )
+    raw = ai_resp.content
 
     # Strip accidental markdown fences before parsing — models occasionally
     # wrap JSON in ```json ... ``` despite instructions not to.
@@ -1267,25 +1097,18 @@ RECENT THREADS: [last 2–3 topics/arts explored]
 Return ONLY the updated profile text. No preamble, no explanation."""
 
     try:
-        groq_key = os.environ.get("GROQ_API_KEY", "")
-        if not groq_key:
-            return {"status": "error", "reason": "GROQ_API_KEY not configured"}
-        import httpx
-        async with httpx.AsyncClient(timeout=30) as client:
-            presp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 600,
-                    "temperature": 0.4,
-                },
-            )
-        presp.raise_for_status()
-        new_profile = presp.json()["choices"][0]["message"]["content"].strip()
-    except Exception as e:
-        return {"status": "error", "reason": str(e)[:120]}
+        ai_resp = await ai_client.ai_complete(
+            "learner_profile",
+            db=db,
+            prompt=prompt,
+            tier="large",
+            response_format="text",
+            max_tokens=600,
+            temperature=0.4,
+        )
+        new_profile = ai_resp.content
+    except HTTPException as e:
+        return {"status": "error", "reason": str(e.detail)[:120]}
 
     # ── Save to learners table ────────────────────────────────
     # Uses raw SQL update to avoid needing the full ORM model definition here.
@@ -1317,6 +1140,7 @@ class GuidingStarResponse(BaseModel):
 async def generate_guiding_star(
     req: GuidingStarRequest,
     learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
 ):
     if not req.learner_profile or len(req.learner_profile.strip()) < 20:
         raise HTTPException(400, "learner_profile too short to distil")
@@ -1337,26 +1161,16 @@ LEARNER PROFILE:
 
 Return ONLY the guiding star phrase. Nothing else."""
 
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(503, "GROQ_API_KEY not configured")
-    import httpx
-    try:
-        async with httpx.AsyncClient(timeout=20) as client:
-            resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "user", "content": prompt}],
-                    "max_tokens": 40,
-                    "temperature": 0.7,
-                },
-            )
-        resp.raise_for_status()
-        star = resp.json()["choices"][0]["message"]["content"].strip().strip('"').strip("'").strip()
-    except Exception as e:
-        raise HTTPException(503, f"Guiding star generation failed: {str(e)[:120]}")
+    ai_resp = await ai_client.ai_complete(
+        "guiding_star",
+        db=db,
+        prompt=prompt,
+        tier="large",
+        response_format="text",
+        max_tokens=40,
+        temperature=0.7,
+    )
+    star = ai_resp.content.strip('"').strip("'").strip()
 
     return GuidingStarResponse(guiding_star=star)
 

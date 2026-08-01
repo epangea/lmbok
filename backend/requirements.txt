@@ -33,9 +33,6 @@ python-dotenv==1.0.1
 # Scheduling (spaced repetition cron jobs)
 apscheduler==3.10.4
 
-# AI challenge generation (Claude API)
-anthropic==0.28.0
-
 # Utilities
 python-slugify==8.0.4
 Pillow==10.3.0

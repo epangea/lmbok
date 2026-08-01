@@ -3,12 +3,8 @@
 # Learner-contributed bioregion profiles + AI collective portraits
 # ============================================================
 
-import json
-import os
 import math
-import re
 import logging
-import httpx
 from datetime import datetime, timezone
 from typing import List, Optional
 from collections import Counter
@@ -22,44 +18,28 @@ from db import get_db
 from routes.auth import get_current_learner
 from routes.admin import require_admin
 from models import BioregionContribution, BioregionPortrait, Learner
+import ai_client
 
 logger = logging.getLogger("freqlearn")
 router = APIRouter()
 
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-GROQ_MODEL   = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
-GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
 
-
-async def _call_groq(prompt: str, max_tokens: int = 900, temperature: float = 0.7) -> str:
-    """Call Groq via httpx. Returns the text content. Raises HTTPException on failure."""
-    if not GROQ_API_KEY:
-        raise HTTPException(status_code=503, detail="GROQ_API_KEY not configured.")
-    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-    payload = {
-        "model": GROQ_MODEL,
-        "messages": [{"role": "user", "content": prompt}],
-        "max_tokens": max_tokens,
-        "temperature": temperature,
-    }
+async def _call_ai(db: AsyncSession, purpose: str, prompt: str,
+                    response_format: str = "json_object",
+                    max_tokens: int = 900, temperature: float = 0.7) -> ai_client.AIResponse:
+    """Thin wrapper over ai_client.ai_complete() with this file's usual
+    tier — bioregion portraits use the "small"/fast model, matching the
+    original llama-3.1-8b-instant default; bump ai_model_groq_small /
+    ai_model_ollama_small in Admin > Settings if richer prose is wanted.
+    """
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(GROQ_URL, headers=headers, json=payload)
-            response.raise_for_status()
-        return response.json()["choices"][0]["message"]["content"].strip()
-    except httpx.ConnectError:
-        logger.error("Bioregions: cannot reach Groq API")
-        raise HTTPException(status_code=502, detail="Cannot reach Groq API.")
-    except httpx.HTTPStatusError as e:
-        logger.error(f"Bioregions Groq HTTP error: {e.response.status_code}")
-        if e.response.status_code == 401:
-            raise HTTPException(status_code=502, detail="Invalid GROQ_API_KEY.")
-        if e.response.status_code == 429:
-            raise HTTPException(status_code=429, detail="Groq rate limit — try again in a minute.")
-        raise HTTPException(status_code=502, detail=f"Groq API error: {e.response.status_code}")
-    except Exception as e:
-        logger.error(f"Bioregions Groq call failed: {e}")
-        raise HTTPException(status_code=502, detail=f"AI call failed: {e}")
+        return await ai_client.ai_complete(
+            purpose, db=db, prompt=prompt, tier="small",
+            response_format=response_format, max_tokens=max_tokens, temperature=temperature,
+        )
+    except HTTPException as e:
+        logger.error(f"Bioregions AI call failed ({purpose}): {e.detail}")
+        raise
 
 
 # ── Auth helpers ──────────────────────────────────────────────
@@ -294,19 +274,9 @@ Return ONLY a valid JSON object — no preamble, no markdown fences. Each value 
   "material_culture": "tools, crafts, foods, medicines, or building traditions tied to local species and materials — what this place has given to human hands"
 }}"""
 
-    raw = await _call_groq(prompt, max_tokens=900, temperature=0.7)
-    # Strip markdown fences if present, then extract first JSON object
-    if raw.startswith("```"):
-        raw = re.sub(r"^```[a-z]*", "", raw).strip().rstrip("`").strip()
-    m = re.search(r"\{.*\}", raw, re.DOTALL)
-    if not m:
-        logger.error("Draft JSON parse error: no JSON object in response")
-        raise HTTPException(status_code=502, detail="AI returned an unparseable response.")
-    try:
-        draft_data = json.loads(m.group())
-    except json.JSONDecodeError as e:
-        logger.error(f"Draft JSON parse error: {e}")
-        raise HTTPException(status_code=502, detail="AI returned an unparseable response.")
+    ai_resp = await _call_ai(db, "bioregion_draft", prompt, response_format="json_object",
+                              max_tokens=900, temperature=0.7)
+    draft_data = ai_resp.content
 
     return {"draft": {
         "place_name":       body.place_name,
@@ -814,7 +784,9 @@ Write a collective portrait of "{portrait.cluster_label}" (150–250 words) that
 
 Write only the portrait itself. No title, no preamble."""
 
-    summary = await _call_groq(prompt, max_tokens=400, temperature=0.75)
+    ai_resp = await _call_ai(db, "bioregion_synthesis", prompt, response_format="text",
+                              max_tokens=400, temperature=0.75)
+    summary = ai_resp.content
 
     new_version = old_version + 1
     portrait.summary = summary

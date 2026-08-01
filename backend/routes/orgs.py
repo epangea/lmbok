@@ -45,6 +45,7 @@ import bcrypt
 import jwt
 
 from db import get_db
+import ai_client
 from models import (
     Organization, OpportunityListing, OpportunityMatch, Learner, Message,
     TaskCompletion, VerifiedSkill, Skill, Session,
@@ -562,10 +563,6 @@ async def parse_listing_needs(
     skills = (await db.execute(select(Skill).where(Skill.is_active == True))).scalars().all()
     vocab = "\n".join(f"- {s.slug}: {s.name}" + (f" ({s.subcategory})" if s.subcategory else "") for s in skills)
 
-    groq_key = os.environ.get("GROQ_API_KEY", "")
-    if not groq_key:
-        raise HTTPException(503, "GROQ_API_KEY not configured")
-
     system_prompt = f"""You are matching an organization's stated needs to a fixed catalog of learner skills for "Surfing the Frequencies", a free lifelong learning platform.
 
 CLOSED VOCABULARY — you may ONLY use skill slugs from this list, never invent new ones:
@@ -583,39 +580,23 @@ Respond with ONLY a JSON object, no preamble, no markdown fences, in this exact 
 {{"needs_skill_targets": [{{"slug": "skill-slug", "min_level": 1}}, ...], "needs_tasks": ["task description", ...]}}
 Include at most 6 skills — the ones most central to the need, not every tangential match. Include at most 5 tasks."""
 
-    import httpx, json as _json
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post(
-                "https://api.groq.com/openai/v1/chat/completions",
-                headers={"Authorization": f"Bearer {groq_key}", "Content-Type": "application/json"},
-                json={
-                    "model": "llama-3.3-70b-versatile",
-                    "messages": [{"role": "system", "content": system_prompt}],
-                    "max_tokens": 700,
-                    "temperature": 0.2,
-                    "response_format": {"type": "json_object"},  # forces Groq to emit strictly valid JSON rather than trusting free-form text-stripping
-                },
-            )
-        resp.raise_for_status()
-        raw = resp.json()["choices"][0]["message"]["content"].strip()
-        raw = raw.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        # Defensive: even in JSON mode, models occasionally wrap the object in
-        # a stray sentence — grab the outermost {...} span before parsing.
-        brace_start, brace_end = raw.find("{"), raw.rfind("}")
-        if brace_start != -1 and brace_end > brace_start:
-            raw = raw[brace_start:brace_end + 1]
-        try:
-            parsed = _json.loads(raw)
-        except _json.JSONDecodeError as je:
-            # Log the actual raw text so a future failure is debuggable from
-            # /var/log/freqlearn/api-error.log without needing a manual curl
-            # (same pattern as admin.py's Scavenger JSON-parse-failure log).
-            logger.error(f"parse-needs JSON parse failed: {je}\nRaw: {raw[:500]}")
-            raise
-    except Exception as e:
-        raise HTTPException(503, f"Needs-parsing unavailable: {str(e)[:120]}")
+        ai_resp = await ai_client.ai_complete(
+            "needs_parsing",
+            db=db,
+            system_msg=system_prompt,
+            tier="large",
+            response_format="json_object",
+            max_tokens=700,
+            temperature=0.2,
+        )
+    except HTTPException as e:
+        # Log the actual failure so it's debuggable from
+        # /var/log/freqlearn/api-error.log without needing a manual curl.
+        logger.error(f"parse-needs unavailable: {e.detail}")
+        raise HTTPException(503, f"Needs-parsing unavailable: {str(e.detail)[:150]}")
 
+    parsed = ai_resp.content
     if not isinstance(parsed, dict):
         parsed = {}
 

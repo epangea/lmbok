@@ -1,20 +1,53 @@
 # ============================================================
 # FreqLearn — ai_client.py
-# Provider-agnostic AI client abstraction.
+# THE single AI-calling module for the entire codebase.
 #
-# Design (per PART 20 — 2026-06-28):
-#   - AI is the source of truth for session generation
-#   - DB sessions are a fallback library, not the default
-#   - Library fallback filters on (art_id, primary_skill_id, dev_phase_id, language)
-#     and excludes sessions the learner has already experienced
-#   - Library recall respects the "ai_library_recall_limit" platform setting
-#     when scanning the learner's history for deduplication
-#   - No token counts, no costs, no financial metrics logged (per project philosophy)
+# Rewritten 2026-07-29 (P41). Before this, six different files each had
+# their own copy-pasted "call Groq via httpx, parse JSON defensively"
+# block, with model names hardcoded or scattered across env vars with
+# silently different fallback defaults (llama-3.1-8b-instant in three
+# places, llama-3.3-70b-versatile in four others) -- and NONE of them
+# actually consulted platform_settings.ai_provider. The admin "AI
+# provider" dropdown existed and looked functional but did nothing:
+# every route called Groq directly regardless of what was selected.
 #
-# Provider chain is configurable via platform_settings.ai_provider:
-#   - 'groq'      → GroqAIClient (primary, free tier)
-#   - 'ollama'    → OllamaAIClient (local, zero cost)
-#   - 'library'   → LibraryAIClient (no AI, only DB) — used for tests/fallback-only mode
+# Gemini added 2026-07-29 (same day, follow-up) as a third free provider
+# -- Charbel's server is currently too small to run Ollama locally, so a
+# second independent cloud provider is the practical redundancy for now.
+# Uses Google's OpenAI-compatible endpoint, so it reuses the same request/
+# response shape as Groq rather than needing a separate native-API client.
+#
+# Every AI call in the codebase now goes through ai_complete() below.
+# There is no other way to call an LLM in this project.
+#
+# What's admin-configurable (platform_settings, no restart needed):
+#   ai_provider              -- 'groq' | 'ollama' | 'gemini' | 'library'
+#   ai_model_groq_large      -- Groq model for content-quality calls
+#   ai_model_groq_small      -- Groq model for lightweight/classification calls
+#   ai_model_ollama_large    -- same split for Ollama
+#   ai_model_ollama_small
+#   ai_model_gemini_large    -- same split for Gemini
+#   ai_model_gemini_small
+#   ai_circuit_breaker_enabled / ai_library_failure_threshold / ai_library_mode_ttl
+# What's still env-var (infra, not model/engine selection):
+#   GROQ_API_KEY, OLLAMA_URL, GEMINI_API_KEY -- secrets and network
+#   endpoints, not provider or model choice, so these stay out of the
+#   admin UI.
+#
+# 'library' as ai_provider means "no live AI, ever" -- ai_complete()
+# raises a clear 503 immediately rather than trying to reach any provider.
+# This is deliberate: an admin who has selected Library-only means it.
+# Only the /session route has an actual content library to fall back to
+# (see routes/generate.py's own _serve_from_library) -- that is
+# app-specific business logic (it persists real Session rows), not
+# something this generic module owns.
+#
+# Every call site gets automatic fallback across the other free providers
+# (if the selected one fails, the others are tried in turn) and a
+# per-purpose circuit breaker (repeated failures for one feature,
+# e.g. Scavenger, don't have to keep re-timing-out on every request --
+# see CircuitBreaker below). This is strictly more resilient than the
+# old per-file code, most of which had zero fallback and zero breaker.
 # ============================================================
 
 from __future__ import annotations
@@ -22,326 +55,477 @@ from __future__ import annotations
 import json
 import os
 import time
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+# ── Infra config (env vars -- secrets/endpoints, not model selection) ──
+
+GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
+GROQ_URL       = "https://api.groq.com/openai/v1/chat/completions"
+OLLAMA_URL     = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+# Google's OpenAI-compatible endpoint -- same request/response shape as
+# Groq's, so _call_gemini() below is nearly identical to _call_groq().
+GEMINI_URL     = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+
+ALL_PROVIDERS = ("groq", "ollama", "gemini")
+
+
+# ── Admin-configurable settings (platform_settings table) ──────
+
+# These defaults only apply if a row is genuinely missing from the DB
+# (fresh install, migration not yet run) -- they are an emergency
+# fallback, not a place model names are meant to live long-term. The
+# real, current values always come from platform_settings, editable
+# in Admin > Settings > AI generation with no restart required.
+_AI_DEFAULTS: dict[str, str] = {
+    "ai_provider":                  "groq",
+    "ai_model_groq_large":          "openai/gpt-oss-120b",
+    "ai_model_groq_small":          "openai/gpt-oss-20b",
+    "ai_model_ollama_large":        "llama3.1:8b",
+    "ai_model_ollama_small":        "llama3.1:8b",
+    "ai_model_gemini_large":        "gemini-2.5-flash",
+    "ai_model_gemini_small":        "gemini-2.5-flash-lite",
+    "ai_circuit_breaker_enabled":   "true",
+    "ai_include_prior_context":     "true",
+    "ai_library_recall_limit":      "200",
+    "ai_inline_reuse_enabled":      "false",
+    "ai_library_failure_threshold": "3",
+    "ai_library_mode_ttl":          "600",
+}
+
+
+async def get_ai_settings(db: AsyncSession) -> dict[str, str]:
+    """The one place every route reads AI settings from. Reads fresh on
+    every call (cheap, single indexed query) so an admin's change in
+    Settings takes effect on the very next request, no restart.
+    """
+    try:
+        placeholders = ", ".join(f"'{k}'" for k in _AI_DEFAULTS)
+        rows = await db.execute(
+            text(f"SELECT key_name, value FROM platform_settings WHERE key_name IN ({placeholders})")
+        )
+        out = dict(_AI_DEFAULTS)
+        for k, v in rows.all():
+            if v is not None and str(v).strip() != "":
+                out[k] = str(v)
+        return out
+    except Exception:
+        # platform_settings missing entirely (pre-migration DB) -- defaults.
+        return dict(_AI_DEFAULTS)
+
+
+def bool_setting(settings: dict[str, str], key: str) -> bool:
+    return settings.get(key, _AI_DEFAULTS[key]).strip().lower() in ("true", "1", "yes", "on")
+
+
+def int_setting(settings: dict[str, str], key: str) -> int:
+    try:
+        return int(settings.get(key, _AI_DEFAULTS[key]))
+    except (TypeError, ValueError):
+        return int(_AI_DEFAULTS[key])
+
+
+# ── Circuit breaker, one instance per "purpose" ─────────────────
+# Spec (originally 2026-06-28 for /session only, generalised here 2026-07-29):
+#   - < N consecutive failures for this purpose  -> raise 503, caller retries.
+#   - >= N consecutive failures                  -> "library mode" for T seconds:
+#     ai_complete() fails fast (no network call) until the window elapses.
+#   - A successful call resets the counter immediately.
+# In-memory, per-process, per-purpose. Resets on restart -- intentional,
+# a fresh process should always retry the upstream once.
+class CircuitBreaker:
+    def __init__(self):
+        self.consecutive_failures: int = 0
+        self.library_mode_until: float = 0.0
+        self.last_failure_reason: str = ""
+        self.failure_threshold: int = 3
+        self.library_mode_ttl: int = 600
+
+    def configure(self, failure_threshold: int, library_mode_ttl: int) -> None:
+        self.failure_threshold = max(1, failure_threshold)
+        self.library_mode_ttl = max(1, library_mode_ttl)
+
+    def is_library_mode(self) -> bool:
+        if self.library_mode_until == 0.0:
+            return False
+        if time.monotonic() >= self.library_mode_until:
+            self.library_mode_until = 0.0
+            self.consecutive_failures = 0
+            return False
+        return True
+
+    def seconds_remaining(self) -> int:
+        return max(0, int(self.library_mode_until - time.monotonic())) if self.library_mode_until else 0
+
+    def record_success(self) -> None:
+        self.consecutive_failures = 0
+        self.library_mode_until = 0.0
+        self.last_failure_reason = ""
+
+    def record_failure(self, reason: str) -> None:
+        self.consecutive_failures += 1
+        self.last_failure_reason = reason[:200]
+        if self.consecutive_failures >= self.failure_threshold:
+            self.library_mode_until = time.monotonic() + self.library_mode_ttl
+
+    def status(self) -> dict:
+        return {
+            "consecutive_failures":            self.consecutive_failures,
+            "library_mode":                    self.is_library_mode(),
+            "library_mode_seconds_remaining":  self.seconds_remaining(),
+            "last_failure_reason":             self.last_failure_reason,
+            "failure_threshold":               self.failure_threshold,
+            "library_mode_ttl":                self.library_mode_ttl,
+        }
+
+
+_breakers: dict[str, CircuitBreaker] = {}
+
+
+def get_breaker(purpose: str) -> CircuitBreaker:
+    if purpose not in _breakers:
+        _breakers[purpose] = CircuitBreaker()
+    return _breakers[purpose]
+
+
+def all_breaker_status() -> dict:
+    """For a diagnostic endpoint -- breaker state across every purpose."""
+    return {p: b.status() for p, b in _breakers.items()}
+
+
+# ── Low-level provider calls ────────────────────────────────────
+# Both take a provider-agnostic OpenAI-style messages list and return
+# (raw_text, latency_ms). They raise plain RuntimeError on failure --
+# ai_complete() is what turns that into an HTTPException, once it knows
+# whether a fallback provider is still worth trying.
+
+async def _call_groq(model: str, messages: list[dict], max_tokens: int,
+                      temperature: float, response_format: str) -> tuple[str, int]:
+    if not GROQ_API_KEY:
+        raise RuntimeError("GROQ_API_KEY not configured")
+
+    payload: dict[str, Any] = {
+        "model":       model,
+        "messages":    messages,
+        "max_tokens":  max_tokens,
+        "temperature": temperature,
+    }
+    if response_format == "json_object":
+        # Groq's strict JSON mode -- only valid when the model is asked for
+        # a single JSON *object*. Never set this for json_array responses;
+        # Groq rejects/misbehaves on array-shaped output in this mode.
+        payload["response_format"] = {"type": "json_object"}
+
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    t0 = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(GROQ_URL, headers=headers, json=payload)
+            resp.raise_for_status()
+    except httpx.ConnectError:
+        raise RuntimeError("Cannot reach Groq API")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise RuntimeError("Invalid GROQ_API_KEY")
+        if e.response.status_code == 429:
+            raise RuntimeError("Groq rate limit reached")
+        if e.response.status_code == 400 and "decommission" in e.response.text.lower():
+            raise RuntimeError(
+                f"Groq model '{model}' has been decommissioned -- "
+                f"update it in Admin > Settings > AI generation"
+            )
+        raise RuntimeError(f"Groq API error: {e.response.status_code}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+
+    content = resp.json()["choices"][0]["message"]["content"].strip()
+    return content, latency_ms
+
+
+async def _call_ollama(model: str, messages: list[dict], max_tokens: int,
+                        temperature: float, response_format: str) -> tuple[str, int]:
+    payload: dict[str, Any] = {
+        "model":    model,
+        "messages": messages,
+        "stream":   False,
+        "options":  {"temperature": temperature, "num_predict": max_tokens},
+    }
+    if response_format in ("json_object", "json_array"):
+        # Ollama's format:"json" just enforces valid JSON generally (object
+        # or array both qualify) -- unlike Groq it doesn't need a separate
+        # array-safe mode.
+        payload["format"] = "json"
+
+    t0 = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            resp = await client.post(f"{OLLAMA_URL}/api/chat", json=payload)
+            resp.raise_for_status()
+    except httpx.ConnectError:
+        raise RuntimeError("Local Ollama not available")
+    except httpx.TimeoutException:
+        raise RuntimeError("Local Ollama timed out")
+    except httpx.HTTPStatusError as e:
+        raise RuntimeError(f"Ollama API error: {e.response.status_code}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+
+    content = resp.json().get("message", {}).get("content", "").strip()
+    return content, latency_ms
+
+
+async def _call_gemini(model: str, messages: list[dict], max_tokens: int,
+                        temperature: float, response_format: str) -> tuple[str, int]:
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY not configured")
+
+    payload: dict[str, Any] = {
+        "model":       model,
+        "messages":    messages,
+        "max_tokens":  max_tokens,
+        "temperature": temperature,
+    }
+    if response_format == "json_object":
+        # Google's compatibility layer advertises support for this, mirroring
+        # OpenAI/Groq's strict-JSON mode. Not yet exercised against a live
+        # key as of 2026-07-29 -- if it turns out unsupported/flaky, this
+        # will show up as a Gemini-specific failure in the fallback chain's
+        # error log, not a hard crash, since ai_complete() tries the next
+        # provider either way.
+        payload["response_format"] = {"type": "json_object"}
+
+    headers = {"Authorization": f"Bearer {GEMINI_API_KEY}", "Content-Type": "application/json"}
+    t0 = time.monotonic()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(GEMINI_URL, headers=headers, json=payload)
+            resp.raise_for_status()
+    except httpx.ConnectError:
+        raise RuntimeError("Cannot reach Gemini API")
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 401:
+            raise RuntimeError("Invalid GEMINI_API_KEY")
+        if e.response.status_code == 429:
+            raise RuntimeError("Gemini rate limit reached")
+        if e.response.status_code == 400 and "not found" in e.response.text.lower():
+            raise RuntimeError(
+                f"Gemini model '{model}' not found -- "
+                f"update it in Admin > Settings > AI generation"
+            )
+        raise RuntimeError(f"Gemini API error: {e.response.status_code}")
+    latency_ms = int((time.monotonic() - t0) * 1000)
+
+    content = resp.json()["choices"][0]["message"]["content"].strip()
+    return content, latency_ms
+
+
+_CALLERS = {"groq": _call_groq, "ollama": _call_ollama, "gemini": _call_gemini}
+
+
+# ── Response parsing ─────────────────────────────────────────────
+
+def _parse(raw: str, response_format: str) -> Any:
+    if response_format == "text":
+        return raw.strip()
+
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.strip("`")
+        if cleaned.lower().startswith("json"):
+            cleaned = cleaned[4:]
+        cleaned = cleaned.strip()
+
+    open_ch, close_ch = ("[", "]") if response_format == "json_array" else ("{", "}")
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        start = cleaned.find(open_ch)
+        end = cleaned.rfind(close_ch) + 1
+        if start != -1 and end > start:
+            parsed = json.loads(cleaned[start:end])
+        else:
+            raise RuntimeError(f"AI returned invalid JSON: {cleaned[:200]}")
+
+    expected_type = list if response_format == "json_array" else dict
+    if not isinstance(parsed, expected_type):
+        raise RuntimeError(f"AI returned JSON of unexpected shape (expected {expected_type.__name__})")
+    return parsed
+
+
+# ── The one entry point every route uses ────────────────────────
+
 @dataclass
 class AIResponse:
-    """Standardised result from any AIClient.complete_json call."""
-    content: dict                        # parsed JSON the AI returned
-    model: str                           # which model answered, or 'library'
-    latency_ms: int                      # wall-clock time in ms (0 for library)
-    served_from_cache: bool = False      # True if LibraryAIClient served this
+    content:    Any    # dict (json_object) | list (json_array) | str (text)
+    model:      str    # which model answered, e.g. "openai/gpt-oss-120b" or "ollama:llama3.1:8b"
+    latency_ms: int
 
 
-class AIClient(ABC):
-    """Abstract base — every provider implements complete_json()."""
+async def ai_complete(
+    purpose: str,
+    *,
+    db: AsyncSession,
+    system_msg: str = "",
+    prompt: Optional[str] = None,
+    messages: Optional[list[dict]] = None,
+    tier: str = "large",
+    response_format: str = "json_object",   # "json_object" | "json_array" | "text"
+    max_tokens: int = 1200,
+    temperature: float = 0.8,
+) -> AIResponse:
+    """Call whichever AI provider the admin has configured, with automatic
+    fallback to the other free provider and a per-purpose circuit breaker.
 
-    @abstractmethod
-    async def complete_json(
-        self,
-        prompt: str,
-        system_msg: str,
-        *,
-        db: Optional[AsyncSession] = None,
-        learner_id: Optional[int] = None,
-        art_id: Optional[int] = None,
-        primary_skill_id: Optional[int] = None,
-        dev_phase_id: Optional[int] = None,
-        language: Optional[str] = None,
-    ) -> AIResponse:
-        """Call the AI, return parsed JSON + metadata. Raise HTTPException on failure."""
-        raise NotImplementedError
-
-
-# ── Groq ─────────────────────────────────────────────────────
-
-GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL   = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_URL     = "https://api.groq.com/openai/v1/chat/completions"
-
-
-class GroqAIClient(AIClient):
-    """Free-tier Groq API (OpenAI-compatible chat completions)."""
-
-    async def complete_json(
-        self,
-        prompt: str,
-        system_msg: str,
-        *,
-        db: Optional[AsyncSession] = None,
-        learner_id: Optional[int] = None,
-        art_id: Optional[int] = None,
-        primary_skill_id: Optional[int] = None,
-        dev_phase_id: Optional[int] = None,
-        language: Optional[str] = None,
-    ) -> AIResponse:
-        if not GROQ_API_KEY:
-            raise HTTPException(503, "GROQ_API_KEY not configured")
-
-        payload = {
-            "model": GROQ_MODEL,
-            "messages": [
-                {"role": "system", "content": system_msg},
-                {"role": "user",   "content": prompt},
-            ],
-            "temperature":     0.8,
-            "max_tokens":      1200,
-            "response_format": {"type": "json_object"},
-        }
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type":  "application/json",
-        }
-
-        t0 = time.monotonic()
-        try:
-            async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(GROQ_URL, headers=headers, json=payload)
-                resp.raise_for_status()
-        except httpx.ConnectError:
-            raise HTTPException(503, "Cannot reach Groq API")
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 401:
-                raise HTTPException(401, "Invalid Groq API key")
-            if e.response.status_code == 429:
-                raise HTTPException(429, "Groq rate limit reached")
-            raise HTTPException(500, f"Groq API error: {e.response.status_code}")
-        latency_ms = int((time.monotonic() - t0) * 1000)
-
-        data    = resp.json()
-        content = data["choices"][0]["message"]["content"].strip()
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError:
-            # Try to extract JSON from surrounding text
-            start = content.find("{")
-            end   = content.rfind("}") + 1
-            if start != -1 and end > start:
-                parsed = json.loads(content[start:end])
-            else:
-                raise HTTPException(500, f"Groq returned invalid JSON: {content[:200]}")
-
-        return AIResponse(content=parsed, model=GROQ_MODEL, latency_ms=latency_ms)
-
-
-# ── Ollama ───────────────────────────────────────────────────
-
-OLLAMA_URL   = os.getenv("OLLAMA_URL",   "http://127.0.0.1:11434")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
-
-
-class OllamaAIClient(AIClient):
-    """Local Ollama instance — zero cost, no external dependency."""
-
-    async def complete_json(
-        self,
-        prompt: str,
-        system_msg: str,
-        **kwargs,
-    ) -> AIResponse:
-        url = f"{OLLAMA_URL}/api/generate"
-        full_prompt = f"{system_msg}\n\n{prompt}"
-
-        t0 = time.monotonic()
-        try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
-                resp = await client.post(url, json={
-                    "model":  OLLAMA_MODEL,
-                    "prompt": full_prompt,
-                    "stream": False,
-                    "format": "json",
-                    "options": {
-                        "temperature": 0.8,
-                        "top_p":       0.9,
-                        "num_predict": 1200,
-                    },
-                })
-                resp.raise_for_status()
-        except httpx.ConnectError:
-            raise HTTPException(503, "Local Ollama not available")
-        except httpx.TimeoutException:
-            raise HTTPException(504, "Local Ollama timed out")
-        latency_ms = int((time.monotonic() - t0) * 1000)
-
-        raw = resp.json().get("response", "").strip()
-        if raw.startswith("```"):
-            raw = raw.split("```")[1]
-            if raw.startswith("json"):
-                raw = raw[4:]
-            raw = raw.strip()
-        try:
-            parsed = json.loads(raw)
-        except json.JSONDecodeError:
-            start = raw.find("{")
-            end   = raw.rfind("}") + 1
-            if start != -1 and end > start:
-                parsed = json.loads(raw[start:end])
-            else:
-                raise HTTPException(500, f"Ollama returned invalid JSON: {raw[:200]}")
-
-        return AIResponse(content=parsed, model=f"ollama:{OLLAMA_MODEL}", latency_ms=latency_ms)
-
-
-# ── Library (DB cache fallback) ─────────────────────────────
-
-class LibraryAIClient(AIClient):
-    """Serves a session from the local DB based on the same filters
-    the original AI generation used: art, primary skill, dev phase,
-    language, and excluding sessions the learner has already seen.
+    purpose: a short stable label ("session", "companion", "assess_companion",
+        "guiding_star", "learner_profile", "needs_parsing", "bioregion_draft",
+        "bioregion_synthesis", "scavenger", ...) -- each gets its own breaker
+        so one feature misbehaving doesn't fail-fast unrelated features.
+    tier: "large" (default) for content generation/quality-sensitive calls,
+        "small" for lightweight/classification calls -- maps to
+        ai_model_{provider}_{tier} in platform_settings.
     """
-
-    def __init__(self, recall_limit: int = 200):
-        self.recall_limit = recall_limit
-
-    async def complete_json(
-        self,
-        prompt: str,
-        system_msg: str,
-        *,
-        db: AsyncSession,
-        learner_id: int,
-        art_id: int,
-        primary_skill_id: Optional[int] = None,
-        dev_phase_id: Optional[int] = None,
-        language: Optional[str] = None,
-        **kwargs,
-    ) -> AIResponse:
-        from models import Session  # local import to avoid circular
-
-        # Build the dedup set: warmup_prompts the learner has seen
-        # in their last `recall_limit` sessions for this art.
-        seen_q = await db.execute(
-            select(Session.warmup_prompt)
-            .where(Session.learner_id == learner_id, Session.art_id == art_id)
-            .order_by(Session.created_at.desc())
-            .limit(self.recall_limit)
-        )
-        recently_seen = {row[0] for row in seen_q.all() if row[0]}
-
-        # Query the library for matching sessions
-        lib_q = select(Session).where(
-            Session.art_id == art_id,
-            Session.warmup_prompt != None,
-        )
-        if primary_skill_id is not None:
-            lib_q = lib_q.where(Session.primary_skill_id == primary_skill_id)
-        if dev_phase_id is not None:
-            lib_q = lib_q.where(Session.dev_phase_id.in_([dev_phase_id, None]))
-        if language is not None:
-            lib_q = lib_q.where((Session.language == language) | (Session.language == None))
-
-        lib_q = lib_q.order_by(Session.created_at.desc()).limit(50)
-        result = await db.execute(lib_q)
-        candidates = result.scalars().all()
-
-        # Filter to ones the learner hasn't seen
-        unseen = [s for s in candidates if s.warmup_prompt not in recently_seen]
-        if not unseen:
-            # No fresh content available — caller will turn this into a 503
-            raise HTTPException(
-                503,
-                "AI assistant currently unavailable - try again later. "
-                "No matching library session for this learner either."
-            )
-
-        import random
-        chosen = random.choice(unseen)
-
-        content = {
-            "title":            chosen.title,
-            "warmup":           chosen.warmup_prompt,
-            "explore":          chosen.explore_content,
-            "challenge":        chosen.challenge_prompt,
-            "reflect":          chosen.reflect_prompt,
-            "assess_question":  chosen.assess_question.get("question") if chosen.assess_question else "",
-            "assess_options":   chosen.assess_question.get("options", []) if chosen.assess_question else [],
-            "assess_correct":   chosen.assess_question.get("correct_index") if chosen.assess_question else 0,
-        }
-        return AIResponse(
-            content=content,
-            model="library",
-            latency_ms=0,
-            served_from_cache=True,
-        )
-
-
-# ── Factory ─────────────────────────────────────────────────
-
-async def get_primary_ai_client(db: AsyncSession) -> AIClient:
-    """Read platform_settings.ai_provider and return the matching client.
-    Falls back to Groq if the setting is missing or unrecognised.
-    """
-    from sqlalchemy import text
-    try:
-        row = (await db.execute(
-            text("SELECT value FROM platform_settings WHERE key_name = 'ai_provider'")
-        )).first()
-        provider = (row[0] if row else "groq") or "groq"
-    except Exception:
+    settings = await get_ai_settings(db)
+    provider = settings.get("ai_provider", "groq")
+    if provider not in (*ALL_PROVIDERS, "library"):
         provider = "groq"
 
-    if provider == "ollama":
-        return OllamaAIClient()
+    breaker = get_breaker(purpose)
+    breaker.configure(
+        int_setting(settings, "ai_library_failure_threshold"),
+        int_setting(settings, "ai_library_mode_ttl"),
+    )
+    breaker_enabled = bool_setting(settings, "ai_circuit_breaker_enabled")
+
     if provider == "library":
-        return LibraryAIClient()
-    # Default and explicit 'groq'
-    return GroqAIClient()
+        raise HTTPException(
+            503,
+            "AI generation is turned off (admin set the platform AI provider "
+            "to Library-only in Settings)."
+        )
+
+    if breaker_enabled and breaker.is_library_mode():
+        raise HTTPException(
+            503,
+            f"AI temporarily degraded for '{purpose}' after repeated failures -- "
+            f"retrying automatically in {breaker.seconds_remaining()}s."
+        )
+
+    msgs: list[dict] = []
+    if system_msg:
+        msgs.append({"role": "system", "content": system_msg})
+    if messages:
+        msgs.extend(messages)
+    elif prompt is not None:
+        msgs.append({"role": "user", "content": prompt})
+    if not msgs:
+        raise ValueError("ai_complete requires prompt or messages")
+
+    order = [provider] + [p for p in ALL_PROVIDERS if p != provider]
+    errors: list[str] = []
+
+    for prov in order:
+        model = settings.get(f"ai_model_{prov}_{tier}", _AI_DEFAULTS[f"ai_model_{prov}_{tier}"])
+        try:
+            raw, latency_ms = await _CALLERS[prov](model, msgs, max_tokens, temperature, response_format)
+            content = _parse(raw, response_format)
+        except Exception as e:
+            errors.append(f"{prov}: {str(e)[:120]}")
+            continue
+
+        breaker.record_success()
+        return AIResponse(
+            content=content,
+            model=(model if prov == "groq" else f"{prov}:{model}"),
+            latency_ms=latency_ms,
+        )
+
+    combined = " | ".join(errors)
+    breaker.record_failure(combined)
+    raise HTTPException(503, f"All AI providers failed for '{purpose}'. {combined}")
 
 
-async def get_secondary_ai_client(db: AsyncSession) -> Optional[AIClient]:
-    """The fallback provider if the primary fails. Currently Ollama is the
-    only secondary — Groq doesn't have a meaningful secondary of its own.
-    """
-    return OllamaAIClient()
+# ── Status helpers (back the admin AI status page) ──────────────
 
-
-async def read_breaker_enabled(db: AsyncSession) -> bool:
-    """Read platform_settings.ai_circuit_breaker_enabled. Default True."""
-    from sqlalchemy import text
+async def groq_status(db: AsyncSession) -> dict:
+    settings = await get_ai_settings(db)
+    if not GROQ_API_KEY:
+        return {
+            "available": False,
+            "message":   "Sign up free at console.groq.com — no credit card needed",
+            "setup":     "Add GROQ_API_KEY=gsk_... to your .env file",
+            "active":    settings["ai_provider"] == "groq",
+        }
     try:
-        row = (await db.execute(
-            text("SELECT value FROM platform_settings WHERE key_name = 'ai_circuit_breaker_enabled'")
-        )).first()
-        if not row:
-            return True
-        v = (row[0] or "true").strip().lower()
-        return v in ("true", "1", "yes", "on")
-    except Exception:
-        return True
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                "https://api.groq.com/openai/v1/models",
+                headers={"Authorization": f"Bearer {GROQ_API_KEY}"},
+            )
+            r.raise_for_status()
+            models = [m["id"] for m in r.json().get("data", [])]
+        return {
+            "available":   True,
+            "model":       settings["ai_model_groq_large"],
+            "model_small": settings["ai_model_groq_small"],
+            "models":      models,
+            "active":      settings["ai_provider"] == "groq",
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)[:200], "active": settings["ai_provider"] == "groq"}
 
 
-async def read_library_recall_limit(db: AsyncSession) -> int:
-    """Read platform_settings.ai_library_recall_limit. Default 200."""
-    from sqlalchemy import text
+async def ollama_status(db: AsyncSession) -> dict:
+    settings = await get_ai_settings(db)
     try:
-        row = (await db.execute(
-            text("SELECT value FROM platform_settings WHERE key_name = 'ai_library_recall_limit'")
-        )).first()
-        if not row or not row[0]:
-            return 200
-        return max(1, int(row[0]))
-    except Exception:
-        return 200
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{OLLAMA_URL}/api/tags")
+            r.raise_for_status()
+            models = [m["name"] for m in r.json().get("models", [])]
+        return {
+            "available":    True,
+            "url":          OLLAMA_URL,
+            "model":        settings["ai_model_ollama_large"],
+            "model_small":  settings["ai_model_ollama_small"],
+            "all_models":   models,
+            "active":       settings["ai_provider"] == "ollama",
+        }
+    except Exception as e:
+        return {
+            "available": False,
+            "url":       OLLAMA_URL,
+            "error":     str(e)[:200],
+            "active":    settings["ai_provider"] == "ollama",
+        }
 
 
-async def read_include_prior_context(db: AsyncSession) -> bool:
-    """Read platform_settings.ai_include_prior_context. Default True."""
-    from sqlalchemy import text
+async def gemini_status(db: AsyncSession) -> dict:
+    settings = await get_ai_settings(db)
+    if not GEMINI_API_KEY:
+        return {
+            "available": False,
+            "message":   "Sign up free at aistudio.google.com — no credit card needed",
+            "setup":     "Add GEMINI_API_KEY=... to your .env file",
+            "active":    settings["ai_provider"] == "gemini",
+        }
     try:
-        row = (await db.execute(
-            text("SELECT value FROM platform_settings WHERE key_name = 'ai_include_prior_context'")
-        )).first()
-        if not row:
-            return True
-        v = (row[0] or "true").strip().lower()
-        return v in ("true", "1", "yes", "on")
-    except Exception:
-        return True
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                "https://generativelanguage.googleapis.com/v1beta/openai/models",
+                headers={"Authorization": f"Bearer {GEMINI_API_KEY}"},
+            )
+            r.raise_for_status()
+            models = [m["id"] for m in r.json().get("data", [])]
+        return {
+            "available":   True,
+            "model":       settings["ai_model_gemini_large"],
+            "model_small": settings["ai_model_gemini_small"],
+            "models":      models,
+            "active":      settings["ai_provider"] == "gemini",
+        }
+    except Exception as e:
+        return {"available": False, "error": str(e)[:200], "active": settings["ai_provider"] == "gemini"}
