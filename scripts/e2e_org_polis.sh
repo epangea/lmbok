@@ -32,11 +32,26 @@
 #          gate on global proposal) OR the below-Grove 403 gate,
 #          whichever applies to TEST_LEARNER's current stage.
 #
+#   P42 (new, 2026-08-01): a REAL end-to-end POST /api/generate/session
+#          AI generation call — the actual gap that let P41's
+#          `_bool_setting` NameError ship past both this script and
+#          smoke.sh and 500 every real session generation in the live
+#          app, since nothing in either script called this route with
+#          a valid learner session before. Asserts a real 200 + a
+#          fully-populated GeneratedSession body, then looks the new
+#          session row up directly in the DB (same db_query() Part C
+#          already uses) to confirm `model` was actually stamped and
+#          note whether it came from a live AI call or served from the
+#          library (either is legitimate depending on breaker/
+#          inline-reuse state — see Part E's own comments for how it
+#          tells the two apart).
+#
 # This is what surfaced the 2026-07-17 bug: org-submitted listings
 # (scavenged=False, is_active=False) never showed up in ANY admin
 # endpoint and could never be approved — see admin.py module
 # docstring for the fix. Re-run this after any change to orgs.py,
-# matching.py, polis.py, or admin.py's listing endpoints.
+# matching.py, polis.py, admin.py's listing endpoints, generate.py,
+# or ai_client.py.
 #
 # Requires in backend/.env (same file ADMIN_KEY lives in):
 #   TEST_LEARNER_EMAIL / TEST_LEARNER_PASSWORD  (required)
@@ -48,7 +63,10 @@
 # which this script cleans up after itself) there's no delete
 # endpoint for votes or discussion comments — running that branch
 # leaves a real [E2E TEST]-tagged comment and vote sitting in
-# whatever open referendum it picks.
+# whatever open referendum it picks. Part E's DB lookup uses the same
+# DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME + mysql/mariadb-CLI-
+# optional pattern as Part C — warns-and-skips the DB-level assertion
+# (not the whole part) if the CLI isn't on the box.
 # ============================================================
 set -euo pipefail
 
@@ -654,6 +672,106 @@ else
     '{"title":"[E2E TEST] should be rejected","scope":"local"}'
   pass "proposal blocked below Grove stage" "$HTTP_CODE" "403"
 fi
+
+echo ""
+
+# ------------------------------------------------------------
+# PART E — AI session generation (P42, 2026-08-01)
+#
+# The actual gap that let P41 ship a `_bool_setting` NameError past both
+# smoke.sh AND this script: neither one had ever called
+# POST /api/generate/session with a real learner session. That route ran
+# fine right up until it hit a bare NameError near the top of every
+# request (before any AI-provider logic even started) -- 500 in the live
+# app, clean everywhere else. This part closes that gap by actually
+# calling it and checking the response is a real, fully-populated
+# GeneratedSession, not just a 200 status code.
+# ------------------------------------------------------------
+echo "-- AI session generation --"
+
+# Baseline breaker state before the call, purely for context in the
+# output below -- not asserted against, since "already tripped" is a
+# legitimate state this test shouldn't fight with or reset.
+call GET "${API_BASE}/api/generate/breaker-status" ""
+BREAKER_BEFORE=$(echo "$HTTP_BODY" | json_get "library_mode")
+note "session breaker library_mode=${BREAKER_BEFORE} before the call"
+
+call POST "${API_BASE}/api/generate/session" "$LJAR" "$LCSRF" \
+  '{"art_slug":"move","phase_slug":"adult","language":"en"}'
+pass "POST /api/generate/session" "$HTTP_CODE" "200"
+
+if [ "$HTTP_CODE" = "200" ]; then
+  # Check every required GeneratedSession field actually came back non-
+  # empty -- this is the real regression check. A route that 500s never
+  # gets here (caught by the "pass" line above); a route that returns 200
+  # with e.g. an empty warmup_prompt would sail through a status-code-only
+  # check the way P41's bug slipped past the old scripts.
+  GEN_OK=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+d = json.load(sys.stdin)
+required_text = ['warmup_prompt','explore_content','challenge_prompt','reflect_prompt','title','art_name','art_slug']
+missing = [k for k in required_text if not (d.get(k) or '').strip()]
+aq = d.get('assess_question') or {}
+if not (aq.get('question') or '').strip():
+    missing.append('assess_question.question')
+opts = aq.get('options') or []
+if len(opts) < 2:
+    missing.append('assess_question.options (need >=2)')
+ci = aq.get('correct_index')
+if not isinstance(ci, int) or not (0 <= ci < len(opts)):
+    missing.append('assess_question.correct_index (out of range)')
+print('MISSING:' + ','.join(missing) if missing else 'OK')
+")
+  if [ "$GEN_OK" = "OK" ]; then
+    echo "OK    generated session has all required fields populated"
+  else
+    echo "FAIL  generated session missing/invalid fields -- ${GEN_OK#MISSING:}"; fail=$((fail+1))
+  fi
+
+  SESSION_ID=$(echo "$HTTP_BODY" | json_get "session_id")
+  if [ -n "$SESSION_ID" ] && [ "$SESSION_ID" != "None" ]; then
+    echo "OK    session_id=${SESSION_ID} returned"
+
+    # DB-level proof of which path actually served this request. Same
+    # db_query() / MYSQL_BIN pattern Part C already uses -- warns and
+    # skips just this assertion (not the whole part) if the CLI isn't
+    # on the box, same as Part C's own fallback.
+    if [ -n "$MYSQL_BIN" ]; then
+      SESSION_MODEL=$(db_query "SELECT model FROM sessions WHERE id=${SESSION_ID};")
+      SESSION_LATENCY=$(db_query "SELECT latency_ms FROM sessions WHERE id=${SESSION_ID};")
+      if [ -z "$SESSION_MODEL" ]; then
+        warn "could not read sessions.model for id=${SESSION_ID} (DB lookup failed or CLI not usable) -- skipping this assertion"
+      elif [ "$SESSION_MODEL" = "library" ]; then
+        # Legitimate in two cases: the breaker was already tripped (noted
+        # above) or an admin has ai_inline_reuse_enabled=true in Settings
+        # (off by default -- see generate.py's module comment). Either
+        # way this is a real, non-buggy outcome of the reuse/breaker
+        # logic, not evidence of the P41-style failure this part exists
+        # to catch -- so it's a WARN prompting a manual look, not a FAIL.
+        warn "sessions.model='library' for id=${SESSION_ID} -- expected if the breaker is tripped or ai_inline_reuse_enabled is on; check admin Settings/AI status if this is unexpected"
+      else
+        echo "OK    sessions.model='${SESSION_MODEL}' (latency_ms=${SESSION_LATENCY:-?}) -- a real AI call actually answered, not a silent library fallback"
+      fi
+    else
+      warn "mysql/mariadb CLI not found -- skipping sessions.model DB-level check (HTTP-level checks above still ran)"
+    fi
+  else
+    echo "FAIL  no session_id in response"; fail=$((fail+1))
+  fi
+fi
+
+# Breaker status after -- a successful call (AI or library) always leaves
+# consecutive_failures at 0 (record_success() resets it; the library
+# path never touches the breaker at all), so this is a light sanity
+# check, not the main assertion above.
+call GET "${API_BASE}/api/generate/breaker-status" ""
+BREAKER_AFTER_FAILURES=$(echo "$HTTP_BODY" | json_get "consecutive_failures")
+[ "$BREAKER_AFTER_FAILURES" = "0" ] && echo "OK    breaker consecutive_failures=0 after the call" || warn "breaker consecutive_failures=${BREAKER_AFTER_FAILURES} after the call -- worth a look if unexpected"
+
+# No cleanup: this is a real, ordinary session for TEST_LEARNER (same as
+# one they'd get from actually using the app) -- there's no [E2E TEST]
+# tag on it and no delete endpoint for sessions, so it's left in place on
+# purpose, same as P8/P11's verified_skills/task_completions rows above.
 
 # Logout both sessions
 call POST "${API_BASE}/api/orgs/logout" "$OJAR" "$OCSRF"

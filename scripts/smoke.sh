@@ -127,6 +127,27 @@ for ep in "/api/matching/1/tasks/0/submit"; do
 done
 
 echo ""
+echo "-- P42: /api/generate structural checks (2026-08-01) --"
+# GenerateRequest.art_slug is a REQUIRED field (unlike the P8/P11 bodies
+# above, which are all-optional) -- an empty '{}' body here would risk a
+# 422 (body validation) racing a 401 (auth dependency) depending on
+# FastAPI's internal resolution order, which would make this check flaky
+# rather than a real proof the route is auth-gated. Sending a body that
+# actually satisfies GenerateRequest means a 401 here is unambiguous.
+code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}/api/generate/session" \
+  -H "Content-Type: application/json" -d '{"art_slug":"move"}' --max-time 8)
+pass "/api/generate/session (no credentials)" "$code" "401"
+
+# Diagnostic endpoint for the /session circuit breaker -- deliberately
+# public (no learner/admin auth) so it can be polled by monitoring/ops
+# without a login. Structural check only; the real end-to-end AI
+# generation call (and the DB-level proof that model != "library") lives
+# in e2e_org_polis.sh's Part E -- kept out of here so smoke.sh stays fast
+# and makes no real AI-provider call.
+code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}/api/generate/breaker-status" --max-time 8)
+pass "/api/generate/breaker-status (public diagnostic)" "$code" "200"
+
+echo ""
 echo "-- Admin cookie/CSRF checks (P-SEC2, 2026-07-17) --"
 # ADMIN_KEY is only ever sent once now, in this login call, over HTTPS, to
 # establish a session — never again as a header on every request. Runs

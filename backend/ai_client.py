@@ -53,6 +53,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import time
 from dataclasses import dataclass
@@ -62,6 +63,16 @@ import httpx
 from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+# 2026-08-04: added after a live P42 e2e run surfaced a Groq 400 and a
+# Gemini 404 with nothing to diagnose them by -- every provider failure
+# used to collapse straight to a bare RuntimeError(f"... error: {status}"),
+# throwing the actual response body away. Matches the logger naming
+# pattern orgs.py/admin.py already use (freqlearn.<module>) and the same
+# fix shape used for the 2026-07-28 parse_listing_needs 503 -- log the raw
+# body so a future failure is diagnosable straight from
+# /var/log/freqlearn/api-error.log, without needing a manual curl.
+logger = logging.getLogger("freqlearn.ai_client")
 
 
 # ── Infra config (env vars -- secrets/endpoints, not model selection) ──
@@ -241,6 +252,14 @@ async def _call_groq(model: str, messages: list[dict], max_tokens: int,
                 f"Groq model '{model}' has been decommissioned -- "
                 f"update it in Admin > Settings > AI generation"
             )
+        # Any other status (a 400 that ISN'T the decommission case -- e.g. a
+        # JSON-mode schema-validation failure, a bad param, a plan/model
+        # mismatch -- previously vanished into a bare status code with no
+        # way to tell those apart after the fact. Log the real body.
+        logger.error(
+            "Groq API error for model '%s': %s -- %s",
+            model, e.response.status_code, e.response.text[:1000],
+        )
         raise RuntimeError(f"Groq API error: {e.response.status_code}")
     latency_ms = int((time.monotonic() - t0) * 1000)
 
@@ -272,6 +291,10 @@ async def _call_ollama(model: str, messages: list[dict], max_tokens: int,
     except httpx.TimeoutException:
         raise RuntimeError("Local Ollama timed out")
     except httpx.HTTPStatusError as e:
+        logger.error(
+            "Ollama API error for model '%s': %s -- %s",
+            model, e.response.status_code, e.response.text[:1000],
+        )
         raise RuntimeError(f"Ollama API error: {e.response.status_code}")
     latency_ms = int((time.monotonic() - t0) * 1000)
 
@@ -292,11 +315,15 @@ async def _call_gemini(model: str, messages: list[dict], max_tokens: int,
     }
     if response_format == "json_object":
         # Google's compatibility layer advertises support for this, mirroring
-        # OpenAI/Groq's strict-JSON mode. Not yet exercised against a live
-        # key as of 2026-07-29 -- if it turns out unsupported/flaky, this
-        # will show up as a Gemini-specific failure in the fallback chain's
-        # error log, not a hard crash, since ai_complete() tries the next
-        # provider either way.
+        # OpenAI/Groq's strict-JSON mode. Exercised against a live key for
+        # the first time 2026-08-04 (e2e_org_polis.sh Part E) -- the call
+        # failed, but with a 404 "model no longer available" from Google
+        # (ai_model_gemini_large was still the P41-era default, 'gemini-
+        # 2.5-flash', which Google appears to be retiring ahead of its own
+        # documented Oct 2026 shutdown date -- see the new migration this
+        # session), not a response_format/json-mode problem. Whether
+        # json_object mode itself is honoured by Gemini's compatibility
+        # layer is still unconfirmed either way.
         payload["response_format"] = {"type": "json_object"}
 
     headers = {"Authorization": f"Bearer {GEMINI_API_KEY}", "Content-Type": "application/json"}
@@ -317,6 +344,22 @@ async def _call_gemini(model: str, messages: list[dict], max_tokens: int,
                 f"Gemini model '{model}' not found -- "
                 f"update it in Admin > Settings > AI generation"
             )
+        # 2026-08-04: Google has been observed returning a plain 404 (not
+        # Groq's 400-with-"not found"-text shape) for a retired/renamed
+        # model -- e.g. "This model models/gemini-2.5-flash is no longer
+        # available", surfaced ahead of its own documented shutdown date.
+        # Handled the same way as the 400 case above: a clear, actionable
+        # message instead of a bare status code.
+        if e.response.status_code == 404:
+            raise RuntimeError(
+                f"Gemini model '{model}' not found (404) -- likely retired/"
+                f"renamed ahead of its documented shutdown date; "
+                f"update it in Admin > Settings > AI generation"
+            )
+        logger.error(
+            "Gemini API error for model '%s': %s -- %s",
+            model, e.response.status_code, e.response.text[:1000],
+        )
         raise RuntimeError(f"Gemini API error: {e.response.status_code}")
     latency_ms = int((time.monotonic() - t0) * 1000)
 
