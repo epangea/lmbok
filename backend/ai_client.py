@@ -312,6 +312,22 @@ async def _call_gemini(model: str, messages: list[dict], max_tokens: int,
         "messages":    messages,
         "max_tokens":  max_tokens,
         "temperature": temperature,
+        # 2026-08-07 (live outage fix): Gemini 2.5/3.x models ship with
+        # "thinking" (internal reasoning) enabled by default, and -- unlike
+        # OpenAI's models -- Google counts those invisible reasoning tokens
+        # against the SAME max_tokens budget as the visible response. With
+        # no reasoning_effort set, the model was burning most/all of
+        # max_tokens=1200 on reasoning before writing any real output,
+        # producing a truncated, invalid-JSON response that looked like a
+        # parse failure but was actually a budget-exhaustion failure --
+        # confirmed live: "AI returned invalid JSON: {\"title\": ...,
+        # \"warmup\": \"Char, consider how" (cut off mid-sentence,
+        # finish_reason=length upstream). "none" frees the entire budget
+        # for visible output on Flash/Flash-lite tiers (what this codebase
+        # uses). NOTE: if a Pro-tier Gemini model is ever configured here,
+        # "none" is reportedly rejected ("Thinking can't be disabled") --
+        # "low" is the documented fallback for Pro if that ever applies.
+        "reasoning_effort": "none",
     }
     if response_format == "json_object":
         # Google's compatibility layer advertises support for this, mirroring

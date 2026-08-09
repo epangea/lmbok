@@ -768,10 +768,101 @@ call GET "${API_BASE}/api/generate/breaker-status" ""
 BREAKER_AFTER_FAILURES=$(echo "$HTTP_BODY" | json_get "consecutive_failures")
 [ "$BREAKER_AFTER_FAILURES" = "0" ] && echo "OK    breaker consecutive_failures=0 after the call" || warn "breaker consecutive_failures=${BREAKER_AFTER_FAILURES} after the call -- worth a look if unexpected"
 
-# No cleanup: this is a real, ordinary session for TEST_LEARNER (same as
+echo ""
+
+# ------------------------------------------------------------
+# PART E.2 -- P6 skill-tiered library reuse (2026-08-06)
+#
+# Part E above never exercises the skill-matching logic added in P6: it
+# doesn't pass skill_id, and doesn't force the reuse path, so the new
+# exact-match -> same-domain/type -> hard-fail tiering in
+# _select_reusable_pool() (backend/routes/generate.py) could regress
+# silently and neither script would notice -- the same shape of gap
+# that P42 was built to close for the reuse path itself. This closes it
+# for the skill dimension specifically, by forcing reuse deterministically
+# and asserting the actual invariant, not just a 200.
+# ------------------------------------------------------------
+echo "-- P6 skill-tiered reuse --"
+
+# Force the reuse path deterministically instead of hoping the breaker is
+# tripped or an admin already has this on. Read + restore afterward --
+# unlike the test data rows elsewhere in this script, this is live prod
+# config and can't be left flipped after the run.
+call GET "${API_BASE}/api/admin/settings" "$AJAR"
+ORIG_INLINE_REUSE=$(echo "$HTTP_BODY" | json_get "settings.ai_inline_reuse_enabled.value")
+[ -z "$ORIG_INLINE_REUSE" ] && ORIG_INLINE_REUSE="false"  # key may not exist yet -- ai_client.py DEFAULT_SETTINGS
+
+call PATCH "${API_BASE}/api/admin/settings" "$AJAR" "$ACSRF" \
+  '{"settings":{"ai_inline_reuse_enabled":"true"}}'
+pass "PATCH ai_inline_reuse_enabled=true (forcing reuse path for this test)" "$HTTP_CODE" "200"
+
+# A real skill_id for the "move" art, straight from the DB -- same
+# db_query()/MYSQL_BIN pattern Part E already uses above, with the same
+# graceful skip if the CLI isn't on the box.
+if [ -n "$MYSQL_BIN" ]; then
+  P6_SKILL_ID=$(db_query "SELECT sk.id FROM arts_skills asx JOIN arts a ON a.id = asx.art_id JOIN skills sk ON sk.id = asx.skill_id WHERE a.slug = 'move' LIMIT 1;")
+else
+  P6_SKILL_ID=""
+fi
+
+if [ -z "$P6_SKILL_ID" ]; then
+  warn "could not resolve a real skill_id for art 'move' (DB CLI missing or no arts_skills row) -- skipping P6 skill-tier check"
+else
+  call POST "${API_BASE}/api/generate/session" "$LJAR" "$LCSRF" \
+    "{\"art_slug\":\"move\",\"phase_slug\":\"adult\",\"language\":\"en\",\"skill_id\":${P6_SKILL_ID}}"
+  pass "POST /api/generate/session with skill_id=${P6_SKILL_ID}" "$HTTP_CODE" "200"
+
+  if [ "$HTTP_CODE" = "200" ]; then
+    RETURNED_SKILL_ID=$(echo "$HTTP_BODY" | json_get "skill_id")
+    P6_SESSION_ID=$(echo "$HTTP_BODY" | json_get "session_id")
+
+    if [ -z "$RETURNED_SKILL_ID" ] || [ "$RETURNED_SKILL_ID" = "None" ]; then
+      echo "FAIL  no skill_id in response"; fail=$((fail+1))
+    elif [ -n "$MYSQL_BIN" ] && [ -n "$P6_SESSION_ID" ] && [ "$P6_SESSION_ID" != "None" ]; then
+      SERVED_MODEL=$(db_query "SELECT model FROM sessions WHERE id=${P6_SESSION_ID};")
+      SERVED_SKILL_ID=$(db_query "SELECT primary_skill_id FROM sessions WHERE id=${P6_SESSION_ID};")
+
+      if [ "$SERVED_MODEL" != "library" ]; then
+        # A fresh AI generation was made instead of reuse -- legitimate
+        # (e.g. the library pool for this skill/phase/language genuinely
+        # came up empty and generate_session fell through to Claude), so
+        # this is a WARN, not a FAIL, same treatment Part E already gives
+        # its own model=='library' case above.
+        warn "sessions.model='${SERVED_MODEL}' for id=${P6_SESSION_ID} -- reuse path didn't fire (an empty pool for this skill/phase/language is a legitimate reason); P6 skill-tier invariant not exercised this run"
+      elif [ "$SERVED_SKILL_ID" = "$P6_SKILL_ID" ]; then
+        echo "OK    reused session id=${P6_SESSION_ID} matched requested skill_id=${P6_SKILL_ID} exactly (tier 1)"
+      else
+        # Not an exact match -- must be the tier-2 same-domain/type
+        # fallback. Verify that invariant directly rather than trusting
+        # it; <=> is MariaDB's null-safe equals, in case either skill's
+        # learning_domain/skill_type is ever NULL.
+        SAME_DOMAIN=$(db_query "SELECT (a.learning_domain <=> b.learning_domain AND a.skill_type <=> b.skill_type) FROM skills a, skills b WHERE a.id=${P6_SKILL_ID} AND b.id=${SERVED_SKILL_ID};")
+        if [ "$SAME_DOMAIN" = "1" ]; then
+          echo "OK    reused session id=${P6_SESSION_ID} served skill_id=${SERVED_SKILL_ID} (differs from requested ${P6_SKILL_ID} but shares learning_domain/skill_type -- tier 2 fallback, as designed)"
+        else
+          echo "FAIL  reused session id=${P6_SESSION_ID} served skill_id=${SERVED_SKILL_ID}, which shares neither an exact match nor learning_domain/skill_type with requested skill_id=${P6_SKILL_ID} -- P6 tiering violated"
+          fail=$((fail+1))
+        fi
+      fi
+    else
+      warn "mysql/mariadb CLI not found or no session_id -- skipping DB-level P6 skill-tier check (HTTP-level checks above still ran)"
+    fi
+  fi
+fi
+
+# Restore the original ai_inline_reuse_enabled -- see note above on why
+# this one gets cleaned up (live prod config) unlike the ordinary test
+# data rows left in place elsewhere in this script.
+call PATCH "${API_BASE}/api/admin/settings" "$AJAR" "$ACSRF" \
+  "{\"settings\":{\"ai_inline_reuse_enabled\":\"${ORIG_INLINE_REUSE}\"}}"
+pass "restored ai_inline_reuse_enabled=${ORIG_INLINE_REUSE}" "$HTTP_CODE" "200"
+
+# No cleanup for the sessions themselves: both the Part E and Part E.2
+# calls above create a real, ordinary session for TEST_LEARNER (same as
 # one they'd get from actually using the app) -- there's no [E2E TEST]
-# tag on it and no delete endpoint for sessions, so it's left in place on
-# purpose, same as P8/P11's verified_skills/task_completions rows above.
+# tag on either and no delete endpoint for sessions, so both are left in
+# place on purpose, same as P8/P11's verified_skills/task_completions
+# rows above.
 
 # Logout both sessions
 call POST "${API_BASE}/api/orgs/logout" "$OJAR" "$OCSRF"

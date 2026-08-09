@@ -55,6 +55,116 @@ class GeneratedSession(BaseModel):
     session_id:       int | None = None
 
 
+async def _select_reusable_pool(
+    db: AsyncSession,
+    learner: Learner,
+    art: Arts,
+    phase_id: int | None,
+    req: GenerateRequest,
+) -> list[Session]:
+    """
+    Shared candidate-selection logic for BOTH stored-session reuse paths:
+    the inline-reuse path (ai_inline_reuse_enabled) and the circuit-breaker
+    library-mode fallback (_serve_from_library). Previously duplicated
+    near-verbatim in both places; consolidated here as part of P6
+    (2026-08-05) alongside adding the new skill tier below.
+
+    Filters, in order:
+      1. art_id (hard — caller already knows the art)
+      2. dev_phase_id — SOFT: prefer phase-matched, fall back to untagged/
+         legacy content if no phase match exists. Unchanged from pre-P6.
+      3. language — HARD, no fallback. Serving the wrong language is worse
+         than no reuse at all (2026-07-20 fix). Unchanged from pre-P6.
+      4. skill (P6, new) — TIERED, only applied when req.skill_id is set
+         (skill_context-only requests, which have no FK to match against,
+         skip this tier entirely -- same permissive behavior as before P6):
+           a. exact primary_skill_id match, if any exist
+           b. else, same learning_domain AND skill_type as the requested
+              skill (Charbel's call, 2026-08-05: never serve a totally
+              unrelated skill just to keep reuse alive)
+           c. else, no reuse for this request -- same hard-fail shape as
+              the language filter, not a fall-through to "any skill".
+      5. already-seen exclusion — learner's last 30 sessions for this art,
+         by warmup_prompt. Unchanged from pre-P6.
+
+    Returns the final reusable pool (caller does random.choice from it),
+    or [] if nothing survives every filter.
+    """
+    existing_q = await db.execute(
+        select(Session)
+        .where(
+            Session.art_id == art.id,
+            Session.warmup_prompt != None,
+            Session.status.in_(["completed", "scheduled"]),
+        )
+        .order_by(Session.created_at.desc())
+        .limit(200)
+    )
+    all_stored = existing_q.scalars().all()
+    if not all_stored:
+        return []
+
+    # Phase: soft fallback to untagged/legacy if no phase match.
+    if phase_id:
+        existing = [s for s in all_stored
+                    if getattr(s, 'dev_phase_id', None) in (None, phase_id)]
+        if not existing:
+            existing = [s for s in all_stored
+                        if getattr(s, 'dev_phase_id', None) is None]
+    else:
+        existing = all_stored
+
+    # Language: hard filter, no fallback.
+    req_language = req.language or "en"
+    existing = [s for s in existing if (s.language or "en") == req_language]
+    if not existing:
+        return []
+
+    # Skill (P6): tiered filter, only when the request carries a real
+    # skill_id. skill_context-only requests (e.g. launched from a Learning
+    # Domain skill click with a display name but no FK) have nothing to
+    # match against and skip this tier, matching pre-P6 behavior exactly.
+    if req.skill_id:
+        exact = [s for s in existing if s.primary_skill_id == req.skill_id]
+        if exact:
+            existing = exact
+        else:
+            req_skill_q = await db.execute(
+                select(Skill).where(Skill.id == req.skill_id)
+            )
+            req_skill = req_skill_q.scalar_one_or_none()
+            if req_skill is None:
+                # Bad/stale skill_id on the request -- can't determine a
+                # domain/type to fall back within, so there's no tier left
+                # to try. Hard-fail like language rather than silently
+                # ignoring the skill filter.
+                return []
+            candidate_skill_ids = {s.primary_skill_id for s in existing}
+            skills_q = await db.execute(
+                select(Skill).where(Skill.id.in_(candidate_skill_ids))
+            )
+            skill_by_id = {sk.id: sk for sk in skills_q.scalars().all()}
+            same_domain = [
+                s for s in existing
+                if (sk := skill_by_id.get(s.primary_skill_id)) is not None
+                and sk.learning_domain == req_skill.learning_domain
+                and sk.skill_type == req_skill.skill_type
+            ]
+            if not same_domain:
+                return []
+            existing = same_domain
+
+    # Already-seen exclusion.
+    seen_q = await db.execute(
+        select(Session.warmup_prompt)
+        .where(Session.learner_id == learner.id, Session.art_id == art.id)
+        .order_by(Session.created_at.desc())
+        .limit(30)
+    )
+    recently_seen = {row[0] for row in seen_q.all()}
+    return [s for s in existing if s.warmup_prompt not in recently_seen]
+
+
 @router.post("/session", response_model=GeneratedSession)
 async def generate_session(
     req: GenerateRequest,
@@ -140,52 +250,15 @@ async def generate_session(
         )
 
     # ── Check if a recent stored session exists for this art/phase ──
-    # Phase filtering done in Python (dev_phase_id added to models.py separately)
-    existing_q = await db.execute(
-        select(Session)
-        .where(
-            Session.art_id == art.id,
-            Session.warmup_prompt != None,
-            Session.status.in_(["completed", "scheduled"])
-        )
-        .order_by(Session.created_at.desc())
-        .limit(200)
-    )
-    all_stored = existing_q.scalars().all()
-
-    # Prefer phase-matched sessions; fall back to untagged (legacy/adult content)
+    # P6 (2026-08-05): candidate selection (phase/language/skill/already-
+    # seen) now lives in the shared _select_reusable_pool() helper, used by
+    # both this path and _serve_from_library below -- see that function's
+    # docstring for the full filter order, including the new skill tier.
     phase_id = phase.id if phase else None
-    if phase_id:
-        existing = [s for s in all_stored
-                    if getattr(s, 'dev_phase_id', None) in (None, phase_id)]
-        # If no phase matches at all, fall back to untagged only
-        if not existing:
-            existing = [s for s in all_stored
-                        if getattr(s, 'dev_phase_id', None) is None]
-    else:
-        existing = all_stored
-
-    # Filter to sessions NOT recently seen by this learner
-    seen_q = await db.execute(
-        select(Session.warmup_prompt)
-        .where(Session.learner_id == learner.id, Session.art_id == art.id)
-        .order_by(Session.created_at.desc())
-        .limit(30)
-    )
-    recently_seen = {row[0] for row in seen_q.all()}
-
-    reusable = [s for s in existing if s.warmup_prompt not in recently_seen]
-
-    # Language filter (2026-07-20 fix): reuse must match the learner's
-    # requested language. Without this, a stored English session could be
-    # silently served to a learner who asked for content in Vietnamese/
-    # French/etc, or vice versa. Unlike the phase filter above, there is no
-    # cross-language fallback here on purpose — if there's no reusable
-    # content in the right language, the len(reusable) >= 3 check below
-    # simply won't clear and this falls through to a fresh AI generation,
-    # which always produces the correct language (see lang_names below).
     req_language = req.language or "en"
-    reusable = [s for s in reusable if (s.language or "en") == req_language]
+    reusable = await _select_reusable_pool(
+        db=db, learner=learner, art=art, phase_id=phase_id, req=req,
+    )
 
     # ── Inline reuse (OFF by default — see BRIEFING 2026-07-09) ─────
     # This branch used to fire unconditionally whenever >=3 stored sessions
@@ -199,11 +272,11 @@ async def generate_session(
     if inline_reuse_enabled and not req.skill_context and len(reusable) >= 3:
         stored = random.choice(reusable[:30])  # wider random pool
 
-        skill_q2 = await db.execute(
-            select(ArtsSkills).where(ArtsSkills.art_id == art.id).limit(1)
-        )
-        reuse_arts_skill = skill_q2.scalar_one_or_none()
-        reuse_skill_id   = reuse_arts_skill.skill_id if reuse_arts_skill else 1
+        # P6 (2026-08-05): use the reused session's OWN skill, not an
+        # arbitrary "first skill for this art" -- _select_reusable_pool
+        # already guarantees this is either an exact skill_id match or a
+        # same-domain/same-type fallback, so this is now always accurate.
+        reuse_skill_id = stored.primary_skill_id
 
         # FIX 2 (option B bias): shuffle stored assess options on every serve
         # so the correct answer isn't always at the same index.
@@ -711,62 +784,25 @@ async def _serve_from_library(
     phase_name: str,
     req: GenerateRequest,
 ) -> GeneratedSession | None:
-    # Candidate pool: stored sessions for this art with content.
-    existing_q = await db.execute(
-        select(Session)
-        .where(
-            Session.art_id == art.id,
-            Session.warmup_prompt != None,
-            Session.status.in_(["completed", "scheduled"]),
-        )
-        .order_by(Session.created_at.desc())
-        .limit(200)
-    )
-    all_stored = existing_q.scalars().all()
-
-    # Prefer phase-matched; fall back to untagged/legacy.
-    if phase_id:
-        existing = [s for s in all_stored
-                    if getattr(s, 'dev_phase_id', None) in (None, phase_id)]
-        if not existing:
-            existing = [s for s in all_stored
-                        if getattr(s, 'dev_phase_id', None) is None]
-    else:
-        existing = all_stored
-
-    if not existing:
-        return None
-
-    # Language filter: must match the requested language. No cross-language
-    # fallback -- serving the wrong language is worse than a clean 503 (the
-    # caller already surfaces "no library session matched this
-    # art/phase/language" when this returns None).
+    # P6 (2026-08-05): candidate selection (phase/language/skill/already-
+    # seen) now lives in the shared _select_reusable_pool() helper -- see
+    # its docstring for the full filter order, including the new skill
+    # tier. Behavior for phase/language/already-seen is unchanged; this
+    # path previously did no skill filtering at all, same as inline reuse.
     req_language = req.language or "en"
-    existing = [s for s in existing if (s.language or "en") == req_language]
-    if not existing:
-        return None
-
-    # Exclude sessions this learner has already been served recently.
-    seen_q = await db.execute(
-        select(Session.warmup_prompt)
-        .where(Session.learner_id == learner.id, Session.art_id == art.id)
-        .order_by(Session.created_at.desc())
-        .limit(30)
+    reusable = await _select_reusable_pool(
+        db=db, learner=learner, art=art, phase_id=phase_id, req=req,
     )
-    recently_seen = {row[0] for row in seen_q.all()}
-
-    reusable = [s for s in existing if s.warmup_prompt not in recently_seen]
     if not reusable:
         return None
 
     stored = random.choice(reusable[:30])
 
-    # Resolve a skill_id (FK requirement on the new Session row).
-    skill_q2 = await db.execute(
-        select(ArtsSkills).where(ArtsSkills.art_id == art.id).limit(1)
-    )
-    reuse_arts_skill = skill_q2.scalar_one_or_none()
-    reuse_skill_id   = reuse_arts_skill.skill_id if reuse_arts_skill else 1
+    # P6 (2026-08-05): use the reused session's OWN skill, not an arbitrary
+    # "first skill for this art" -- _select_reusable_pool already guarantees
+    # this is either an exact skill_id match or a same-domain/same-type
+    # fallback, so this is now always accurate.
+    reuse_skill_id = stored.primary_skill_id
 
     # Shuffle the stored assess options so the correct answer isn't always
     # at the same index.
