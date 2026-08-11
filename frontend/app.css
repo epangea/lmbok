@@ -157,7 +157,7 @@ p{color:var(--text2);line-height:1.65}
 
 /* ══════════════════════════════════════════════════
    NAV — desktop tab bar (default)
-   On mobile (<860px) tabs hide; hamburger appears
+   On mobile (<960px) tabs hide; hamburger appears
 ══════════════════════════════════════════════════ */
 .nav{
   position:fixed;top:0;left:0;right:0;z-index:200;
@@ -174,10 +174,21 @@ p{color:var(--text2);line-height:1.65}
   display:flex;gap:2px;flex:1;
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
-  scrollbar-width:none;
-  -ms-overflow-style:none;
+  /* 2026-08-11: was scrollbar-width:none / ::-webkit-scrollbar{display:none}
+     -- with 9 tabs now (Ekklesia/Polis added later), this strip regularly
+     overflows on laptop-width screens, and hiding the scrollbar removed
+     the only cue that more tabs existed off-screen. Reported live by
+     Charbel: Ekklesia was invisible with no way to discover it. Swapped
+     for a thin, always-visible themed scrollbar instead -- same 3px/--bg5
+     convention already used site-wide (see the global ::-webkit-scrollbar
+     rule near the top of this file), just applied horizontally here. No
+     JS needed; the scrollbar itself now IS the affordance. */
+  scrollbar-width:thin;
+  scrollbar-color:var(--bg5) transparent;
 }
-.nav-tabs::-webkit-scrollbar{display:none}
+.nav-tabs::-webkit-scrollbar{height:4px}
+.nav-tabs::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:2px}
+.nav-tabs::-webkit-scrollbar-thumb:hover{background:var(--border2)}
 .nav-tab{
   padding:6px 13px;border-radius:var(--r-sm);
   font-family:var(--font-display);font-size:12px;font-weight:600;
@@ -1131,7 +1142,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .page-org .spin{width:36px;height:36px;border:3px solid var(--bd);border-top-color:var(--gr);border-radius:50%;animation:page-org--sp .7s linear infinite;margin:48px auto}
 @keyframes page-org--sp{to{transform:rotate(360deg)}}
 /* Gate */
-.page-org #gate{display:flex;align-items:center;justify-content:center;min-height:80vh;padding:24px}
+.page-org #gate{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:80vh;padding:24px}
 .page-org .gw{display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:760px;width:100%}
 @media (max-width:660px){.page-org .gw{grid-template-columns:1fr}}
 .page-org .gp{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:32px 28px}
@@ -1147,6 +1158,25 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .page-org #toast.err{border-color:var(--re)}
 .page-org hr{border:none;border-top:1px solid var(--bd);margin:24px 0}
 @media (max-width:600px){.page-org main{padding:20px 14px 48px}.page-org header{padding:0 14px}.page-org .tabs{padding:0 14px}.page-org .srow{grid-template-columns:1fr 1fr}.page-org .bname{display:none}}
+/* Mobile header fix (2026-08-11) — org.html's header previously had no
+   mobile handling at all: fixed height:58px, justify-content:space-between,
+   no wrap. Unlike app.html/admin.html (both have a hamburger fallback),
+   org.html's 3-4 header buttons (theme toggle, Org/org-name, Agora/Home,
+   Sign out) had nowhere to go on a phone-width screen but clip off-screen
+   or overlap. Reported live by Charbel, 2026-08-11. Fixed by letting the
+   header wrap onto a second row instead of clipping -- keeps every button
+   visible and tappable without needing a new hamburger/JS pattern, and
+   matches the "shrink/hide/wrap at breakpoints" approach already used
+   elsewhere on this page (.bname, .frow, .ag, .gw above). */
+@media (max-width:600px){
+  .page-org header{
+    height:auto;min-height:58px;
+    flex-wrap:wrap;row-gap:8px;
+    padding:10px 14px;
+  }
+  .page-org .hr{flex-wrap:wrap;justify-content:flex-end;row-gap:6px}
+  .page-org .ibtn{padding:5px 8px;font-size:13px}
+}
 
 /* --- polis.html — The Polis (scoped: body.page-polis) --- */
 .page-polis{

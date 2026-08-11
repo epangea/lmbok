@@ -101,24 +101,40 @@ async def csrf_protect(request: Request, call_next):
     if request.url.path in _CSRF_EXEMPT_PATHS:
         return await call_next(request)
 
-    # /api/orgs is an unambiguous, org-only prefix — check it before the
-    # admin-cookie fallback below. ADMIN_ACCESS_COOKIE is deliberately
-    # scoped to all of /api (see cookie_auth.py), so it rides along on
-    # /api/orgs/* requests too whenever the same browser also has an admin
-    # session open (a very normal thing for a solo operator testing both
-    # roles) — checking cookie-presence first would then validate the CSRF
-    # header against the wrong cookie and 403 every org action. Path first,
-    # cookie-presence fallback second — apply the same principle if any
-    # other unambiguous top-level prefix needs its own branch later.
+    # Rewritten 2026-08-11 (P-SEC3 follow-up) to route on path prefix alone,
+    # for ALL three session kinds — no more cookie-presence fallback at all.
+    # ADMIN_ACCESS_COOKIE is deliberately scoped to all of /api (see
+    # cookie_auth.py), so it rides along on every request whenever the same
+    # browser also has an admin session open (a very normal thing for a
+    # solo operator testing multiple roles at once, e.g. Charbel). The
+    # original design only gave /api/orgs its own explicit branch and let
+    # everything else fall through to "admin cookie present? use admin CSRF
+    # pair" — which is correct ONLY for endpoints that are actually
+    # admin-gated. It silently mis-checked every OTHER learner-facing
+    # prefix (confirmed live 2026-08-11 via /api/generate/session
+    # "CSRF check failed" while both a learner and admin session were open
+    # in the same browser). The 2026-08-10 patch only widened the
+    # /api/orgs-style special case to /api/matching and /api/learners —
+    # still a whitelist of two, not a fix of the underlying assumption.
+    # Ground truth (confirmed via `grep -rl require_admin routes/`,
+    # 2026-08-11): require_admin is used in exactly two places —
+    # routes/admin.py (all of /api/admin) and routes/bioregions.py's
+    # /admin/... sub-paths only. Every other router (auth's non-exempt
+    # endpoints, learners, matching, generate, sessions, progress, radar,
+    # contribute, polis, reflections, peripatos, skills, and the rest of
+    # bioregions) is learner-scoped or public. So the middleware now
+    # mirrors that reality directly instead of guessing from cookies:
+    #   1. /api/orgs/*                                  -> org CSRF pair
+    #   2. /api/admin/* or /api/bioregions/admin/*       -> admin CSRF pair
+    #   3. everything else (default)                     -> learner CSRF pair
+    # If a future admin-gated endpoint is added outside these two prefixes,
+    # it must be added to the admin branch below, or it will be checked
+    # against the learner CSRF pair and reject every legitimately-CSRF'd
+    # admin request that also happens to carry a learner cookie.
     if request.url.path.startswith("/api/orgs"):
         cookie_name = ORG_CSRF_COOKIE
         session_cookie = ORG_ACCESS_COOKIE
-    # Admin session cookie is otherwise checked by presence, not path prefix,
-    # because admin-gated routes live under two different prefixes (/api/admin/*
-    # and /api/bioregions/admin/*) — see cookie_auth.py's ADMIN_ACCESS_COOKIE_PATH
-    # comment. Added 2026-07-17 as part of P-SEC2 (admin moved off the old
-    # X-Admin-Key-header-only auth that fell through this middleware entirely).
-    elif request.cookies.get(ADMIN_ACCESS_COOKIE):
+    elif request.url.path.startswith("/api/admin") or request.url.path.startswith("/api/bioregions/admin"):
         cookie_name = ADMIN_CSRF_COOKIE
         session_cookie = ADMIN_ACCESS_COOKIE
     else:

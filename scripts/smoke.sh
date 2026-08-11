@@ -286,6 +286,110 @@ else
 fi
 
 echo ""
+echo "-- P-SEC3: dual-session CSRF regression check (rewritten 2026-08-11) --"
+# Regression test for the CSRF middleware bug class: ADMIN_ACCESS_COOKIE is
+# scoped to all of /api (see cookie_auth.py), so it rides along on every
+# request whenever the same browser also has an admin session open — a very
+# normal thing for a solo operator testing multiple roles at once in one
+# window (Charbel's actual report, 2026-08-11: "CSRF check failed" on
+# /api/generate/session with both learner and admin logged in). The
+# 2026-08-10 fix only special-cased /api/matching and /api/learners; the
+# 2026-08-11 fix replaced the whole cookie-presence fallback with real
+# path-based routing (see main.py) since admin-gating is actually confined
+# to exactly two prefixes (confirmed via `grep -rl require_admin routes/`:
+# routes/admin.py and routes/bioregions.py's /admin/... sub-paths only).
+# This block recreates the dual-cookie browser state and checks a spread of
+# prefixes -- not just the two from the narrower 2026-08-10 patch -- so a
+# future prefix-scoping mistake gets caught here instead of live. Gated on
+# TEST_LEARNER_EMAIL/PASSWORD since it needs a real learner session to layer
+# the admin one on top of; reuses ADMIN_KEY (always required, see top of
+# script).
+if [ -n "${TEST_LEARNER_EMAIL:-}" ] && [ -n "${TEST_LEARNER_PASSWORD:-}" ]; then
+  DJAR=$(mktemp)
+
+  code=$(curl -s -c "$DJAR" -o /dev/null -w "%{http_code}" \
+    -X POST "${API_BASE}/api/auth/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"email\":\"${TEST_LEARNER_EMAIL}\",\"password\":\"${TEST_LEARNER_PASSWORD}\"}" \
+    --max-time 8)
+  pass "/api/auth/login (dual-session setup)" "$code" "200"
+
+  # Log the SAME jar into an admin session too -- curl's -b -c on the same
+  # file merges new Set-Cookie values in alongside what's already there,
+  # rather than replacing the jar, so DJAR now genuinely holds both
+  # fl_access/fl_csrf and fl_admin_session/fl_admin_csrf at once, exactly
+  # matching the real-world scenario that exposed the bug.
+  code=$(curl -s -b "$DJAR" -c "$DJAR" -o /dev/null -w "%{http_code}" \
+    -X POST "${API_BASE}/api/admin/login" \
+    -H "Content-Type: application/json" \
+    -d "{\"admin_key\":\"${ADMIN_KEY}\"}" \
+    --max-time 8)
+  pass "/api/admin/login (dual-session setup)" "$code" "200"
+
+  # Sanity check: both session cookies must actually be present in the same
+  # jar, or the tests below wouldn't be reproducing the real bug at all.
+  if grep -q "fl_access" "$DJAR" && grep -q "fl_admin_session" "$DJAR"; then
+    echo "OK    dual session established (fl_access + fl_admin_session both present)"
+  else
+    echo "FAIL  dual session setup failed -- fl_access and/or fl_admin_session missing from jar"; fail=$((fail+1))
+  fi
+
+  DCSRF=$(awk -F'\t' '$6=="fl_csrf"{print $7}' "$DJAR")
+  ACSRF_D=$(awk -F'\t' '$6=="fl_admin_csrf"{print $7}' "$DJAR")
+
+  # PATCH /api/learners/me/preferences with the LEARNER's own CSRF token,
+  # while the admin session cookie also rides along. Pre-fix, this 403'd
+  # (middleware checked the header against fl_admin_csrf instead). Body is
+  # a genuine no-op -- every PreferencesUpdate field is Optional.
+  code=$(curl -s -o /dev/null -w "%{http_code}" -b "$DJAR" -X PATCH "${API_BASE}/api/learners/me/preferences" \
+    -H "Content-Type: application/json" -H "X-CSRF-Token: ${DCSRF}" -d '{}' --max-time 8)
+  pass "PATCH /api/learners/me/preferences with learner X-CSRF-Token + admin cookie present" "$code" "200"
+
+  # DELETE /api/matching/999999 (a match id that doesn't exist) with the
+  # same learner CSRF token. A 404 here proves the request got PAST the
+  # CSRF check and into the real route logic; a 403 would mean the
+  # middleware is still validating against the wrong (admin) CSRF pair.
+  # 999999 is chosen to be safely out of range of any real seeded data.
+  code=$(curl -s -o /dev/null -w "%{http_code}" -b "$DJAR" -X DELETE "${API_BASE}/api/matching/999999" \
+    -H "X-CSRF-Token: ${DCSRF}" --max-time 8)
+  pass "DELETE /api/matching/999999 with learner X-CSRF-Token + admin cookie present (expect 404, not 403)" "$code" "404"
+
+  # POST /api/generate/session with an art_slug that doesn't exist, learner
+  # CSRF token, admin cookie present. This is the exact live symptom
+  # Charbel reported 2026-08-11 -- /api/generate wasn't covered by the
+  # 2026-08-10 patch at all. A 404 ("Art not found") proves the request
+  # cleared the CSRF check and reached generate.py's own art lookup, well
+  # before anything would call an AI provider -- no real AI generation or
+  # cost is triggered by this check.
+  code=$(curl -s -o /dev/null -w "%{http_code}" -b "$DJAR" -X POST "${API_BASE}/api/generate/session" \
+    -H "Content-Type: application/json" -H "X-CSRF-Token: ${DCSRF}" \
+    -d '{"art_slug":"__smoke_test_nonexistent_art__"}' --max-time 8)
+  pass "POST /api/generate/session with learner X-CSRF-Token + admin cookie present (expect 404, not 403)" "$code" "404"
+
+  # Inverse check: an /api/admin/* request must still validate against the
+  # ADMIN CSRF pair, not the learner one, even with a learner cookie also
+  # present in the jar -- confirms the path-based rewrite didn't overcorrect
+  # and start treating admin-prefixed requests as learner-scoped. Same
+  # genuine-no-op settings PATCH the existing admin CSRF block above uses.
+  code=$(curl -s -o /dev/null -w "%{http_code}" -b "$DJAR" -X PATCH "${API_BASE}/api/admin/settings" \
+    -H "Content-Type: application/json" -H "X-CSRF-Token: ${DCSRF}" \
+    -d '{"settings":{"ai_provider":"groq"}}' --max-time 8)
+  pass "PATCH /api/admin/settings with LEARNER X-CSRF-Token (must be rejected, wrong pair)" "$code" "403"
+
+  code=$(curl -s -o /dev/null -w "%{http_code}" -b "$DJAR" -X PATCH "${API_BASE}/api/admin/settings" \
+    -H "Content-Type: application/json" -H "X-CSRF-Token: ${ACSRF_D}" \
+    -d '{"settings":{"ai_provider":"groq"}}' --max-time 8)
+  pass "PATCH /api/admin/settings with admin X-CSRF-Token + learner cookie present" "$code" "200"
+
+  # Clean up both sessions
+  curl -s -o /dev/null -b "$DJAR" -X POST "${API_BASE}/api/auth/logout" -H "X-CSRF-Token: ${DCSRF}" --max-time 8 || true
+  curl -s -o /dev/null -b "$DJAR" -X POST "${API_BASE}/api/admin/logout" -H "X-CSRF-Token: ${ACSRF_D}" --max-time 8 || true
+  rm -f "$DJAR"
+else
+  echo "WARN  No TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD set — P-SEC3 dual-session check skipped"
+fi
+
+echo ""
 echo "-- Org cookie/CSRF checks (P-SEC1, 2026-07-16) --"
 if [ -n "${TEST_ORG_EMAIL:-}" ] && [ -n "${TEST_ORG_PASSWORD:-}" ]; then
   OJAR=$(mktemp)
