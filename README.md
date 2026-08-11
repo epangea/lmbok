@@ -103,12 +103,14 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
 
 - [`docs/LANDING_PAGE.md`](docs/LANDING_PAGE.md) — how to edit the landing page (copy, translations, video IDs) and how it integrates with the app (auth-aware redirect, Home link, CTAs)
 
-## Roadmap (high level -- see PROJECT_MASTER.md for the working backlog)
+## Roadmap (high level)
 
 - **Polis ↔ One 'Ouse integration** -- the core unfinished piece of the vision above: Polis referenda/votes feeding directly into the One 'Ouse Blueprint, so civic participation earned through learning has a real destination. Not yet scoped.
-- Security hardening ahead of wider public traffic (see PROJECT_MASTER.md)
+- Ongoing security hardening ahead of wider public traffic
 - Bioregion page: map view alongside the existing portrait list
-- Org-verified skills, email verification infrastructure, and other items tracked in PROJECT_MASTER.md
+- Org-verified skills, email verification infrastructure, and other in-progress work
+
+The detailed, day-to-day backlog is tracked in a local project doc, not in this repo -- open an issue if you'd like visibility into a specific item.
 
 ## Status
 

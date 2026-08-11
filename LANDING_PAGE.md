@@ -55,7 +55,7 @@ logged-in learner clicking it will just get bounced straight back.
 If a logged-in learner does end up viewing the landing page (via Home),
 "Sign In" / "Join Free" don't make sense for them. `index.html`'s bottom
 script checks `localStorage['fl_learner']` (the same display-info cache
-`app.js` uses, not real auth — see PROJECT_MASTER PART 6/4) and swaps all
+`app.js` uses, not real auth — see the maintainer's internal architecture notes) and swaps all
 three CTA pairs (top nav, hero, final band) for a single **"LMBoK Agora →"**
 link to `/app.html`.
 
@@ -148,5 +148,5 @@ The embed starts at `start_track=N` (0-based index: 0 = first track, 1 = second,
 
 ## Deploying changes
 
-Same sequence as the rest of the frontend (see MAINTENANCE.md, local-only):
+Same sequence as the rest of the frontend (see the maintainer's local-only `PROJECT.md`):
 Claude/you edit files → sftp to the server → run `scripts/smoke.sh` → **then** commit/push. `frontend/index.html` and `frontend/app.js` are both plain static files — no backend restart needed for either.
