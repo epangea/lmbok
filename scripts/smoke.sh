@@ -445,6 +445,60 @@ else
 fi
 
 echo ""
+echo "-- Registration DB round-trip check (PART 30, 2026-08-14) --"
+# Exercises the exact code path that was hitting the stale-connection
+# RuntimeError (POST /api/auth/register -> a real INSERT via the async
+# pool) rather than a synthetic health check, then cleans up after itself.
+# This is the closest thing to a canary for the db.py pool_recycle fix:
+# if the pool goes stale again, this is what will catch it, same as a
+# real learner would hit it.
+
+DB_USER=$(env_or_file DB_USER); DB_USER="${DB_USER:-freqlearn}"
+DB_PASSWORD=$(env_or_file DB_PASSWORD); DB_PASSWORD="${DB_PASSWORD:-changeme}"
+DB_HOST=$(env_or_file DB_HOST); DB_HOST="${DB_HOST:-127.0.0.1}"
+DB_PORT=$(env_or_file DB_PORT); DB_PORT="${DB_PORT:-3306}"
+DB_NAME=$(env_or_file DB_NAME); DB_NAME="${DB_NAME:-freqlearn}"
+MYSQL_BIN=$(command -v mariadb || command -v mysql || true)
+
+db_exec() {
+  # db_exec "DELETE ..." -> best-effort, never fails the script (cleanup only)
+  [ -z "$MYSQL_BIN" ] && return 0
+  "$MYSQL_BIN" -N -B -h "$DB_HOST" -P "$DB_PORT" -u "$DB_USER" -p"$DB_PASSWORD" "$DB_NAME" \
+    -e "$1" 2>/dev/null || true
+}
+
+# Reuses TEST_LEARNER_EMAIL's local part with a +smoketest-<epoch> alias so a
+# real send (the register endpoint fires a verification email as a
+# fire-and-forget background task) lands harmlessly in an inbox Charbel
+# already owns, rather than bouncing against a fake domain. Falls back to a
+# clearly-junk address if TEST_LEARNER_EMAIL isn't set — registration itself
+# is still tested either way, only the "does the email actually land
+# somewhere sane" nicety is lost.
+if [ -n "$TEST_LEARNER_EMAIL" ] && [[ "$TEST_LEARNER_EMAIL" == *"@"* ]]; then
+  SMOKE_REG_EMAIL="${TEST_LEARNER_EMAIL%%@*}+smoketest-$(date +%s)@${TEST_LEARNER_EMAIL##*@}"
+else
+  SMOKE_REG_EMAIL="smoketest-$(date +%s)@example.invalid"
+fi
+SMOKE_REG_PASS="Sm0keTest$(date +%s)!"
+
+reg_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}/api/auth/register" \
+  -H "Content-Type: application/json" \
+  -d "{\"email\":\"${SMOKE_REG_EMAIL}\",\"password\":\"${SMOKE_REG_PASS}\"}" \
+  --max-time 8)
+pass "POST /api/auth/register (real DB round-trip)" "$reg_code" "200"
+
+# Best-effort cleanup — never blocks or fails the script. FK order matters:
+# learner_streaks/learner_preferences reference learners.id.
+if [ "$reg_code" = "200" ]; then
+  db_exec "DELETE ls FROM learner_streaks ls JOIN learners l ON l.id=ls.learner_id WHERE l.email='${SMOKE_REG_EMAIL}';"
+  db_exec "DELETE lp FROM learner_preferences lp JOIN learners l ON l.id=lp.learner_id WHERE l.email='${SMOKE_REG_EMAIL}';"
+  db_exec "DELETE FROM learners WHERE email='${SMOKE_REG_EMAIL}';"
+  if [ -z "$MYSQL_BIN" ]; then
+    echo "WARN  mysql/mariadb CLI not found -- smoke-test account ${SMOKE_REG_EMAIL} was NOT cleaned up, delete manually"
+  fi
+fi
+
+echo ""
 if [ "$fail" -ne 0 ]; then
   echo "--- Last 30 lines of $FAIL_LOG ---"
   if [ -f "$FAIL_LOG" ]; then

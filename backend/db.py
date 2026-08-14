@@ -29,6 +29,15 @@ engine = create_async_engine(
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,  # reconnect if MariaDB dropped the connection
+    pool_recycle=1800,   # 2026-08-13: proactively replace connections older than
+                          # 30 min. pool_pre_ping alone doesn't cover a known
+                          # aiomysql edge case where a stale connection's own
+                          # ping check raises RuntimeError("...the handler is
+                          # closed") instead of the exception type SQLAlchemy's
+                          # pre-ping recovery logic catches. See PROJECT.md
+                          # PART 30. Confirm this is comfortably under MariaDB's
+                          # actual wait_timeout (SHOW VARIABLES LIKE
+                          # 'wait_timeout';) before/after deploying.
 )
 
 AsyncSessionLocal = async_sessionmaker(
