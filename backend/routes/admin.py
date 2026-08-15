@@ -48,7 +48,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, desc
+from sqlalchemy import select, text, desc, func
 from typing import Optional
 from jose import jwt, JWTError
 from pydantic import BaseModel
@@ -310,35 +310,122 @@ async def approve_listing(
     return {"ok": True, "listing": _listing_out(listing, org)}
 
 
+@router.post("/scavenger/listings/bulk-delete-pending")
+async def bulk_delete_pending_listings(
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard-delete every currently-inactive listing that has no match
+    history. Added 2026-08-15, Charbel's explicit call, prompted by 50
+    accumulated e2e-test org listings with no practical way to clear
+    them one at a time.
+
+    Same-session correction: an earlier version of this endpoint deleted
+    every is_active=False row unconditionally and hit the same FK issue
+    fixed in reject_listing() just above -- a listing that was
+    previously live and matched, then later deactivated, still has real
+    opportunity_matches rows. Rather than let one bad row 500 the whole
+    batch, this now checks match history per listing and skips (not
+    deletes) any with matches on record, reporting both counts so the
+    admin can see what actually happened instead of a silent partial
+    success or an opaque total failure.
+    """
+    result = await db.execute(
+        select(OpportunityListing).where(OpportunityListing.is_active == False)  # noqa: E712
+    )
+    listings = result.scalars().all()
+
+    if not listings:
+        return {"ok": True, "deleted": 0, "skipped": 0}
+
+    listing_ids = [l.id for l in listings]
+    match_rows = (await db.execute(
+        select(OpportunityMatch.listing_id, func.count(OpportunityMatch.id))
+        .where(OpportunityMatch.listing_id.in_(listing_ids))
+        .group_by(OpportunityMatch.listing_id)
+    )).all()
+    matched_ids = {row[0] for row in match_rows}
+
+    deleted = 0
+    skipped = 0
+    for listing in listings:
+        if listing.id in matched_ids:
+            skipped += 1
+            continue
+        await db.delete(listing)
+        deleted += 1
+    await db.commit()
+
+    logger.info(f"Bulk-deleted {deleted} pending listings, skipped {skipped} with match history")
+    return {"ok": True, "deleted": deleted, "skipped": skipped}
+
+
 @router.delete("/scavenger/listings/{listing_id}")
 async def reject_listing(
     listing_id: int,
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Hard-delete a scavenged listing (safe — no learner matches exist while
-    is_active=False). Deliberately scavenged-only (2026-07-17): unlike an
-    AI-generated draft, an org-submitted listing is a real org's real
-    submission — silently hard-deleting it isn't the right "reject" behavior.
-    Leaving it inactive (the default state until approved) is reject enough;
-    the org itself can also delete/deactivate its own listing via
-    orgs.py DELETE /api/orgs/listings/{id}."""
+    """Hard-delete a listing, AI-scavenged or org-submitted.
+
+    2026-08-15 (Charbel's explicit call, prompted by 50 accumulated
+    e2e-test org listings with no way to clear them): loosened from the
+    original 2026-07-17 scavenged-only restriction. That restriction's
+    stated safety reasoning was "no learner matches exist while
+    is_active=False" -- true for ANY inactive listing, not just
+    AI-scavenged ones, so it was gating on the wrong condition. The real
+    invariant that matters is inactivity, not source. An org's real,
+    live listing (is_active=True) is still fully protected -- delete it
+    and you'd orphan any real interest/match rows against it. An org's
+    still-pending or already-deactivated listing carries the same "no
+    matches possible" guarantee a scavenged draft does, so it's just as
+    safe to remove -- including a real org's own withdrawn/deactivated
+    listing, which is by design: the org already chose to take it down
+    (see orgs.py DELETE /api/orgs/listings/{id}); this just lets admin
+    finish the cleanup rather than leaving inactive rows around forever.
+
+    2026-08-15, same-session correction: "is_active=False implies no
+    matches" turned out to be false for a listing that was PREVIOUSLY
+    live, matched against, and later deactivated (exactly what
+    e2e_org_polis.sh's Part A/C/D flows do -- approve, match, verify
+    skills/tasks, THEN withdraw/deactivate at cleanup). Those listings
+    still have real opportunity_matches rows (and possibly chained
+    verified_skills/task_completions) pointing at them. The DB's FK
+    constraint correctly rejected the delete, but the error surfaced as
+    an uncaught IntegrityError -> generic non-JSON 500 all the way to
+    the browser. Fixed by checking for matches up front and returning a
+    clear, actionable 400 -- the actual safety invariant is "no matches
+    reference this listing", not "is_active is False"; is_active=False
+    is necessary but not sufficient.
+    """
     listing = (await db.execute(
         select(OpportunityListing).where(OpportunityListing.id == listing_id)
     )).scalar_one_or_none()
     if not listing:
         raise HTTPException(404, "Listing not found")
-    if not listing.scavenged:
+    if listing.is_active:
         raise HTTPException(
             400,
-            "This is an org-submitted listing, not an AI-scavenged draft — "
-            "it can't be deleted from here. Leave it unapproved to keep it "
-            "hidden, or ask the org to remove it themselves."
+            "This listing is live (approved and visible to learners) — "
+            "it can't be deleted from here. Ask the org to withdraw it, "
+            "or check for real learner interest/matches first."
+        )
+
+    match_count = (await db.execute(
+        select(func.count(OpportunityMatch.id)).where(OpportunityMatch.listing_id == listing_id)
+    )).scalar() or 0
+    if match_count:
+        raise HTTPException(
+            400,
+            f"This listing has {match_count} learner match"
+            f"{'es' if match_count != 1 else ''} on record (it was live at "
+            "some point) — deleting it would orphan real match history. "
+            "It's already hidden from learners; leave it as-is."
         )
 
     await db.delete(listing)
     await db.commit()
-    logger.info(f"Scavenged listing {listing_id} rejected and deleted")
+    logger.info(f"Listing {listing_id} rejected and deleted (source={'scavenger' if listing.scavenged else 'org'})")
     return {"ok": True}
 
 
@@ -1296,7 +1383,7 @@ async def admin_list_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """List sessions in the library (template browser). Paginated."""
-    from sqlalchemy import or_, func
+    from sqlalchemy import or_
 
     # Build base query
     q1 = select(Session).where(Session.completed_at.is_(None))  # Library = uncompleted sessions
@@ -1450,7 +1537,10 @@ async def admin_delete_session(
 #   GET    /api/admin/outreach              — list drafts (pending first, then newest)
 #   PATCH  /api/admin/outreach/{id}         — edit subject/body before sending
 #   POST   /api/admin/outreach/{id}/send    — send via mail.send_mail(), mark sent
-#   PATCH  /api/admin/outreach/{id}/discard — mark discarded (no hard delete)
+#   PATCH  /api/admin/outreach/{id}/discard — mark discarded
+#   DELETE /api/admin/outreach/{id}         — hard delete (discarded/sent
+#                                              only; added 2026-08-15,
+#                                              Charbel's explicit call)
 # ============================================================
 
 @router.get("/outreach")
@@ -1547,6 +1637,30 @@ async def admin_discard_outreach(
     draft.status = "discarded"
     await db.commit()
     return {"ok": True, "id": draft_id, "status": "discarded"}
+
+
+@router.delete("/outreach/{draft_id}")
+async def admin_delete_outreach(
+    draft_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Hard-delete a discarded or sent outreach draft. Charbel's explicit
+    call (2026-08-15), same pattern as the Learners hard delete (P9.2):
+    UI-gated behind a type-DELETE-to-confirm prompt. Pending drafts are
+    never deletable here -- discard or send first -- so the only ways
+    into a deletable state are actions an admin already took on purpose.
+    """
+    result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == draft_id))
+    draft = result.scalar_one_or_none()
+    if not draft:
+        raise HTTPException(404, "Outreach draft not found")
+    if draft.status == "pending":
+        raise HTTPException(400, "Cannot delete a pending draft — discard or send it first")
+
+    await db.delete(draft)
+    await db.commit()
+    return {"ok": True, "id": draft_id, "deleted": True}
 
 
 # ── P8 — Validation section (2026-07-25) ────────────────────

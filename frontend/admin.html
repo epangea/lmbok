@@ -179,7 +179,8 @@ var sessionsState = { sessions: null, total: 0, loading: false, error: null, off
 
 // ── Lecko moderation live state ──────────────────────────────
 var moderateState = { pending: null, loading: false, error: null };
-var outreachState = { drafts: null, loading: false, error: null };
+// filter: 'pending' (default, per Charbel's 2026-08-15 decision) | 'all'
+var outreachState = { drafts: null, loading: false, error: null, filter: 'pending' };
 var validationState = { tab: 'skills', skills: null, tasks: null, loading: false, error: null };
 
 // ── Auth wall ────────────────────────────────────
@@ -1190,7 +1191,7 @@ function lecsSave(leckoId) {
 // ── SCAVENGER AGENT (live) ────────────────────────
 function AdminScavenger() {
   return '<h2 style="margin-bottom:6px">Web scavenger agent</h2>'
-    + '<p style="margin-bottom:20px">Review listings before they go live — both AI-scavenged drafts and listings submitted directly by organizations. Approve to make visible to learners; AI drafts can also be rejected/discarded (org submissions can\u2019t be deleted here — leave unapproved to keep hidden).</p>'
+    + '<p style="margin-bottom:20px">Review listings before they go live — both AI-scavenged drafts and listings submitted directly by organizations. Approve to make visible to learners, or delete while still pending/inactive to remove it entirely. Once a listing is live, delete no longer applies here — ask the org to withdraw it.</p>'
     + '<div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">'
     + '<button class="btn btn-wave btn-sm" id="scav-run-btn" onclick="scavRun()">&#9654; Run scavenger now</button>'
     + '<button class="btn btn-ghost btn-sm" onclick="showAdmin(\'outreach\')">View outreach queue →</button>'
@@ -1220,7 +1221,10 @@ function scavRenderListings(listings) {
   var approved = listings.filter(function(l) { return  l.is_active; });
   var html = '';
   if (pending.length) {
-    html += '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px">Pending review (' + pending.length + ')</div>';
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      + '<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Pending review (' + pending.length + ')</div>'
+      + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="scavBulkDeletePending(' + pending.length + ')">✕ Delete all pending (' + pending.length + ')</button>'
+      + '</div>';
     html += pending.map(scavCard).join('');
   }
   if (approved.length) {
@@ -1242,7 +1246,7 @@ function scavCard(r) {
   var actions = r.is_active
     ? '<span class="badge badge-green">✓ Live</span>'
     : '<button class="btn btn-wave btn-sm" onclick="scavApprove(' + r.id + ')">✓ Approve</button>'
-      + (r.source === 'org' ? '' : ' <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="scavReject(' + r.id + ')">✕ Reject</button>');
+      + ' <button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="scavReject(' + r.id + ', ' + escH(JSON.stringify(r.title || ('listing #' + r.id))) + ')">✕ Delete</button>';
   return '<div class="scav-result">'
     + '<div style="flex:1"><h4>' + r.title + '</h4>'
     + '<p style="margin-bottom:6px">' + (r.description || '') + '</p>'
@@ -1293,11 +1297,36 @@ function scavApprove(id) {
     .catch(function(e) { alert('Approve failed: ' + e.message); });
 }
 
-function scavReject(id) {
-  if (!confirm('Delete this listing? Cannot be undone.')) return;
+function scavReject(id, label) {
+  // Two-step confirm (2026-08-15), matching learnersDelete/outreachHardDelete --
+  // this can now delete a real org's real submission (if inactive), not just
+  // an AI-scavenged draft, so it gets the same friction as other hard deletes.
+  if (!confirm('Permanently delete "' + label + '"? This cannot be undone. Type DELETE on the next prompt to confirm.')) return;
+  var typed = prompt('Type DELETE to permanently remove this listing:');
+  if (typed !== 'DELETE') { alert('Cancelled — no changes made.'); return; }
   adminFetch('/admin/scavenger/listings/' + id, { method: 'DELETE' })
     .then(function() { scavLoad(); })
-    .catch(function(e) { alert('Reject failed: ' + e.message); });
+    .catch(function(e) { alert('Delete failed: ' + (e.message || 'unknown')); });
+}
+
+function scavBulkDeletePending(count) {
+  // Higher-stakes typed confirm than a single delete (DELETE ALL, not just
+  // DELETE) since this removes every currently-pending/inactive listing in
+  // one shot — including any real org's real still-pending submissions,
+  // not only test/junk ones. Added 2026-08-15, Charbel's explicit call.
+  if (!confirm('Permanently delete all ' + count + ' pending listings? This cannot be undone. Type DELETE ALL on the next prompt to confirm.')) return;
+  var typed = prompt('Type DELETE ALL to permanently remove all ' + count + ' pending listings:');
+  if (typed !== 'DELETE ALL') { alert('Cancelled — no changes made.'); return; }
+  adminFetch('/admin/scavenger/listings/bulk-delete-pending', { method: 'POST' })
+    .then(function(res) {
+      var deleted = (res && res.deleted != null) ? res.deleted : 0;
+      var skipped = (res && res.skipped != null) ? res.skipped : 0;
+      var msg = 'Deleted ' + deleted + ' pending listing' + (deleted === 1 ? '' : 's') + '.';
+      if (skipped) msg += ' Skipped ' + skipped + ' with real learner match history (kept, not deleted).';
+      alert(msg);
+      scavLoad();
+    })
+    .catch(function(e) { alert('Bulk delete failed: ' + (e.message || 'unknown')); });
 }
 
 // ── OUTREACH ──────────────────────────────────────
@@ -1306,8 +1335,12 @@ function AdminOutreach() {
   var body = '<h2 style="margin-bottom:6px">Outreach queue</h2>'
     + '<p style="margin-bottom:20px;font-size:13px;color:var(--text3)">Email drafts ready for review and sending. Each email notifies an organization that we have learners who have proven the skills they need. Matching is placeholder for now — real org/learner auto-matching lands in a later pass.</p>';
 
-  body += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
+  body += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap">'
     + '<button class="btn btn-ghost btn-sm" onclick="outreachLoad()">&#8635; Refresh</button>'
+    + '<div style="display:flex;gap:4px;margin-left:4px">'
+    + '<button class="btn btn-sm ' + (s.filter === 'pending' ? 'btn-wave' : 'btn-ghost') + '" onclick="outreachSetFilter(\'pending\')">Pending</button>'
+    + '<button class="btn btn-sm ' + (s.filter === 'all' ? 'btn-wave' : 'btn-ghost') + '" onclick="outreachSetFilter(\'all\')">All</button>'
+    + '</div>'
     + (s.loading ? '<span style="font-size:11px;color:var(--text3)">Loading...</span>' : '')
     + (s.error ? '<span style="font-size:11px;color:var(--coral)">' + escH(s.error) + '</span>' : '')
     + '</div>';
@@ -1317,12 +1350,24 @@ function AdminOutreach() {
     return '<div class="page">' + body + '</div>';
   }
 
+  // Default view is Pending-only (2026-08-15, Charbel's call) -- discarded
+  // and sent drafts accumulate forever server-side (GET returns everything,
+  // by design, so nothing already-sent silently vanishes from an admin who
+  // wants to see it) but shouldn't clutter the queue an admin actually has
+  // to act on day to day. 'All' shows everything, same as before this change.
+  var visibleDrafts = s.filter === 'all' ? s.drafts : s.drafts.filter(function(d) { return d.status === 'pending'; });
+
   if (!s.drafts.length) {
     body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No outreach drafts yet.</div>';
     return '<div class="page">' + body + '</div>';
   }
 
-  body += s.drafts.map(function(d) {
+  if (!visibleDrafts.length) {
+    body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No pending drafts. <a href="#" onclick="outreachSetFilter(\'all\');return false" style="color:var(--wave)">Show all (' + s.drafts.length + ')</a></div>';
+    return '<div class="page">' + body + '</div>';
+  }
+
+  body += visibleDrafts.map(function(d) {
     var badge = d.status === 'pending'
       ? '<span class="badge badge-amber">Pending review</span>'
       : d.status === 'sent'
@@ -1347,7 +1392,7 @@ function AdminOutreach() {
             + '<button class="btn btn-ghost btn-sm" onclick="outreachSaveDraft(' + d.id + ')">Save edits</button>'
             + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="outreachDiscard(' + d.id + ')">Discard</button>'
             + '</div>'
-          : '')
+          : '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="outreachHardDelete(' + d.id + ', ' + escH(JSON.stringify(d.org_name || ('draft #' + d.id))) + ')">Delete permanently</button>')
       + '</div>';
   }).join('');
 
@@ -1402,6 +1447,26 @@ function outreachDiscard(draftId) {
     outreachLoad();
   }).catch(function(e) {
     alert('Discard failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function outreachSetFilter(f) {
+  outreachState.filter = f;
+  renderAdmin();
+}
+
+function outreachHardDelete(draftId, label) {
+  // Same two-step confirm as learnersDelete() (2026-07-24, P9.2) --
+  // deliberately consistent UX for any admin action that's truly
+  // irreversible. Only reachable from discarded/sent cards in the UI;
+  // the backend enforces the same rule independently (400 on pending).
+  if (!confirm('Permanently delete outreach draft for ' + label + '? This cannot be undone. Type DELETE on the next prompt to confirm.')) return;
+  var typed = prompt('Type DELETE to permanently remove this draft:');
+  if (typed !== 'DELETE') { alert('Cancelled — no changes made.'); return; }
+  adminFetch('/admin/outreach/' + draftId, 'DELETE').then(function() {
+    outreachLoad();
+  }).catch(function(e) {
+    alert('Delete failed: ' + (e.message || 'unknown'));
   });
 }
 
@@ -2222,57 +2287,128 @@ function AdminSettings() {
 
   body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
 
+  // Renders one setting's <label>/description/<input> block. Extracted
+  // from the old flat per-category loop (2026-08-15) so the same field
+  // markup can be reused both for categories that stay flat and for the
+  // AI card's new provider sub-groups below -- no change to widget-type
+  // detection or data-setting/data-type attributes, so settingsSaveCategory()
+  // needs no changes.
+  function renderSettingField(it) {
+    var f = '<div class="form-group">';
+    f += '<label class="form-label">' + escH(it.key) + '</label>';
+    if (it.desc) {
+      f += '<p style="font-size:11px;color:var(--text3);margin:0 0 4px 0">' + escH(it.desc) + '</p>';
+    }
+    // Special widget types
+    if (it.key === 'default_language') {
+      var langs = [['en','English'],['fr','French'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ar','Arabic'],['de','German'],['ru','Russian'],['hi','Hindi'],['bn','Bengali'],['pt','Portuguese']];
+      f += '<select class="form-input" data-setting="' + escH(it.key) + '">';
+      langs.forEach(function(l) {
+        f += '<option value="' + l[0] + '"' + (l[0] === it.value ? ' selected' : '') + '>' + l[1] + '</option>';
+      });
+      f += '</select>';
+    } else if (it.key === 'ai_provider') {
+      // 'gemini' was missing here despite ai_client.py supporting it as
+      // a full third provider since P41 (2026-07-29) -- admin.html's own
+      // module comments in gemini_generate.py claimed this dropdown
+      // already had it. Confirmed 2026-08-04 it never actually did:
+      // there was no way to select Gemini as the primary provider from
+      // this UI at all. Added here alongside the matching status card
+      // in AdminAI() below.
+      f += '<select class="form-input" data-setting="' + escH(it.key) + '">';
+      [['groq','Groq (free)'],['ollama','Ollama (local)'],['gemini','Gemini (free)'],['library','Library only']].forEach(function(p) {
+        f += '<option value="' + p[0] + '"' + (p[0] === it.value ? ' selected' : '') + '>' + p[1] + '</option>';
+      });
+      f += '</select>';
+    } else if (it.key.indexOf('_verification') !== -1 || it.key.indexOf('allow_') !== -1 || it.key.indexOf('show_') !== -1 || it.key.indexOf('auto_send') !== -1 || it.key.indexOf('_enabled') !== -1) {
+      // Boolean
+      var isTrue = it.value === 'true' || it.value === true || it.value === '1';
+      f += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">';
+      f += '<input type="checkbox" data-setting="' + escH(it.key) + '" data-type="bool"' + (isTrue ? ' checked' : '') + '/>';
+      f += ' Enabled</label>';
+    } else if (it.key.indexOf('budget') !== -1 || it.key.indexOf('min_library') !== -1 || it.key.indexOf('_limit') !== -1 || it.key.indexOf('_threshold') !== -1 || it.key.indexOf('_ttl') !== -1) {
+      // Numeric
+      f += '<input class="form-input" type="number" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '" style="max-width:120px"/>';
+    } else if (it.key === 'admin_email' || it.key.indexOf('_email') !== -1) {
+      // Email
+      f += '<input class="form-input" type="email" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
+    } else if (it.key === 'admin_key' || it.key.indexOf('_key') !== -1) {
+      // Password
+      f += '<input class="form-input" type="password" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
+    } else {
+      // Text
+      f += '<input class="form-input" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
+    }
+    f += '</div>';
+    return f;
+  }
+
+  // AI card sub-grouping (2026-08-15): the 'ai' category had grown to 12
+  // flat keys (3 providers x 2 models each, plus provider/budget/breaker/
+  // reuse behavior settings) with no visual separation -- see PROJECT.md
+  // gotcha entry for the UX review that prompted this. Groups by provider
+  // prefix so a future 4th provider (e.g. a new ai_model_<x>_large/small
+  // pair) automatically gets its own sub-block without touching this code,
+  // as long as its keys follow the ai_model_<provider>_<size> convention.
+  // Deliberately kept in the SAME card with the SAME single Save button --
+  // this is a visual regroup only, not a new card/section/endpoint. Live
+  // status stays on the separate AI Engine page (AdminAI()); this is
+  // config only, on purpose -- see PROJECT.md for why those stay split.
+  function aiProviderLabel(id) {
+    var known = { groq: 'Groq', ollama: 'Ollama', gemini: 'Gemini' };
+    return known[id] || (id.charAt(0).toUpperCase() + id.slice(1));
+  }
+
+  function renderAiCategory(items) {
+    var providerKeyRe = /^ai_model_([a-z0-9]+)_(large|small)$/;
+    var byProvider = {};   // provider id -> [items]
+    var providerOrder = [];
+    var behaviorItems = [];
+    var topItem = null;    // ai_provider selector, shown above the provider blocks
+
+    items.forEach(function(it) {
+      var m = it.key.match(providerKeyRe);
+      if (it.key === 'ai_provider') {
+        topItem = it;
+      } else if (m) {
+        var pid = m[1];
+        if (!byProvider[pid]) { byProvider[pid] = []; providerOrder.push(pid); }
+        byProvider[pid].push(it);
+      } else {
+        behaviorItems.push(it);
+      }
+    });
+
+    var out = '';
+    if (topItem) out += renderSettingField(topItem);
+
+    if (providerOrder.length) {
+      out += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:4px 0 14px">';
+      providerOrder.forEach(function(pid) {
+        out += '<div style="border:1px solid var(--border,rgba(255,255,255,.08));border-radius:8px;padding:10px 12px">';
+        out += '<h4 style="margin:0 0 8px;font-size:12px;letter-spacing:.02em;color:var(--text2);text-transform:uppercase">' + escH(aiProviderLabel(pid)) + '</h4>';
+        byProvider[pid].forEach(function(it) { out += renderSettingField(it); });
+        out += '</div>';
+      });
+      out += '</div>';
+    }
+
+    if (behaviorItems.length) {
+      out += '<h4 style="margin:4px 0 8px;font-size:12px;letter-spacing:.02em;color:var(--text2);text-transform:uppercase">Behavior</h4>';
+      behaviorItems.forEach(function(it) { out += renderSettingField(it); });
+    }
+
+    return out;
+  }
+
   catMeta.forEach(function(cm) {
     var items = byCat[cm.id] || [];
     body += '<div class="card"><h3 style="margin-bottom:14px">' + cm.label + '</h3>';
-    items.forEach(function(it) {
-      body += '<div class="form-group">';
-      body += '<label class="form-label">' + escH(it.key) + '</label>';
-      if (it.desc) {
-        body += '<p style="font-size:11px;color:var(--text3);margin:0 0 4px 0">' + escH(it.desc) + '</p>';
-      }
-      // Special widget types
-      if (it.key === 'default_language') {
-        var langs = [['en','English'],['fr','French'],['es','Spanish'],['vi','Vietnamese'],['zh','Chinese'],['ar','Arabic'],['de','German'],['ru','Russian'],['hi','Hindi'],['bn','Bengali'],['pt','Portuguese']];
-        body += '<select class="form-input" data-setting="' + escH(it.key) + '">';
-        langs.forEach(function(l) {
-          body += '<option value="' + l[0] + '"' + (l[0] === it.value ? ' selected' : '') + '>' + l[1] + '</option>';
-        });
-        body += '</select>';
-      } else if (it.key === 'ai_provider') {
-        // 'gemini' was missing here despite ai_client.py supporting it as
-        // a full third provider since P41 (2026-07-29) -- admin.html's own
-        // module comments in gemini_generate.py claimed this dropdown
-        // already had it. Confirmed 2026-08-04 it never actually did:
-        // there was no way to select Gemini as the primary provider from
-        // this UI at all. Added here alongside the matching status card
-        // in AdminAI() below.
-        body += '<select class="form-input" data-setting="' + escH(it.key) + '">';
-        [['groq','Groq (free)'],['ollama','Ollama (local)'],['gemini','Gemini (free)'],['library','Library only']].forEach(function(p) {
-          body += '<option value="' + p[0] + '"' + (p[0] === it.value ? ' selected' : '') + '>' + p[1] + '</option>';
-        });
-        body += '</select>';
-      } else if (it.key.indexOf('_verification') !== -1 || it.key.indexOf('allow_') !== -1 || it.key.indexOf('show_') !== -1 || it.key.indexOf('auto_send') !== -1 || it.key.indexOf('_enabled') !== -1) {
-        // Boolean
-        var isTrue = it.value === 'true' || it.value === true || it.value === '1';
-        body += '<label style="display:flex;align-items:center;gap:8px;cursor:pointer">';
-        body += '<input type="checkbox" data-setting="' + escH(it.key) + '" data-type="bool"' + (isTrue ? ' checked' : '') + '/>';
-        body += ' Enabled</label>';
-      } else if (it.key.indexOf('budget') !== -1 || it.key.indexOf('min_library') !== -1 || it.key.indexOf('_limit') !== -1 || it.key.indexOf('_threshold') !== -1 || it.key.indexOf('_ttl') !== -1) {
-        // Numeric
-        body += '<input class="form-input" type="number" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '" style="max-width:120px"/>';
-      } else if (it.key === 'admin_email' || it.key.indexOf('_email') !== -1) {
-        // Email
-        body += '<input class="form-input" type="email" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
-      } else if (it.key === 'admin_key' || it.key.indexOf('_key') !== -1) {
-        // Password
-        body += '<input class="form-input" type="password" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
-      } else {
-        // Text
-        body += '<input class="form-input" value="' + escH(it.value) + '" data-setting="' + escH(it.key) + '"/>';
-      }
-      body += '</div>';
-    });
+    if (cm.id === 'ai') {
+      body += renderAiCategory(items);
+    } else {
+      items.forEach(function(it) { body += renderSettingField(it); });
+    }
     body += '<button class="btn btn-wave btn-sm" onclick="settingsSaveCategory(\'' + cm.id + '\')">Save ' + cm.label + '</button>';
     body += '</div>';
   });
