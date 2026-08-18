@@ -492,6 +492,15 @@ async def ai_complete(
         try:
             raw, latency_ms = await _CALLERS[prov](model, msgs, max_tokens, temperature, response_format)
             content = _parse(raw, response_format)
+            # 2026.119: a 200 response with genuinely empty content (a real,
+            # observed failure mode -- provider returned successfully but
+            # said nothing) was previously treated as a SUCCESS: no failover
+            # to the next provider, no breaker penalty, and the empty string
+            # sailed on to become a blank bubble for the learner. Text-format
+            # calls are the ones this actually reaches the user raw (JSON
+            # calls fail their own shape check above and are already caught).
+            if response_format == "text" and not content:
+                raise RuntimeError("provider returned an empty completion")
         except Exception as e:
             errors.append(f"{prov}: {str(e)[:120]}")
             continue

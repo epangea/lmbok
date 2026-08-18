@@ -2323,7 +2323,9 @@ async function sendSandboxMessage(inputId, phaseLabel) {
       messages: S.sandboxMessages,
       context:  buildSandboxContext(phaseLabel),
     });
-    S.sandboxMessages = S.sandboxMessages.concat([{role:'assistant', content:res.reply}]);
+    S.sandboxMessages = S.sandboxMessages.concat([
+      {role:'assistant', content:res.reply, media_hint: res.media_hint || null}
+    ]);
 
     // Autosave every 4 exchanges (2 user + 2 assistant = 4 messages)
     if (S.sandboxMessages.length % 4 === 0) triggerProfileUpdate();
@@ -2342,6 +2344,26 @@ async function sendSandboxMessage(inputId, phaseLabel) {
   }, 60);
 }
 
+// 2026.116: opt-in image/video search chips for a companion reply that
+// plainly defined a concrete physical/visual term (see [[MEDIA: ...]]
+// marker parsing in backend/routes/generate.py::scaffold_companion).
+// Deliberately NOT embedded media — just two links the learner can choose
+// to open, so nothing downloads or preloads for anyone on a slow
+// connection who doesn't tap them. Query is a plain search term parsed
+// server-side out of the model's own reply, never a model-supplied URL.
+function mediaHintChipsHTML(hint) {
+  if (!hint) return '';
+  var q = encodeURIComponent(hint);
+  return '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap">'
+    + '<a href="https://www.google.com/search?q='+q+'&tbm=isch" target="_blank" rel="noopener" '
+    + 'style="font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--border);color:var(--text3);text-decoration:none;background:var(--bg4)">'
+    + '🔍 See a photo</a>'
+    + '<a href="https://www.youtube.com/results?search_query='+q+'" target="_blank" rel="noopener" '
+    + 'style="font-size:11px;padding:4px 9px;border-radius:999px;border:1px solid var(--border);color:var(--text3);text-decoration:none;background:var(--bg4)">'
+    + '▶ Watch a short video (opens externally)</a>'
+    + '</div>';
+}
+
 function renderSandboxThread(inputId, phaseLabel, showGenerateBtn) {
   var msgs = S.sandboxMessages;
   var threadHTML = msgs.length === 0
@@ -2352,7 +2374,9 @@ function renderSandboxThread(inputId, phaseLabel, showGenerateBtn) {
           + '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;background:'+(isUser?'var(--bg4)':'var(--bg3)')+'">'
           + (isUser ? '👤' : '🌊') + '</div>'
           + '<div style="max-width:85%;font-size:13px;line-height:1.65;padding:8px 12px;border-radius:12px;'+(isUser?'border-radius:12px 4px 12px 12px;background:var(--bg4);color:var(--text)':'border-radius:4px 12px 12px 12px;background:var(--bg3);color:var(--text2)')+'">'
-          + m.content + '</div></div>';
+          + m.content
+          + (!isUser ? mediaHintChipsHTML(m.media_hint) : '')
+          + '</div></div>';
       }).join('');
 
   if (S.sandboxLoading) {
@@ -3569,7 +3593,7 @@ async function sendAssessCompanionMessage() {
         reflect_summary: S.reflectText || null,
       },
     });
-    S.assessCompanionMessages = S.assessCompanionMessages.concat([{role:'assistant', content:res.reply}]);
+    S.assessCompanionMessages = S.assessCompanionMessages.concat([{role:'assistant', content:res.reply, media_hint: res.media_hint || null}]);
     S.assessCompanionResolved = !!res.resolved;
     if (res.score_update !== null && res.score_update !== undefined) {
       S.assessCompanionScoreUpdate = res.score_update;
@@ -3604,7 +3628,9 @@ function renderAssessCompanionModal() {
       + '<div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;background:'+(isUser?'var(--bg4)':'var(--bg3)')+'">'
       + (isUser ? '👤' : '🌊') + '</div>'
       + '<div style="max-width:85%;font-size:13px;line-height:1.65;padding:8px 12px;border-radius:12px;'+(isUser?'border-radius:12px 4px 12px 12px;background:var(--bg4);color:var(--text)':'border-radius:4px 12px 12px 12px;background:var(--bg3);color:var(--text2)')+'">'
-      + m.content + '</div></div>';
+      + m.content
+      + (!isUser ? mediaHintChipsHTML(m.media_hint) : '')
+      + '</div></div>';
   }).join('');
 
   if (S.assessCompanionLoading) {

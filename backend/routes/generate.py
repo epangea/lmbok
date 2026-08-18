@@ -16,6 +16,7 @@
 
 import json
 import random
+import re
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -721,6 +722,12 @@ class ScaffoldRequest(BaseModel):
 
 class ScaffoldResponse(BaseModel):
     reply: str
+    # 2026.116: short search term for an OPT-IN image/video lookup chip,
+    # e.g. "slow squat". None when the reply doesn't warrant one. Never a
+    # URL from the model — the backend only ever hands back a search term;
+    # the frontend builds the actual search URLs itself (see media_hint
+    # parsing below and renderSandboxThread in app.js).
+    media_hint: str | None = None
 
 
 # ============================================================
@@ -757,6 +764,10 @@ class AssessCompanionResponse(BaseModel):
     reply:        str
     resolved:     bool           # True once the AI considers the discussion concluded
     score_update: int | None = None  # non-null only when the AI is (re)setting the score this turn
+    # 2026.117: same opt-in image/video lookup hint as ScaffoldResponse
+    # (see 2026.116) -- a plain search term the model supplies via the JSON
+    # response, never a URL. None when the reply doesn't warrant one.
+    media_hint:   str | None = None
 
 
 # ============================================================
@@ -944,6 +955,11 @@ TONE AND STYLE:
 - Draw on the full breadth of human knowledge — science, art, philosophy, daily life, community — wherever it serves the learner's curiosity
 - The platform's philosophy: learning should feel like surfing, not drowning. You are the wave, not the shore.
 
+CLARIFICATION vs. REFLECTION — an important distinction:
+- If the learner is asking what a word, term, or instruction in their challenge MEANS (e.g. "what's a slow squat", "what do you mean by arm sweep") — that is comprehension, not the reflective answer. Answer it directly and plainly in 1–2 sentences, then hand the moment back to the exercise with a short Socratic follow-up. Do not deflect a genuine "I don't know what this word means" question back at them with more questions — that's not Socratic, it's just confusing.
+- Stay fully Socratic only on questions about the MEANING of their own experience, choices, or conclusions — that's the part worth them discovering themselves.
+- When (and only when) you plainly define a concrete, physical, visual, or gross-motor term this way, end your reply on its own new line with exactly: [[MEDIA: short search term]] — e.g. [[MEDIA: slow squat exercise]]. Use this only for something a photo or short video would genuinely clarify faster than words (a movement, a pose, a physical object). Never use it for abstract, emotional, or reflective content. Omit it entirely otherwise.
+
 Respond only with your reply to the learner. No preamble, no meta-commentary."""
 
     chat_messages = [{"role": m.role, "content": m.content} for m in req.messages]
@@ -959,7 +975,17 @@ Respond only with your reply to the learner. No preamble, no meta-commentary."""
         temperature=0.75,
     )
 
-    return ScaffoldResponse(reply=ai_resp.content)
+    # 2026.116: strip the optional [[MEDIA: term]] marker out of the visible
+    # reply. Only ever a plain search term, never a URL — the model can't
+    # inject a link this way, the frontend builds the actual search URLs.
+    raw = ai_resp.content
+    media_hint = None
+    m = re.search(r"\n?\[\[MEDIA:\s*(.+?)\s*\]\]\s*$", raw)
+    if m:
+        media_hint = m.group(1).strip()[:80] or None  # hard length cap, defence in depth
+        raw = raw[:m.start()].rstrip()
+
+    return ScaffoldResponse(reply=raw, media_hint=media_hint)
 
 
 @router.post("/assess-companion", response_model=AssessCompanionResponse)
@@ -1007,9 +1033,11 @@ YOUR ROLE:
 - Warm, curious, short responses: 2-4 sentences, usually ending in one open question, until the discussion is genuinely settled.
 - Never say "great question" or hollow affirmations.
 
+CLARIFICATION vs. REASONING — an important distinction (2026.116/2026.117, same principle as the sandbox companion): if the learner is asking what a WORD in the question or options means, not defending their reasoning, that's comprehension, not the thing you're evaluating. Answer it directly and plainly in 1–2 sentences, then return to the Socratic evaluation of their actual reasoning. Don't deflect a genuine "I don't know what this word means" with more questions — stay Socratic only on whether their reasoning about the concept holds up, not on vocabulary. When you plainly define a concrete, physical, visual, or gross-motor term this way, set the "media_hint" field below to a short search term (e.g. "slow squat exercise"); omit it (null) otherwise, and never for abstract or reflective content.
+
 RESPONSE FORMAT — this is critical:
 Respond with ONLY a JSON object, no preamble, no markdown fences, no other text:
-{{"reply": "<your message to the learner>", "resolved": <true if this discussion has reached a real conclusion, otherwise false>, "score_update": <an integer 0-100 if you are now confident enough to set/raise the learner's score for this assess, otherwise null>}}
+{{"reply": "<your message to the learner>", "resolved": <true if this discussion has reached a real conclusion, otherwise false>, "score_update": <an integer 0-100 if you are now confident enough to set/raise the learner's score for this assess, otherwise null>, "media_hint": <a short search term string if this reply plainly defined a concrete physical/visual term, otherwise null>}}
 
 Only set "resolved": true and a non-null "score_update" once you have genuinely evaluated their reasoning (through actual back-and-forth, not on the very first message) and reached a real conclusion — either that their answer holds up, that more than one answer is valid, or that the answer key's option is indeed the best one and they now understand why. Keep "score_update" null and "resolved": false while the conversation is still open."""
 
@@ -1048,14 +1076,17 @@ Only set "resolved": true and a non-null "score_update" once you have genuinely 
         score_update = parsed.get("score_update", None)
         if score_update is not None:
             score_update = max(0, min(100, int(score_update)))
+        media_hint = parsed.get("media_hint", None)
+        if media_hint is not None:
+            media_hint = str(media_hint).strip()[:80] or None  # hard length cap, defence in depth
         if not reply_text:
             raise ValueError("empty reply")
     except Exception:
         # Model didn't return valid JSON — fail soft with the raw text as the
         # reply rather than erroring the whole conversation out for the learner.
-        reply_text, resolved, score_update = raw, False, None
+        reply_text, resolved, score_update, media_hint = raw, False, None, None
 
-    return AssessCompanionResponse(reply=reply_text, resolved=resolved, score_update=score_update)
+    return AssessCompanionResponse(reply=reply_text, resolved=resolved, score_update=score_update, media_hint=media_hint)
 
 
 # ============================================================
