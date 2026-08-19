@@ -32,7 +32,7 @@
 // bump doesn't cover them -- bump THIS constant whenever any file under
 // lang/ changes content, same deploy discipline as app.html's ASSET_VERSION
 // for app.js/app.css.
-const LANG_ASSET_VERSION = '20260722a';
+const LANG_ASSET_VERSION = '20260817b';
 
 
 
@@ -318,6 +318,7 @@ const S = {
   peripatosSaveStatus: null,      // null | 'saving' | 'saved' | 'error'
   learnerProfile: null,  // accumulated life-CV string (loaded from /learners/me)
   language:    localStorage.getItem('fl_lang') || landingPageLang() || 'en',
+  voiceMode:   localStorage.getItem('fl_voice') === '1', // 2026-08-17: hands-free session mode (listen + speak-to-answer)
   stoaPrompt:   '',      // prompt used for current entry
   stoaEntries:  null,    // loaded reflection entries (null = not yet fetched)
   stoaSessionId: null,   // session_id to link if coming from Academy
@@ -971,6 +972,16 @@ const LANG = {  // Only English ships inline; other languages load
     'lang.translate_page_short':'Translate page',
     'lang.translate_session':'Translate session content in-place',
     'lang.translate_short':'Translate',
+    'voice.toggle_on':'Turn on voice mode — listen to prompts, answer by speaking',
+    'voice.toggle_off':'Turn off voice mode',
+    'voice.listen':'Listen',
+    'voice.stop':'Stop',
+    'voice.record_answer':'Answer by voice',
+    'voice.recording':'Listening… tap to stop',
+    'voice.options_prefix':'Options:',
+    'voice.unsupported':'Voice features aren\u2019t supported in this browser yet. Try Chrome or Edge.',
+    'voice.mic_unsupported':'Voice answering isn\u2019t supported in this browser. You can still type your answer.',
+    'voice.transcribing_error':'Couldn\u2019t hear that clearly — please try again or type your answer.',
     'mouseion.lmbok_full':'Life Management Body of Knowledge',
     'mouseion.lmbok_modal_body':'The LMBoK organises everything a human being can learn, develop, and master into 15 arts across three domains — Being, Becoming, and Connecting. Rooted in the belief that free, open, lifelong learning belongs to everyone, it maps human development into measurable skills that grow at your own pace, guided by curiosity and owned by no one but you.',
     'mouseion.placeholder':'What are you thinking about, struggling with, or curious about today? (optional)',
@@ -1898,6 +1909,152 @@ function Dashboard() {
 // ══════════════════════════════════════════════════
 const phaseNames = ['Warm-up','Explore','Challenge','Reflect','Assess'];
 
+// ── Voice mode (2026-08-17) ──────────────────────────────────
+// Browser-native Web Speech APIs only — no server round-trip, no cost,
+// keeps this free on low-end devices/2G (same spirit as the i18n work).
+// Synthesis (listen) and Recognition (speak-to-answer) are feature-detected
+// independently: a browser with only one of the two still gets partial
+// value instead of an all-or-nothing gate.
+var VOICE_SYNTH_OK = typeof window !== 'undefined' && 'speechSynthesis' in window;
+var VOICE_RECOG_OK = typeof window !== 'undefined' && !!(window.SpeechRecognition || window.webkitSpeechRecognition);
+
+var VOICE_BCP47 = {
+  en:'en-US', fr:'fr-FR', es:'es-ES', de:'de-DE',
+  ru:'ru-RU', vi:'vi-VN', zh:'zh-CN', ar:'ar-SA',
+};
+function voiceLangTag(code) { return VOICE_BCP47[code] || 'en-US'; }
+
+// Session content (warmup_prompt etc.) is inserted as HTML elsewhere in this
+// file; strip it down to plain text before handing it to the synthesizer.
+function stripForSpeech(html) {
+  var d = document.createElement('div');
+  d.innerHTML = html || '';
+  return (d.textContent || d.innerText || '').replace(/\s+/g, ' ').trim();
+}
+
+var voiceLastSpokenPhase = -1;   // re-armed to -1 on toggle-on and on new session load
+var voiceRecognition     = null; // active SpeechRecognition instance, or null
+var voiceRecordingField  = null; // textarea id currently being dictated into, or null
+var voiceSpeaking        = false; // true while an utterance is actively playing
+
+// Stops any narration in progress. Safe to call even when nothing is
+// playing (no-op). Used by: the Listen/Stop toggle, starting a mic
+// recording (never talk over the learner), and phase navigation (Back/
+// Next/close) so leaving a phase always silences it.
+function stopSpeaking() {
+  if (VOICE_SYNTH_OK) window.speechSynthesis.cancel();
+  if (voiceSpeaking) { voiceSpeaking = false; set({}); }
+}
+
+window.toggleVoiceMode = function() {
+  if (!VOICE_SYNTH_OK) { alert(T('voice.unsupported')); return; }
+  if (voiceRecognition) { voiceRecognition.stop(); }
+  window.speechSynthesis.cancel();
+  voiceSpeaking = false;
+  var next = !S.voiceMode;
+  localStorage.setItem('fl_voice', next ? '1' : '0');
+  voiceLastSpokenPhase = -1; // speak the current phase right away if turning on
+  set({voiceMode: next});
+};
+
+function speakText(text) {
+  if (!VOICE_SYNTH_OK || !text) return;
+  window.speechSynthesis.cancel(); // one utterance at a time
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = voiceLangTag(S.language);
+  u.onstart = function() { voiceSpeaking = true; set({}); };
+  u.onend   = function() { voiceSpeaking = false; set({}); };
+  u.onerror = function() { voiceSpeaking = false; set({}); };
+  window.speechSynthesis.speak(u);
+}
+
+function getPhaseSpeakText(p) {
+  if (!currentSession) return '';
+  if (p === 0) return stripForSpeech(currentSession.warmup_prompt || '');
+  if (p === 1) return stripForSpeech(currentSession.explore_content || '');
+  if (p === 2) return stripForSpeech(currentSession.challenge_prompt || '');
+  if (p === 3) return stripForSpeech(currentSession.reflect_prompt || '');
+  if (p === 4) {
+    var aq = currentSession.assess_question;
+    if (!aq) return '';
+    var opts = (aq.options || []).map(function(o, i){ return (i+1) + '. ' + o; }).join('. ');
+    return stripForSpeech(aq.question) + '. ' + T('voice.options_prefix') + ' ' + opts;
+  }
+  return '';
+}
+
+window.speakCurrentPhase = function() {
+  if (voiceSpeaking) { stopSpeaking(); return; }
+  voiceLastSpokenPhase = S.phase;
+  speakText(getPhaseSpeakText(S.phase));
+};
+
+window.startVoiceInput = function(fieldId, stateKey) {
+  if (!VOICE_RECOG_OK) { alert(T('voice.mic_unsupported')); return; }
+  stopSpeaking(); // never talk over the learner while they're answering
+  if (voiceRecognition && voiceRecordingField === fieldId) {
+    voiceRecognition.stop(); // tap again to stop early
+    return;
+  }
+  if (voiceRecognition) { voiceRecognition.stop(); }
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  var rec = new SR();
+  rec.lang = voiceLangTag(S.language);
+  rec.continuous = true;
+  rec.interimResults = true;
+  var el = document.getElementById(fieldId);
+  var base = el ? el.value : (S[stateKey] || '');
+  if (base && !/\s$/.test(base)) base += ' ';
+  rec.onresult = function(e) {
+    var finalChunk = '', interim = '';
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      var t = e.results[i][0].transcript;
+      if (e.results[i].isFinal) { finalChunk += t + ' '; } else { interim += t; }
+    }
+    if (finalChunk) { base += finalChunk; }
+    var live = document.getElementById(fieldId);
+    if (live) { live.value = base + interim; }
+    S[stateKey] = base.trim();
+  };
+  rec.onerror = function(e) {
+    if (e.error !== 'no-speech' && e.error !== 'aborted') { alert(T('voice.transcribing_error')); }
+  };
+  rec.onend = function() {
+    if (voiceRecordingField === fieldId) {
+      voiceRecognition = null;
+      voiceRecordingField = null;
+      set({});
+    }
+  };
+  voiceRecognition = rec;
+  voiceRecordingField = fieldId;
+  try { rec.start(); } catch (e) { /* ignore double-start */ }
+  set({});
+};
+
+function micButton(fieldId, stateKey) {
+  if (!S.voiceMode) return '';
+  if (!VOICE_RECOG_OK) return '';
+  var recording = voiceRecordingField === fieldId;
+  return '<button type="button" class="btn btn-ghost btn-sm" onclick="startVoiceInput(\'' + fieldId + '\',\'' + stateKey + '\')"'
+    + ' style="margin-top:6px' + (recording ? ';color:var(--wave);animation:xpp 1.2s infinite' : '') + '"'
+    + ' title="' + (recording ? T('voice.recording') : T('voice.record_answer')) + '">'
+    + (recording ? '⏺ ' + T('voice.recording') : '🎤 ' + T('voice.record_answer'))
+    + '</button>';
+}
+
+function tutorBubble(html) {
+  var listenBtn = (S.voiceMode && VOICE_SYNTH_OK)
+    ? '<button type="button" class="btn btn-ghost btn-sm" onclick="speakCurrentPhase()" title="' + (voiceSpeaking ? T('voice.stop') : T('voice.listen')) + '"'
+      + ' style="position:absolute;top:6px;right:6px;padding:2px 8px;font-size:12px;line-height:1.6;white-space:nowrap' + (voiceSpeaking ? ';color:var(--wave)' : '') + '">'
+      + (voiceSpeaking ? '⏹ ' + T('voice.stop') : '🔊 ' + T('voice.listen'))
+      + '</button>'
+    : '';
+  return '<div class="tutor-row"><div class="tutor-icon">🌊</div>'
+    + '<div class="tutor-bubble" style="position:relative' + (listenBtn ? ';padding-right:80px' : '') + '">'
+    + listenBtn + html + '</div></div>';
+}
+
 function phaseBody(p) {
   if(p===0) {
     var warmup = currentSession ? currentSession.warmup_prompt
@@ -1909,8 +2066,7 @@ function phaseBody(p) {
     var artGroup     = _aDatum ? _aDatum.group : T('common.category_connecting');
     var artGroupPill = artGroup === 'Being' ? 'pw' : artGroup === 'Becoming' ? 'pd' : 'pa';
     return `
-    <div class="tutor-row"><div class="tutor-icon">🌊</div>
-    <div class="tutor-bubble">${warmup}</div></div>
+    ${tutorBubble(warmup)}
     <div class="card" style="margin-bottom:14px">
       <h3 style="margin-bottom:8px">${title}</h3>
       <p style="line-height:1.7;color:var(--text2)">${T('session.art_of_x_reflection', {art: artName, group: artGroup})}</p>
@@ -1944,8 +2100,7 @@ function phaseBody(p) {
     var explore = currentSession ? currentSession.explore_content
       : T('session.explore_fallback');
     return `
-    <div class="tutor-row"><div class="tutor-icon">🌊</div>
-    <div class="tutor-bubble">${explore}</div></div>
+    ${tutorBubble(explore)}
     <p style="font-size:12px;color:var(--text3);margin-top:12px">${T('session.sit_with_this')}</p>`;
   }
   if(false && p===1) return `
@@ -1968,12 +2123,12 @@ function phaseBody(p) {
     var challenge = currentSession ? currentSession.challenge_prompt
       : T('session.challenge_fallback');
     return `
-    <div class="tutor-row"><div class="tutor-icon">🌊</div>
-    <div class="tutor-bubble">${challenge}</div></div>
+    ${tutorBubble(challenge)}
     <div class="card">
       <p style="font-size:13px;color:var(--text2);margin-bottom:8px">${T('common.your_response')}</p>
       <textarea id="ctxt" rows="5"
         placeholder="${T('session.placeholder_no_single_answer')}" oninput="S.challengeText=this.value"></textarea>
+      ${micButton('ctxt','challengeText')}
     </div>
     <div class="card" style="margin-top:12px;border-left:3px solid var(--wave)">
       <div style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none"
@@ -2013,10 +2168,7 @@ function phaseBody(p) {
       : T('session.reflect_fallback');
     const w = S.challengeText || '"A small herb garden where each plant supports the others — the way a good community works."';
     return `
-    <div class="tutor-row"><div class="tutor-icon">🌊</div>
-    <div class="tutor-bubble">
-      ${T('session.beautiful_created')}
-    </div></div>
+    ${tutorBubble(T('session.beautiful_created'))}
     <div class="card" style="margin-bottom:14px">
       <p style="font-size:13px;color:var(--text2);margin-bottom:6px">${T('common.your_response')}</p>
       <p style="font-size:15px;font-style:italic;line-height:1.8;border-left:3px solid var(--wave);padding-left:13px">${w}</p>
@@ -2025,6 +2177,7 @@ function phaseBody(p) {
       <p style="font-size:13px;font-weight:500;margin-bottom:11px">${reflectQ}</p>
       <textarea id="rtxt" rows="4"
         placeholder="${T('session.placeholder_no_wrong_answer')}" oninput="S.reflectText=this.value"></textarea>
+      ${micButton('rtxt','reflectText')}
     </div>
     <div class="card" style="margin-top:12px;border-left:3px solid var(--deep)">
       <div style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none"
@@ -2059,8 +2212,7 @@ function phaseBody(p) {
     var selIdx     = S.assessSelectedIndex;
     var isCorrect  = answered && typeof selIdx === 'number' && selIdx === aq.correct_index;
     return `
-    <div class="tutor-row"><div class="tutor-icon">🌊</div>
-    <div class="tutor-bubble">One last wave. Your honest best — this helps me know where to take you next.</div></div>
+    ${tutorBubble('One last wave. Your honest best — this helps me know where to take you next.')}
     <div class="card" style="margin-bottom:14px">
       <p style="font-size:15px;font-weight:500;margin-bottom:13px">${aq.question}</p>
       ${aq.options.map((opt,i) => {
@@ -2129,6 +2281,7 @@ async function loadAISession(artSlug) {
     });
     currentSession = res;
     sessionLoading = false;
+    voiceLastSpokenPhase = -1; // new session: (re)speak phase 0 even though the phase number is unchanged
     set({sessionLoading: false, phase: 0, answered: false});
     S.assessSelectedIndex = null;   // 2026-07-07: reset pick state for the new session
     // P40: reset companion state for the new session's assess
@@ -2236,6 +2389,17 @@ function Session() {
       + '</div></div></div>';
   }
 
+  // Voice mode: speak the phase content once per phase, not on every
+  // re-render (set({}) fires on lots of unrelated state changes here —
+  // e.g. the sandbox companion thread). voiceLastSpokenPhase is the guard;
+  // it's re-armed to -1 on toggle-on (Session's toggleVoiceMode) and on a
+  // fresh session load (loadAISession), so both cases re-speak correctly.
+  if (S.voiceMode && voiceLastSpokenPhase !== p) {
+    voiceLastSpokenPhase = p;
+    var _toSay = getPhaseSpeakText(p);
+    if (_toSay) { setTimeout(function(){ speakText(_toSay); }, 60); }
+  }
+
   return `
   <div class="page">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px">
@@ -2244,11 +2408,12 @@ function Session() {
         <p style="font-size:12px;margin-top:2px">${currentSession ? (currentSession.art_name || 'Connecting') : 'Connecting · Permaculture &amp; regenerative systems'}</p>
       </div>
       <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="toggleVoiceMode()" title="${S.voiceMode ? T('voice.toggle_off') : T('voice.toggle_on')}" style="${S.voiceMode?'color:var(--wave)':''}">${S.voiceMode ? '🎙️' : '🎧'}</button>
         <button class="btn btn-ghost btn-sm" onclick="window._translateTarget=S.language==='en'?(S.learner&&S.learner.language||'en'):'en';set({language:window._translateTarget})" title="${T('lang.toggle_ui')}">🌐</button>
         ${(currentSession && currentSession.language && S.learner && S.learner.language && currentSession.language !== S.learner.language) ? `
         <button class="btn btn-ghost btn-sm" onclick="translateSessionContent(S.learner&&S.learner.language||'en')" title="${T('lang.translate_session')}">🌍 ${T('lang.translate_short')}</button>
         ` : ''}
-        <button class="btn btn-ghost btn-sm" onclick="goHome()">✕</button>
+        <button class="btn btn-ghost btn-sm" onclick="stopSpeaking();goHome()">✕</button>
       </div>
     </div>
     <div class="phase-strip">
@@ -2263,10 +2428,10 @@ function Session() {
     <div id="pc">${phaseBody(p)}</div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:22px">
       <button class="btn btn-ghost" ${p===0?'disabled style="opacity:.4"':''}
-        onclick="set({phase:${Math.max(0,p-1)},answered:false})">← Back</button>
+        onclick="stopSpeaking();set({phase:${Math.max(0,p-1)},answered:false})">← Back</button>
       <span style="font-size:12px;color:var(--text3);font-family:var(--font-display)">Phase ${p+1} of 5</span>
       <button class="btn btn-wave" ${p===4?'style="visibility:hidden"':''}
-        onclick="set({phase:${Math.min(4,p+1)},answered:false})">Next →</button>
+        onclick="stopSpeaking();set({phase:${Math.min(4,p+1)},answered:false})">Next →</button>
     </div>
     ${S.showPolisGate ? `
     <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);

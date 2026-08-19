@@ -270,5 +270,15 @@
   "stoa.save": "Sauvegarder",
   "stoa.tagline": "Un portique pour la pensée solitaire. Cet espace est le tien — sans notes, sans performance, juste une réflexion honnête.",
   "stoa.title": "Le Péripatos",
-  "stoa.todays_prompt": "Réflexion du jour"
+  "stoa.todays_prompt": "Réflexion du jour",
+  "voice.listen": "Écouter",
+  "voice.mic_unsupported": "La réponse vocale n’est pas prise en charge par ce navigateur. Vous pouvez toujours taper votre réponse.",
+  "voice.options_prefix": "Options :",
+  "voice.record_answer": "Répondre à voix haute",
+  "voice.recording": "Écoute en cours… touchez pour arrêter",
+  "voice.stop": "Arrêter",
+  "voice.toggle_off": "Désactiver le mode vocal",
+  "voice.toggle_on": "Activer le mode vocal — écoutez les questions, répondez à voix haute",
+  "voice.transcribing_error": "Nous n’avons pas bien compris — réessayez ou tapez votre réponse.",
+  "voice.unsupported": "Les fonctions vocales ne sont pas encore prises en charge par ce navigateur. Essayez Chrome ou Edge."
 }

@@ -270,5 +270,15 @@
   "stoa.save": "حفظ التأمل",
   "stoa.tagline": "مكان للتفكير المنفرد. هذه المساحة لك — بلا درجات، بلا أداء، مجرد تفكير صادق.",
   "stoa.title": "بيريباتوس",
-  "stoa.todays_prompt": "تأمل اليوم"
+  "stoa.todays_prompt": "تأمل اليوم",
+  "voice.listen": "استماع",
+  "voice.mic_unsupported": "الإجابة الصوتية غير مدعومة في هذا المتصفح. لا يزال بإمكانك كتابة إجابتك.",
+  "voice.options_prefix": "الخيارات:",
+  "voice.record_answer": "الإجابة بالصوت",
+  "voice.recording": "جارٍ الاستماع… اضغط للإيقاف",
+  "voice.stop": "إيقاف",
+  "voice.toggle_off": "إيقاف وضع الصوت",
+  "voice.toggle_on": "تفعيل وضع الصوت — استمع إلى الأسئلة وأجب بصوتك",
+  "voice.transcribing_error": "لم نفهم ذلك بوضوح — يرجى المحاولة مرة أخرى أو كتابة إجابتك.",
+  "voice.unsupported": "ميزات الصوت غير مدعومة بعد في هذا المتصفح. جرّب Chrome أو Edge."
 }

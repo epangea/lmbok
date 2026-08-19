@@ -270,5 +270,15 @@
   "stoa.save": "Save to Peripatos",
   "stoa.tagline": "Ein Ort für wandernde Gedanken. Dies ist dein Raum — keine Noten, keine Performance, nur ehrliche Reflexion.",
   "stoa.title": "Peripatos",
-  "stoa.todays_prompt": "Heutige Prompt"
+  "stoa.todays_prompt": "Heutige Prompt",
+  "voice.listen": "Anhören",
+  "voice.mic_unsupported": "Sprachantworten werden von diesem Browser nicht unterstützt. Du kannst deine Antwort weiterhin eintippen.",
+  "voice.options_prefix": "Optionen:",
+  "voice.record_answer": "Per Sprache antworten",
+  "voice.recording": "Hört zu… zum Stoppen tippen",
+  "voice.stop": "Stopp",
+  "voice.toggle_off": "Sprachmodus ausschalten",
+  "voice.toggle_on": "Sprachmodus einschalten — Fragen anhören, gesprochen antworten",
+  "voice.transcribing_error": "Das konnten wir nicht klar verstehen — bitte erneut versuchen oder Antwort eintippen.",
+  "voice.unsupported": "Sprachfunktionen werden von diesem Browser noch nicht unterstützt. Versuche es mit Chrome oder Edge."
 }

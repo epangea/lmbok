@@ -270,5 +270,15 @@
   "stoa.save": "Lưu suy ngẫm",
   "stoa.tagline": "Không gian suy nghĩ một mình. Đây là không gian của bạn — không điểm số, không trình diễn.",
   "stoa.title": "Peripatos",
-  "stoa.todays_prompt": "Câu hỏi hôm nay"
+  "stoa.todays_prompt": "Câu hỏi hôm nay",
+  "voice.listen": "Nghe",
+  "voice.mic_unsupported": "Trình duyệt này chưa hỗ trợ trả lời bằng giọng nói. Bạn vẫn có thể gõ câu trả lời.",
+  "voice.options_prefix": "Các lựa chọn:",
+  "voice.record_answer": "Trả lời bằng giọng nói",
+  "voice.recording": "Đang nghe… chạm để dừng",
+  "voice.stop": "Dừng",
+  "voice.toggle_off": "Tắt chế độ giọng nói",
+  "voice.toggle_on": "Bật chế độ giọng nói — nghe câu hỏi, trả lời bằng lời nói",
+  "voice.transcribing_error": "Chúng tôi chưa nghe rõ — hãy thử lại hoặc gõ câu trả lời.",
+  "voice.unsupported": "Trình duyệt này chưa hỗ trợ tính năng giọng nói. Hãy thử Chrome hoặc Edge."
 }

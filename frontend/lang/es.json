@@ -270,5 +270,15 @@
   "stoa.save": "Guardar reflexión",
   "stoa.tagline": "Un pórtico para el pensamiento solitario. Este espacio es tuyo — sin calificaciones, sin actuación, solo pensamiento honesto.",
   "stoa.title": "El Peripatos",
-  "stoa.todays_prompt": "Reflexión de hoy"
+  "stoa.todays_prompt": "Reflexión de hoy",
+  "voice.listen": "Escuchar",
+  "voice.mic_unsupported": "Responder por voz no es compatible con este navegador. Aún puedes escribir tu respuesta.",
+  "voice.options_prefix": "Opciones:",
+  "voice.record_answer": "Responder por voz",
+  "voice.recording": "Escuchando… toca para detener",
+  "voice.stop": "Detener",
+  "voice.toggle_off": "Desactivar el modo de voz",
+  "voice.toggle_on": "Activar el modo de voz — escucha las preguntas, responde hablando",
+  "voice.transcribing_error": "No pudimos escucharte bien — inténtalo de nuevo o escribe tu respuesta.",
+  "voice.unsupported": "Las funciones de voz aún no son compatibles con este navegador. Prueba con Chrome o Edge."
 }

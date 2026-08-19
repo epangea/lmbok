@@ -270,5 +270,15 @@
   "stoa.save": "Save reflection",
   "stoa.tagline": "A walkway for wandering thought. This space is yours — no grades, no performance, just honest reflection.",
   "stoa.title": "The Peripatos",
-  "stoa.todays_prompt": "Today's prompt"
+  "stoa.todays_prompt": "Today's prompt",
+  "voice.listen": "Listen",
+  "voice.mic_unsupported": "Voice answering isn’t supported in this browser. You can still type your answer.",
+  "voice.options_prefix": "Options:",
+  "voice.record_answer": "Answer by voice",
+  "voice.recording": "Listening… tap to stop",
+  "voice.stop": "Stop",
+  "voice.toggle_off": "Turn off voice mode",
+  "voice.toggle_on": "Turn on voice mode — listen to prompts, answer by speaking",
+  "voice.transcribing_error": "Couldn’t hear that clearly — please try again or type your answer.",
+  "voice.unsupported": "Voice features aren’t supported in this browser yet. Try Chrome or Edge."
 }

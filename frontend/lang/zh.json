@@ -270,5 +270,15 @@
   "stoa.save": "保存反思",
   "stoa.tagline": "独处思考的空间。这是你的地方 — 没有评分，没有表演，只有真实的思考。",
   "stoa.title": "漫步廊",
-  "stoa.todays_prompt": "今日思考"
+  "stoa.todays_prompt": "今日思考",
+  "voice.listen": "聆听",
+  "voice.mic_unsupported": "此浏览器不支持语音回答，你仍然可以输入答案。",
+  "voice.options_prefix": "选项：",
+  "voice.record_answer": "语音回答",
+  "voice.recording": "正在聆听…点击停止",
+  "voice.stop": "停止",
+  "voice.toggle_off": "关闭语音模式",
+  "voice.toggle_on": "开启语音模式——聆听问题，用语音回答",
+  "voice.transcribing_error": "没有听清楚——请重试或输入你的答案。",
+  "voice.unsupported": "此浏览器暂不支持语音功能，请尝试使用 Chrome 或 Edge。"
 }
