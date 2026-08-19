@@ -23,6 +23,17 @@
 <meta property="og:image" content="charb.jpg"/>
 <title>LMBoK — Life Management Body of Knowledge</title>
 
+<!-- Favicon — inline SVG wave, matches app.html/org.html/etc. -->
+<link rel="icon" type="image/png" href="/icons/icon-192.png"/>
+
+<!-- PWA — installable app shell (added 2026-08-19). Root is the primary
+     install entry point: browsers evaluate installability here, and the
+     existing auto-redirect above (localStorage fl_learner check) already
+     sends a returning logged-in learner straight to /app.html, so an
+     installed home-screen icon opens directly into the app for them. -->
+<link rel="manifest" href="/manifest.json"/>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
+
 <!-- Fonts -->
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
@@ -1836,6 +1847,23 @@ try {
     if (finalRow) finalRow.innerHTML = agoraBtn('btn btn-amber');
   }
 } catch(e) {}
+</script>
+
+<!-- Service worker registration — see frontend/sw.js header comment for
+     strategy. Same registration snippet as app.html/org.html/admin.html/
+     polis.html/contribute.html/privacy.html; registering from every page
+     (not just here) means a learner who deep-links straight into /app.html
+     or /org without ever visiting "/" still gets the offline-capable
+     shell on their next visit, since navigator.serviceWorker.register()
+     is a no-op if a matching registration already exists. -->
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('/sw.js').catch(function (err) {
+      console.warn('LMBoK service worker registration failed:', err);
+    });
+  });
+}
 </script>
 
 </body>

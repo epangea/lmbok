@@ -49,11 +49,13 @@ bump_asset() {
   hash=$(cksum "$asset" | awk '{print $1}')
   local new_ref="${asset}?v=${hash}"
 
-  # Every .html file that currently references this asset with a ?v= tag --
-  # discovered dynamically via grep, not a hardcoded file list, so a new
-  # page added later that links app.css/app.js is picked up automatically.
+  # Every .html file (plus sw.js, which precaches these same URLs -- see
+  # its PRECACHE_URLS array) that currently references this asset with a
+  # ?v= tag -- discovered dynamically via grep, not a hardcoded file list,
+  # so a new page added later that links app.css/app.js is picked up
+  # automatically.
   local refs
-  refs=$(grep -l "${basename}\.${ext}?v=" *.html 2>/dev/null || true)
+  refs=$(grep -l "${basename}\.${ext}?v=" *.html sw.js 2>/dev/null || true)
 
   if [ -z "$refs" ]; then
     echo "WARN  no .html files reference ${asset}?v=... -- nothing to update"
@@ -73,9 +75,43 @@ bump_asset() {
   done
 }
 
+bump_sw_cache_name() {
+  # sw.js's CACHE_NAME (see its own header comment) is a second, independent
+  # version signal on top of the ?v= tags bump_asset already keeps in sync
+  # above -- it's what actually changes sw.js's own byte content, which is
+  # what makes the browser's periodic service-worker update check notice
+  # anything changed at all. Derived from a combined hash of the three
+  # files that make up the precached app shell, so it changes exactly when
+  # a repeat visitor would need a fresh cache -- no more, no less.
+  local sw="sw.js"
+  if [ ! -f "$sw" ]; then
+    echo "SKIP  $sw not found in frontend/"
+    return
+  fi
+  if [ ! -f app.css ] || [ ! -f app.js ] || [ ! -f app.html ]; then
+    echo "WARN  app shell file(s) missing -- skipping sw.js CACHE_NAME bump"
+    return
+  fi
+
+  local combined
+  combined=$(cat app.css app.js app.html | cksum | awk '{print $1}')
+  local new_name="lmbok-shell-${combined}"
+
+  local current
+  current=$(grep -o "CACHE_NAME = '[^']*'" "$sw" | head -1)
+  if [ "$current" = "CACHE_NAME = '${new_name}'" ]; then
+    return
+  fi
+  sed -i.bak "s/CACHE_NAME = '[^']*'/CACHE_NAME = '${new_name}'/" "$sw"
+  rm -f "${sw}.bak"
+  echo "OK    $sw -> CACHE_NAME '${new_name}'"
+  changed=$((changed+1))
+}
+
 echo "-- Checking asset versions (content-hash based) --"
 bump_asset app.css
 bump_asset app.js
+bump_sw_cache_name
 
 echo ""
 if [ "$changed" -eq 0 ]; then
