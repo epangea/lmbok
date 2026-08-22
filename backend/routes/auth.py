@@ -122,7 +122,6 @@ def _send_verification_email(to_addr: str, display_name: str, token: str) -> Non
         "Please verify your email address by clicking the link below:\n\n"
         f"{link}\n\n"
         "This link expires in 24 hours.\n\n"
-        "Note: If you don't see this email in your inbox, please check your spam or junk folder.\n"
         "If you did not create this account, you can safely ignore this message.\n"
     )
     try:

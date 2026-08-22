@@ -9,7 +9,7 @@ Live at [build.onehouse.top](https://build.onehouse.top).
 ## Two projects, one vision
 
 **Learning & Growth — LMBoK (ePangea)**
-Built around **15 human arts**, **48 learning domains**, and **6 developmental phases**, shaped by the learner's own bioregion. Two features carry this beyond individual study:
+Built around **15 human arts**, **48 skills across 8 practical domains**, and **6 developmental phases**, shaped by the learner's own bioregion. Two features carry this beyond individual study:
 1. A **community matching tool** connecting real local challenges with learner progress — putting theory into practice, with real impact and meaning.
 2. **Polis** — an Avaaz-like referenda, discussion, and voting section that can shape One 'Ouse's Blueprint.
 
@@ -27,7 +27,7 @@ A MediaWiki-like open dialogue where we design a blueprint for how we — all of
 FreqLearn is built on **["The Arts to Be Human"](https://docs.google.com/document/d/1RFxrO_mzHjTjk5qAg09KZzXIgqBija5F/edit?usp=sharing&ouid=102217663626879191510&rtpof=true&sd=true)** — a framework organizing human development around:
 
 - **15 universal arts**, grouped under three domains: *Being*, *Becoming*, and *Connecting*
-- **48 learning domains**
+- **48 skills, grouped into 8 Mouseion domains (6 skills each)**
 - **6 developmental phases**: prenascent → nascent → child → adolescent → adult → elder
 
 Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-reliance, and civic agency. The goal isn't credentials — it's a self-directed, AI-assisted path through your own development, at your own pace, in your own language.
@@ -92,16 +92,16 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
       contribute.html  Learner contribution UI
       privacy.html  Privacy note
       favicon.ico
-
-    docs/
-      LANDING_PAGE.md  How to edit the landing page (copy, translations, video IDs) and how it integrates with the app
+      docs/         Learner-facing Help content (*.md, rendered in-app via the
+                     Help section) -- see manifest.json for the index. NOT the
+                     same thing as this repo's root-level maintainer docs below.
 
     scripts/        DB migrations, seed data, diagnostics, and one-off fixes
                     (kept for history -- see commit log for context on each)
 
 ## Documentation
 
-- [`docs/LANDING_PAGE.md`](docs/LANDING_PAGE.md) — how to edit the landing page (copy, translations, video IDs) and how it integrates with the app (auth-aware redirect, Home link, CTAs)
+- [`LANDING_PAGE.md`](LANDING_PAGE.md) — how to edit the landing page (copy, translations, video IDs) and how it integrates with the app (auth-aware redirect, Home link, CTAs)
 
 ## Roadmap (high level)
 

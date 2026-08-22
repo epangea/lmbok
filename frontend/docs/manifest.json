@@ -1,0 +1,17 @@
+[
+  {"slug":"welcome",     "title":"Welcome & how this Help section works", "section":"Start here"},
+  {"slug":"prosopon",    "title":"Prosopon — your learner profile",       "section":"Start here"},
+  {"slug":"agora",       "title":"Agora — your dashboard",                "section":"Platform sections"},
+  {"slug":"academy",     "title":"Academy — sessions",                    "section":"Platform sections"},
+  {"slug":"mouseion",    "title":"Mouseion — skills map",                 "section":"Platform sections"},
+  {"slug":"stoa",        "title":"Stoa — reflections",                    "section":"Platform sections"},
+  {"slug":"portfolio",   "title":"Portfolio — your progress",             "section":"Platform sections"},
+  {"slug":"bioregion",   "title":"Bioregion",                             "section":"Platform sections"},
+  {"slug":"syneisfero",  "title":"Syneisfero — contribute a LECKO",       "section":"Platform sections"},
+  {"slug":"ekklesia",    "title":"Ekklesia — organizations",              "section":"Platform sections"},
+  {"slug":"polis",       "title":"Polis — civic dialogue",                "section":"Platform sections"},
+  {"slug":"onboarding",  "title":"Onboarding — what happens when you join","section":"Platform sections"},
+  {"slug":"15-arts",     "title":"The 15 Arts",                           "section":"Concepts"},
+  {"slug":"avatar-stage","title":"Avatar stages",                        "section":"Concepts"},
+  {"slug":"voice-mode",  "title":"Voice mode",                            "section":"Concepts"}
+]

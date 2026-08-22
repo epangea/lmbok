@@ -44,17 +44,16 @@ LMBoK is built on **["The Arts to Be Human"](https://docs.google.com/document/d/
 
 *(Corrected 2026-08-13 — earlier internal notes had dropped Nascent/Infant and listed only 5. Confirmed against "The Arts to Be Human," Tables 1-3.)*
 
-## Learning domains
-
-The framework's own top-level domain list — not a fixed count, but this is what's actually named in the source document:
-
-Human · Physiology · Psychology · Medicine & Healthcare · Environmental Biology · Chemistry · Physics · Engineering · Mathematics · Literature & Language · Visual Art & Expression · History & Journalism · Public Policy & Law · Happiness & Finance
-
-*(Corrected 2026-08-13 — earlier internal notes cited "48 learning domains," a figure that doesn't appear anywhere in the source document. This is the actual list.)*
-
 ## The Mouseion Skill Map — 8 domains × 6 skills
 
-A separate, deliberately simpler and more backward-intuitive taxonomy from the 14 learning domains above — this is what actually drives the Mouseion UI (`frontend/app.js`, `Mouseion()`), acting as a universal library learners browse directly to find topics/skills they relate to, each domain anchored to one of the 15 arts as its primary art. Confirmed 2026-08-14 by reading `_DOMS` in `app.js` directly — no guessing. (This is very likely also where an old, incorrect "48 learning domains" figure came from: 8 domains × 6 skills = 48 skills, not domains — a mix-up between two different structures, now resolved.)
+*(2026-08-20 — removed the standalone "Learning domains" list that previously sat here.
+It was real content from the source document, but wasn't wired into anything the platform
+actually does, and having a third domain-count figure floating around this doc was a
+recurring source of confusion. The 15 Arts above and the 8×6 Mouseion grid below are the
+only two taxonomies in active use anywhere on the platform — this section is now the sole
+place any "learning domain" figure should ever appear.)*
+
+This taxonomy is what actually drives the Mouseion UI (`frontend/app.js`, `Mouseion()`), acting as a universal library learners browse directly to find topics/skills they relate to, each domain anchored to one of the 15 arts as its primary art. Confirmed 2026-08-14 by reading `_DOMS` in `app.js` directly — no guessing.
 
 | Domain | Primary art | Skills |
 |---|---|---|

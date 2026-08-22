@@ -5,6 +5,7 @@ from sqlalchemy import select
 from db import get_db
 from models import Learner, LearnerStreak, LearnerPreferences
 from routes.auth import get_current_learner
+import ai_client
 
 router = APIRouter()
 
@@ -196,3 +197,121 @@ async def get_my_verified_skills(
         for v, listing, org, sk in rows
     ]
 
+
+# ── Prosopon: seed initial skill signal from the 3-question onboarding card ──
+# Added 2026-08-20. Functional replacement for the retired being/becoming/
+# connecting familiarity self-assessment (which used to drive /me/seed-progress
+# via ArtsGroup). This version classifies against the 8 Mouseion domains,
+# matched by Skill.name against MOUSEION_DOMAIN_SKILLS below (mirrored from
+# frontend/app.js's _DOMS) rather than by Skill.learning_domain — that column
+# is populated with a different, legacy subject-matter taxonomy, not the 8
+# Mouseion domains (see MOUSEION_DOMAIN_SKILLS comment). One small AI call,
+# run once at onboarding completion. See SESSION_ARCHITECTURE.md §2.4
+# (Profile Distiller) for how this feeds learner_profile downstream, and
+# frontend/docs/prosopon.md for the learner-facing explanation.
+
+class SeedProgressDomainsRequest(_BaseModel):
+    curiosity:   Optional[str] = None
+    cares_about: Optional[str] = None
+    wants_to_do: Optional[str] = None
+
+
+# The 8 Mouseion domains and their 48 skills, mirrored 1:1 from frontend/app.js's
+# _DOMS (inside Mouseion()) — that array is the sole source of truth for this
+# grouping and is entirely client-side/hardcoded, NOT sourced from any DB column.
+# Deliberately matching by Skill.name here rather than trusting Skill.learning_domain:
+# that DB column is populated with a different, older subject-matter taxonomy
+# (Physiology, Physics, etc. — see backend/routes/generate.py's skill_id lookup
+# path, and models.Lecko.learning_domain, which shares the same legacy values).
+# Per 2026-08-20 decision, that legacy taxonomy is retired everywhere it's not
+# load-bearing for real functionality; Skill.learning_domain itself is left alone
+# here since generate.py's LECKO-similarity matching still depends on its current
+# values — repurposing that column is a separate, bigger decision, not this one.
+MOUSEION_DOMAIN_SKILLS = {
+    "Cognitive & Intellectual": ["Critical Thinking","Problem Solving","Systems Thinking","Memory & Retention","Decision Making","Project Management"],
+    "Creative & Artistic": ["Visual Art","Music & Rhythm","Creative Writing","Drama & Theatre","Improvisation & Public Speaking","Craftsmanship & Making"],
+    "Physical & Motor": ["Gross Motor","Fine Motor","Physical Fitness","Dance & Movement","Body Awareness","First Aid & Nursing"],
+    "Social & Relational": ["Collaboration","Conflict Resolution","Empathetic Leadership","Negotiation","Cultural Competence","Parenting & Caregiving"],
+    "Language & Communication": ["Active Reading","Active Listening","Storytelling","Debate & Argumentation","Foreign Language Acquisition","Rhetoric & Persuasion"],
+    "Emotional & Psychological": ["Self-Awareness","Emotional Regulation","Empathy and Compassion","Self-Efficacy","Contemplative Practice","Gratitude & Appreciation"],
+    "Meta-Learning": ["Learning How to Learn","Self-Regulation","Personal Values","Curiosity and Exploration","Vision, Mission and Purpose","Mentorship & Teaching"],
+    "Tools & Systems": ["Digital Literacy","Data Analysis & Statistics","Design Thinking","Philosophy & Ethics","Permaculture","Cooking & Nutrition"],
+}
+MOUSEION_DOMAINS = list(MOUSEION_DOMAIN_SKILLS.keys())
+
+
+@router.post("/me/seed-progress-domains")
+async def seed_progress_from_prosopon_answers(
+    req: SeedProgressDomainsRequest,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Classifies the learner's 3 onboarding answers against the 8 Mouseion
+    domains and seeds light learner_skill_progress signal (evidence_count=2,
+    current_level=0 — the same "some experience" tier the old familiarity
+    screen used for its middle option) for every skill in each matched
+    domain. Never overwrites existing real progress. No-ops silently if all
+    3 answers were skipped or the AI call fails — onboarding must never
+    block on this.
+    """
+    text = " ".join(x for x in (req.curiosity, req.cares_about, req.wants_to_do) if x).strip()
+    if not text:
+        return {"seeded": 0, "domains": []}
+
+    import json
+    from models import Skill
+
+    prompt = f"""A new learner on the Surfing the Frequencies platform answered three onboarding questions:
+
+{text}
+
+Which of these 8 learning domains genuinely connect to what they wrote? Pick 1-4, only ones with a real connection — do not force a match for every answer.
+
+Domains: {", ".join(MOUSEION_DOMAINS)}
+
+Return ONLY a JSON object: {{"domains": ["Domain Name", ...]}} using the exact domain names above."""
+
+    try:
+        ai_resp = await ai_client.ai_complete(
+            "learner_profile",
+            db=db,
+            prompt=prompt,
+            tier="small",
+            response_format="json_object",
+            max_tokens=150,
+            temperature=0.3,
+        )
+        picked = json.loads(ai_resp.content).get("domains", [])
+        picked = [d for d in picked if d in MOUSEION_DOMAINS]
+    except Exception as e:
+        return {"seeded": 0, "domains": [], "error": str(e)[:120]}
+
+    if not picked:
+        return {"seeded": 0, "domains": []}
+
+    skill_names = [name for d in picked for name in MOUSEION_DOMAIN_SKILLS.get(d, [])]
+    skills_q = await db.execute(select(Skill).where(Skill.name.in_(skill_names)))
+    skills = skills_q.scalars().all()
+
+    existing_q = await db.execute(
+        select(LearnerSkillProgress).where(LearnerSkillProgress.learner_id == learner.id)
+    )
+    existing_ids = {p.skill_id for p in existing_q.scalars().all()}
+
+    seeded = 0
+    for sk in skills:
+        if sk.id in existing_ids:
+            continue
+        db.add(LearnerSkillProgress(
+            learner_id=learner.id,
+            skill_id=sk.id,
+            current_level=0,
+            evidence_count=2,
+            recall_count=2,
+            last_practiced_at=None,
+        ))
+        seeded += 1
+
+    await db.commit()
+    return {"seeded": seeded, "domains": picked}

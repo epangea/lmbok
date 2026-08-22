@@ -285,12 +285,22 @@ const S = {
   authEmail: '',
   regEmail: '',
   pendingVerifyEmail: '', verifyStatus: null, resendSent: false, resendLoading: false, resendError: '',
-  onboardStep: 1,      // 1-5
+  onboardStep: 1,      // 0-4
   onboardName: '',
   onboardPhase: '',
-  onboardArt: '',
-  onboardFamiliarity: {},
+  onboardArt: '',       // no longer set during onboarding; kept for the loadAISession() fallback chain
   onboardColor: '#00E5C8',
+  // Prosopon onboarding card (step 4) — replaces the old first-art pick +
+  // being/becoming/connecting familiarity self-assessment. See PROSOPON.md.
+  onboardCuriosity:  '',
+  onboardCaresAbout: '',
+  onboardWantsToDo:  '',
+  // Help section (docs/*.md rendered client-side) — see docs/README.md
+  helpDocs:      null,   // manifest: [{slug,title,section}]
+  helpActiveDoc: null,   // currently-open slug
+  helpContent:   {},     // slug -> rendered HTML, cached per session
+  helpSearch:    '',
+  helpLoading:   false,
   sessionLoading: false,
   activeSession: null,  // current session data from API
   sessionStartTime: null,
@@ -940,6 +950,7 @@ const LANG = {  // Only English ships inline; other languages load
     'common.category_being':'Being',
     'common.category_connecting':'Connecting',
     'common.continue':'Continue',
+    'common.skip':'Skip for now',
     'common.current_construct':'Current construct',
     'common.deeper_roots':'Deeper roots',
     'common.display_name':'Display name',
@@ -1001,6 +1012,13 @@ const LANG = {  // Only English ships inline; other languages load
     'nav.polis':'Polis',
     'nav.portfolio':'Portfolio',
     'nav.signout':'Sign out',
+    'nav.help':'Help',
+    'help.title':'Help & Documentation',
+    'help.subtitle':'How the platform works, section by section — searchable, always up to date.',
+    'help.search_placeholder':'Search docs\u2026',
+    'help.select_prompt':'Choose a topic on the left to read about it.',
+    'help.no_results':'No matching docs.',
+    'help.load_error':'Could not load this doc. Try again shortly.',
     'nav.stoa':'Peripatos',
     'nav.syneisfero':'Syneisféro',
     'onboard.avatar_body':'Your avatar is your presence on the platform. Pick what feels right — you can always change it later.',
@@ -1022,11 +1040,14 @@ const LANG = {  // Only English ships inline; other languages load
     'onboard.phase_body':'Every phase has its own gifts. There is no better or worse — just where you are right now.',
     'onboard.some_experience':'Some experience',
     'onboard.step_progress':'Step {n} of {total}',
-    'onboard.sub_avatar':'Your avatar',
-    'onboard.sub_first_art':'Your first art',
     'onboard.sub_name':'Your name',
     'onboard.sub_phase':'Your phase',
-    'onboard.sub_starting_point':'Your starting point',
+    'onboard.sub_prosopon':'Getting to know you',
+    'onboard.prosopon_title':'A few things worth knowing about you',
+    'onboard.prosopon_flavor':'If you had all the money in the world and could talk to anyone you wanted \u2014 what would you ask them?',
+    'onboard.prosopon_curiosity_label':'What would you ask them?',
+    'onboard.prosopon_cares_label':'What do you care about most?',
+    'onboard.prosopon_wants_label':'What do you want to do most?',
     'onboard.welcome_body':'This is a space for lifelong learning — free, open, and entirely yours. No grades, no competition, no wrong answers. Just you, growing at your own pace.<br><br>Let us start by getting to know you a little.',
     'onboard.welcome_title':'Welcome to the frequency 🌊',
     'onboard.what_call':'What shall we call you?',
@@ -1292,6 +1313,7 @@ window.showProfileMenu = function(e) {
     + '<div style="color:var(--text3);font-size:12px;margin-top:3px">Lv ' + (S.level||1) + ' · ' + (S.xp||0) + ' XP</div>'
     + '</div>'
     + '<button onclick="showPreferences()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:block">⚙ ' + T('common.preferences') + '</button>'
+    + '<button onclick="set({view:\'help\'});document.getElementById(\'profile-menu\').remove()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:block">❓ ' + T('nav.help') + '</button>'
     + '<button onclick="doLogout()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--coral);font-size:13px;cursor:pointer;display:block">↪ ' + T('nav.signout') + '</button>';
   document.body.appendChild(menu);
   setTimeout(function() {
@@ -4380,9 +4402,9 @@ function computeSkillScore(skillName, artScores) {
 }
 
 var PHASES = [
-  {slug:'prenascent', icon:'🌱', name:'Expecting a child', desc:'Pregnancy \u00B7 preparing for parenthood'},
-  {slug:'nascent',    icon:'🌿', name:'Newborn & Infant',  desc:'Ages 0\u20132 \u00B7 attuning to a new life'},
-  {slug:'child',      icon:'🧒', name:'Child',            desc:'Ages 3\u201311 \u00B7 curiosity-led exploration'},
+  {slug:'prenascent', icon:'🌱', name:'Expecting a child (ParentGuide)', desc:'Pregnancy \u00B7 preparing for parenthood'},
+  {slug:'nascent',    icon:'🌿', name:'Newborn & Infant (GuardianGuide)',  desc:'Ages 0\u20132 \u00B7 attuning to a new life'},
+  {slug:'child',      icon:'🧒', name:'Child (GuardianGuide)',            desc:'Ages 3\u201311 \u00B7 curiosity-led exploration'},
   {slug:'adolescent', icon:'🔥', name:'Adolescent',       desc:'Ages 12\u201317 \u00B7 identity & independence'},
   {slug:'adult',      icon:'🌳', name:'Adult',            desc:'Ages 18\u201360 \u00B7 building & contributing'},
   {slug:'elder',      icon:'🍂', name:'Elder',            desc:'Ages 61+ \u00B7 wisdom & transmission'},
@@ -4396,11 +4418,14 @@ var LANGUAGES = [
   ['vi','🇻🇳','Tiếng Việt'],['zh','🇨🇳','中文'],['ar','🇸🇦','العربية'],
 ];
 
+var ONBOARD_TOTAL_STEPS = 4; // language (0) doesn't get a pip; steps 1-4 do
+
 function pips(current) {
-  return PHASES.map(function(_,i) {
-    return '<div class="onboard-pip' + (i < current ? ' done' : '') + '"></div>';
-  }).join('') + '<div class="onboard-pip' + (current >= 5 ? ' done' : '') + '"></div>'
-    + '<div class="onboard-pip' + (current >= 6 ? ' done' : '') + '"></div>';
+  var out = '';
+  for (var i = 1; i <= ONBOARD_TOTAL_STEPS; i++) {
+    out += '<div class="onboard-pip' + (i <= current ? ' done' : '') + '"></div>';
+  }
+  return out;
 }
 
 function OnboardPage() {
@@ -4422,14 +4447,14 @@ function OnboardPage() {
   }
 
   else if (step === 1) {
-    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:1, total:5}) + "</div>"
+    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:1, total:4}) + "</div>"
       + "<div class=\"onboard-title\">" + T('onboard.welcome_title') + "</div>"
       + "<div class=\"onboard-sub\">" + T('onboard.welcome_body') + "</div>"
       + "<button class=\"btn btn-wave btn-full btn-lg\" onclick=\"set({onboardStep:2})\">" + T('common.lets_go') + " \u2192</button>";
   }
 
   else if (step === 2) {
-    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:2, total:5}) + " \u00B7 " + T('onboard.sub_name') + "</div>"
+    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:2, total:4}) + " \u00B7 " + T('onboard.sub_name') + "</div>"
       + "<div class=\"onboard-title\">" + T('onboard.what_call') + "</div>"
       + "<div class=\"onboard-sub\">" + T('onboard.name_desc')
       + " " + T('onboard.name_body_cont') + "</div>"
@@ -4447,7 +4472,7 @@ function OnboardPage() {
         + "<div class=\"phase-desc\">" + p.desc + "</div>"
         + "</div>";
     }).join('');
-    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:3, total:5}) + " \u00B7 " + T('onboard.sub_phase') + "</div>"
+    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:3, total:4}) + " \u00B7 " + T('onboard.sub_phase') + "</div>"
       + "<div class=\"onboard-title\">" + T('onboard.where_life') + "</div>"
       + "<div class=\"onboard-sub\">" + T('onboard.phase_body') + "</div>"
       + "<div class=\"phase-grid\">" + phaseCards + "</div>"
@@ -4457,78 +4482,38 @@ function OnboardPage() {
   }
 
   else if (step === 4) {
-    var groupColors = {Being:"var(--wave)", Becoming:"var(--deep)", Connecting:"var(--gold)"};
-    var artCards = ARTS_DATA.map(function(a) {
-      var sel = S.onboardArt === a.slug ? " sel" : "";
-      var col = groupColors[a.group] || "var(--wave)";
-      var borderStyle = S.onboardArt === a.slug ? "border-color:" + col + ";" : "";
-      return "<div class=\"art-pick" + sel + "\" style=\"" + borderStyle + "\" onclick=\"obArt('" + a.slug + "');\">"
-        + "<div class=\"art-name\" style=\"color:" + col + "\">" + a.name + "</div>"
-        + "<div class=\"art-tag\">" + a.tag + "</div>"
-        + "</div>";
-    }).join('');
-    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:4, total:5}) + " \u00B7 " + T('onboard.sub_first_art') + "</div>"
-      + "<div class=\"onboard-title\">" + T('onboard.what_pulls') + "</div>"
-      + "<div class=\"onboard-sub\">" + T('onboard.first_art_body') + "</div>"
-      + "<div class=\"art-grid\">" + artCards + "</div>"
-      + "<button class=\"btn btn-wave btn-full btn-lg\" "
-      + (S.onboardArt ? "" : "disabled ")
-      + "onclick=\"set({onboardStep:5})\">" + T('common.continue') + " \u2192</button>";
-  }
-
-  else if (step === 5) {
-    var emojiOpts = EMOJIS.map(function(e) {
-      var sel = S.onboardEmoji === e ? " sel" : "";
-      return "<div class=\"emoji-opt" + sel + "\" onclick=\"obEmoji('" + e + "');\">" + e + "</div>";
-    }).join('');
-    var colorOpts = COLORS.map(function(c) {
-      var sel = S.onboardColor === c ? " sel" : "";
-      return "<div class=\"color-opt" + sel + "\" style=\"background:" + c + "\" onclick=\"obColor('" + c + "');\">" + "</div>";
-    }).join('');
-    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:5, total:6}) + " \u00B7 " + T('onboard.sub_avatar') + "</div>"
-      + "<div class=\"onboard-title\">" + T('bio.make_it_yours') + "</div>"
-      + "<div class=\"onboard-sub\">" + T('onboard.avatar_body') + "</div>"
-      + "<div style=\"text-align:center;margin-bottom:20px\">"
-      + "<div style=\"width:72px;height:72px;border-radius:50%;background:" + S.onboardColor + "33;"
-      + "border:3px solid " + S.onboardColor + ";display:inline-flex;align-items:center;"
-      + "justify-content:center;font-size:32px;box-shadow:0 0 24px " + S.onboardColor + "44\">"
-      + S.onboardEmoji + "</div></div>"
-      + "<h4 style=\"margin-bottom:10px\">" + T('onboard.choose_wave') + "</h4>"
-      + "<div class=\"emoji-grid\">" + emojiOpts + "</div>"
-      + "<h4 style=\"margin-bottom:10px\">" + T('onboard.choose_colour') + "</h4>"
-      + "<div class=\"color-grid\">" + colorOpts + "</div>"
-      + "<button class=\"btn btn-wave btn-full btn-lg\" onclick=\"set({onboardStep:6})\">" + T('common.continue') + " \u2192</button>";
-  }
-
-  else if (step === 6) {
-    var groups6 = [
-      {key:'being',      emoji:'🧘', label:T('common.category_being'),      desc:T('onboard.desc_being'), color:'var(--wave)'},
-      {key:'becoming',   emoji:'🤝', label:T('common.category_becoming'),   desc:T('onboard.desc_becoming'), color:'var(--deep)'},
-      {key:'connecting', emoji:'🌍', label:T('common.category_connecting'), desc:T('onboard.desc_connecting'), color:'var(--gold)'},
+    // Prosopon onboarding card — replaces the old first-art pick (step 4) and
+    // the being/becoming/connecting familiarity self-assessment (old step 6).
+    // Three short, skippable, voice-enabled free-text answers. Raw text is
+    // stored as-is; a one-time AI pass at completion (POST /learners/me/prosopon)
+    // extracts skill/domain tags to seed learner_skill_progress — the direct
+    // functional replacement for what the old familiarity screen fed into
+    // seed-progress. See PROSOPON.md for the full design.
+    var flavor = T('onboard.prosopon_flavor');
+    var listenBtn = (S.voiceMode && VOICE_SYNTH_OK)
+      ? '<button type="button" class="btn btn-ghost btn-sm" onclick="speakText(' + JSON.stringify(flavor) + ')" style="margin-bottom:10px">🔊 ' + T('voice.listen') + '</button>'
+      : '';
+    var fields = [
+      {id:'ob-curiosity',  key:'onboardCuriosity',  label:T('onboard.prosopon_curiosity_label')},
+      {id:'ob-cares',      key:'onboardCaresAbout', label:T('onboard.prosopon_cares_label')},
+      {id:'ob-wants',      key:'onboardWantsToDo',  label:T('onboard.prosopon_wants_label')},
     ];
-    var fam = S.onboardFamiliarity || {};
-    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:6, total:6}) + " \u00B7 " + T('onboard.sub_starting_point') + "</div>"
-      + "<div class=\"onboard-title\">" + T('bio.where_are_you_now') + "</div>"
-      + "<div class=\"onboard-sub\">" + T('onboard.familiarity_body') + "</div>"
-      + groups6.map(function(g) {
-          var cur = fam[g.key] !== undefined ? fam[g.key] : -1;
-          return "<div style=\"margin-bottom:18px\">"
-            + "<div style=\"font-weight:600;color:" + g.color + ";font-size:13px;margin-bottom:8px\">" + g.emoji + " " + g.label
-            + " <span style=\"color:var(--text3);font-weight:400;font-size:12px\">\u2014 " + g.desc + "</span></div>"
-            + "<div style=\"display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px\">"
-            + [['\uD83C\uDF31',T('onboard.new_to_this'),0],['\uD83D\uDCD6',T('onboard.some_experience'),1],['\u2713',T('onboard.comfortable'),2]].map(function(opt) {
-                var sel = cur === opt[2];
-                return "<button onclick=\"obFamiliarity('" + g.key + "'," + opt[2] + ")\" "
-                  + "style=\"padding:9px 4px;font-size:11px;line-height:1.4;"
-                  + "background:" + (sel ? "rgba(0,229,200,0.15)" : "var(--card)") + ";"
-                  + "border:1px solid " + (sel ? "var(--wave)" : "var(--border)") + ";"
-                  + "border-radius:6px;cursor:pointer;"
-                  + "color:" + (sel ? "var(--wave)" : "var(--text)") + "\">"
-                  + opt[0] + "<br>" + opt[1] + "</button>";
-              }).join('')
-            + "</div></div>";
+    inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:4, total:4}) + " \u00B7 " + T('onboard.sub_prosopon') + "</div>"
+      + "<div class=\"onboard-title\">" + T('onboard.prosopon_title') + "</div>"
+      + "<div class=\"onboard-sub\">" + flavor + "</div>"
+      + listenBtn
+      + fields.map(function(f) {
+          return "<div class=\"form-group\" style=\"margin-top:14px\">"
+            + "<label style=\"font-size:12px;color:var(--text2);font-weight:600\">" + f.label + "</label>"
+            + "<textarea class=\"form-input\" id=\"" + f.id + "\" rows=\"2\" style=\"font-size:15px;padding:10px;margin-top:4px\" "
+            + "oninput=\"obSetProsopon('" + f.key + "', this.value)\">" + (S[f.key] || '') + "</textarea>"
+            + micButton(f.id, f.key)
+            + "</div>";
         }).join('')
-      + "<button class=\"btn btn-wave btn-full btn-lg\" onclick=\"obComplete()\">" + T('onboard.begin_journey') + " \u2192</button>";
+      + "<div style=\"display:flex;gap:10px;margin-top:18px\">"
+      + "<button class=\"btn btn-ghost btn-full\" onclick=\"obSkipProsopon()\">" + T('common.skip') + "</button>"
+      + "<button class=\"btn btn-wave btn-full btn-lg\" onclick=\"obComplete()\">" + T('onboard.begin_journey') + " \u2192</button>"
+      + "</div>";
   }
 
   return "<div class=\"onboard-wrap\"><div class=\"onboard-card\">"
@@ -4545,14 +4530,6 @@ window.obConfirmLanguage = async function() {
   set({onboardStep: 1});
 };
 window.obPhase  = function(slug) { SND.step(); set({onboardPhase: slug}); };
-window.obArt    = function(slug) { SND.tap(); set({onboardArt: slug}); };
-window.obEmoji  = function(e)    { set({onboardEmoji: e}); };
-window.obColor  = function(c)    { set({onboardColor: c}); };
-window.obFamiliarity = function(group, level) {
-  var fam = Object.assign({}, S.onboardFamiliarity || {});
-  fam[group] = level;
-  set({onboardFamiliarity: fam});
-};
 
 window.obSetName = function() {
   var name = document.getElementById('ob-name');
@@ -4560,34 +4537,74 @@ window.obSetName = function() {
   set({onboardName: name.value.trim(), onboardStep: 3});
 };
 
+// Prosopon card (step 4) — three live-bound free-text fields.
+window.obSetProsopon = function(key, value) { S[key] = value; };
+
+window.obSkipProsopon = function() {
+  S.onboardCuriosity = ''; S.onboardCaresAbout = ''; S.onboardWantsToDo = '';
+  obComplete();
+};
+
 window.obComplete = async function() {
+  // Logo/color are no longer chosen by the learner — randomize instead
+  // (per 2026-08-20 decision: not worth the onboarding friction).
+  var randEmoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+  var randColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+
   try {
     await API.patch('/learners/me/preferences', {
-      avatar_emoji:  S.onboardEmoji,
-      avatar_color:  S.onboardColor,
+      avatar_emoji:  randEmoji,
+      avatar_color:  randColor,
       phase:         S.onboardPhase,
       display_name:  S.onboardName,
-      first_art:     S.onboardArt,
     });
   } catch(e) { console.log('Preferences save:', e.message); }
 
-  // Seed initial skill progress from familiarity self-assessment
-  if (S.onboardFamiliarity && Object.keys(S.onboardFamiliarity).length > 0) {
+  // Prosopon (the learner's living profile — see PROSOPON.md):
+  // the 3 onboarding answers are the FIRST entry into learner_profile,
+  // going through the exact same distillation pipeline a sandbox
+  // conversation would (POST /generate/profile-update) rather than a
+  // separate one-off code path — one profile, one way it grows.
+  // Separately, seed-progress-domains gives the ZPD engine real initial
+  // signal, functionally replacing what the old familiarity screen fed.
+  var hasProsopon = (S.onboardCuriosity || S.onboardCaresAbout || S.onboardWantsToDo);
+  if (hasProsopon) {
+    var obMsgs = [];
+    if (S.onboardCuriosity)  { obMsgs.push({role:'assistant', content:'If you had all the money in the world and could talk to anyone you wanted, what would you ask them?'}); obMsgs.push({role:'user', content:S.onboardCuriosity}); }
+    if (S.onboardCaresAbout) { obMsgs.push({role:'assistant', content:'What do you care about most?'}); obMsgs.push({role:'user', content:S.onboardCaresAbout}); }
+    if (S.onboardWantsToDo)  { obMsgs.push({role:'assistant', content:'What do you want to do most?'});  obMsgs.push({role:'user', content:S.onboardWantsToDo}); }
     try {
-      await API.post('/learners/me/seed-progress', { familiarity: S.onboardFamiliarity });
-    } catch(e) { console.log('Seed progress:', e.message); }
+      var profRes = await API.post('/generate/profile-update', {
+        messages:         obMsgs,
+        existing_profile: null,
+      });
+      if (profRes && profRes.status === 'ok') {
+        var me = await API.get('/learners/me');
+        if (me && me.learner_profile) S.learnerProfile = me.learner_profile;
+      }
+    } catch(e) { console.log('Prosopon profile seed:', e.message); }
+    try {
+      await API.post('/learners/me/seed-progress-domains', {
+        curiosity:   S.onboardCuriosity  || null,
+        cares_about: S.onboardCaresAbout || null,
+        wants_to_do: S.onboardWantsToDo  || null,
+      });
+    } catch(e) { console.log('Seed progress (domains):', e.message); }
   }
+
   // Mark onboarded on server (persists across devices) + locally
   try { await API.patch('/auth/me', { onboarding_complete: true }); } catch(e) { console.log('Onboarding flag sync:', e.message); }
   localStorage.setItem('fl_onboarded', '1');
-  localStorage.setItem('fl_first_art', S.onboardArt);
   // Update learner display name + onboarding flag in local cache
   var l = S.learner || {};
   l.display_name = S.onboardName || l.display_name;
+  l.avatar_emoji = randEmoji;
+  l.avatar_color = randColor;
   l.onboarding_complete = true;
   localStorage.setItem('fl_learner', JSON.stringify(l));
   set({
     learner: l,
+    onboardColor: randColor,
     view: 'session',
     phase: 0,
     answered: false,
@@ -5500,7 +5517,141 @@ window.switchBioVersion = async function(portraitId, versionNumber) {
   }
 };
 
+// ══════════════════════════════════════════════════
+// HELP SECTION
+// Renders docs/*.md client-side. Manifest lists every doc; content is
+// fetched lazily (same lazy-load pattern as lang/<code>.json) and cached
+// in memory for the session. No markdown library — a small hand-rolled
+// renderer covers headings, bold/italic, links, lists, code, tables and
+// paragraphs, which is everything docs/*.md actually uses. Keeps this
+// consistent with the rest of the platform's zero-dependency, low-
+// bandwidth-friendly frontend.
+// ══════════════════════════════════════════════════
+
+function mdToHtml(md) {
+  if (!md) return '';
+  var esc = function(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); };
+  var lines = md.replace(/\r\n/g, '\n').split('\n');
+  var html = '', inList = false, inCode = false, inTable = false, para = [];
+  function flushPara() {
+    if (para.length) {
+      var t = inline(para.join(' '));
+      html += '<p>' + t + '</p>';
+      para = [];
+    }
+  }
+  function inline(t) {
+    t = esc(t);
+    t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+    t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    t = t.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    return t;
+  }
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i];
+    if (/^```/.test(l)) {
+      flushPara();
+      if (!inCode) { html += '<pre><code>'; inCode = true; }
+      else { html += '</code></pre>'; inCode = false; }
+      continue;
+    }
+    if (inCode) { html += esc(l) + '\n'; continue; }
+    if (/^\s*\|.*\|\s*$/.test(l)) {
+      flushPara();
+      if (/^[\s|:-]+$/.test(l)) continue; // header separator row
+      var cells = l.trim().replace(/^\||\|$/g, '').split('|').map(function(c){ return inline(c.trim()); });
+      if (!inTable) { html += '<table>'; inTable = true; }
+      var tag = (i > 0 && /^\s*\|[\s:-]+\|\s*$/.test(lines[i+1]||'')) ? 'th' : 'td';
+      html += '<tr>' + cells.map(function(c){ return '<' + tag + '>' + c + '</' + tag + '>'; }).join('') + '</tr>';
+      continue;
+    } else if (inTable) { html += '</table>'; inTable = false; }
+    var h = l.match(/^(#{1,4})\s+(.*)$/);
+    if (h) { flushPara(); html += '<h' + h[1].length + '>' + inline(h[2]) + '</h' + h[1].length + '>'; continue; }
+    if (/^\s*[-*]\s+/.test(l)) {
+      flushPara();
+      if (!inList) { html += '<ul>'; inList = true; }
+      html += '<li>' + inline(l.replace(/^\s*[-*]\s+/, '')) + '</li>';
+      continue;
+    } else if (inList) { html += '</ul>'; inList = false; }
+    if (l.trim() === '') { flushPara(); continue; }
+    para.push(l);
+  }
+  flushPara();
+  if (inList) html += '</ul>';
+  if (inTable) html += '</table>';
+  if (inCode) html += '</code></pre>';
+  return html;
+}
+
+function loadHelpManifest() {
+  if (S.helpDocs) return Promise.resolve();
+  return fetch('docs/manifest.json?v=' + LANG_ASSET_VERSION, { credentials: 'same-origin' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) { set({helpDocs: data}); })
+    .catch(function() { set({helpDocs: []}); });
+}
+
+window.openHelpDoc = function(slug) {
+  set({helpActiveDoc: slug, helpLoading: !S.helpContent[slug]});
+  if (S.helpContent[slug]) return;
+  fetch('docs/' + slug + '.md?v=' + LANG_ASSET_VERSION, { credentials: 'same-origin' })
+    .then(function(r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+    .then(function(md) {
+      var c = Object.assign({}, S.helpContent);
+      c[slug] = mdToHtml(md);
+      set({helpContent: c, helpLoading: false});
+    })
+    .catch(function() {
+      var c = Object.assign({}, S.helpContent);
+      c[slug] = '<p style="color:var(--coral)">' + T('help.load_error') + '</p>';
+      set({helpContent: c, helpLoading: false});
+    });
+};
+
+function HelpPage() {
+  if (!S.helpDocs) { loadHelpManifest(); }
+  var docs = S.helpDocs || [];
+  var q = (S.helpSearch || '').toLowerCase();
+  var filtered = q ? docs.filter(function(d) { return d.title.toLowerCase().indexOf(q) > -1 || d.section.toLowerCase().indexOf(q) > -1; }) : docs;
+
+  var bySection = {};
+  filtered.forEach(function(d) { (bySection[d.section] = bySection[d.section] || []).push(d); });
+
+  var sidebar = Object.keys(bySection).map(function(sec) {
+    var items = bySection[sec].map(function(d) {
+      var on = S.helpActiveDoc === d.slug;
+      return '<button onclick="openHelpDoc(\'' + d.slug + '\')" style="display:block;width:100%;text-align:start;'
+        + 'padding:6px 10px;border:none;border-radius:6px;cursor:pointer;font-size:13px;margin:1px 0;'
+        + 'background:' + (on ? 'rgba(0,229,200,0.15)' : 'transparent') + ';'
+        + 'color:' + (on ? 'var(--wave)' : 'var(--text2)') + '">' + d.title + '</button>';
+    }).join('');
+    return '<div style="margin-bottom:14px"><div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+      + 'letter-spacing:.04em;color:var(--text3);padding:0 10px;margin-bottom:4px">' + sec + '</div>' + items + '</div>';
+  }).join('') || '<div style="color:var(--text3);font-size:13px;padding:10px">' + T('help.no_results') + '</div>';
+
+  var content;
+  if (!S.helpActiveDoc) {
+    content = '<div style="color:var(--text3);padding:30px;text-align:center">' + T('help.select_prompt') + '</div>';
+  } else if (S.helpLoading) {
+    content = '<div style="color:var(--text3);padding:30px;text-align:center">' + T('common.loading') + '</div>';
+  } else {
+    content = '<div class="help-doc">' + (S.helpContent[S.helpActiveDoc] || '') + '</div>';
+  }
+
+  return '<div class="page" style="max-width:1000px">'
+    + '<h2 style="margin-bottom:4px">' + T('help.title') + '</h2>'
+    + '<div style="color:var(--text3);font-size:13px;margin-bottom:16px">' + T('help.subtitle') + '</div>'
+    + '<input class="form-input" placeholder="' + T('help.search_placeholder') + '" value="' + (S.helpSearch||'') + '" '
+    + 'oninput="set({helpSearch:this.value})" style="margin-bottom:16px;max-width:320px">'
+    + '<div style="display:grid;grid-template-columns:220px 1fr;gap:20px;align-items:start">'
+    + '<div class="card" style="padding:12px 4px;position:sticky;top:70px">' + sidebar + '</div>'
+    + '<div class="card" style="padding:20px 26px;min-height:300px">' + content + '</div>'
+    + '</div></div>';
+}
+
 function draw() {
+
   const views = {
     login:      AuthPage,
     onboard:    OnboardPage,
@@ -5513,6 +5664,7 @@ function draw() {
     reflect:    Stoa,
     portfolio:  Portfolio,
     bioregion:  BioregionPage,
+    help:       HelpPage,
   };
 
   const root = document.getElementById('root');
