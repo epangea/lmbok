@@ -5,6 +5,7 @@ from sqlalchemy import select
 from db import get_db
 from models import Learner, LearnerStreak, LearnerPreferences
 from routes.auth import get_current_learner
+from mouseion_domains import MOUSEION_DOMAIN_SKILLS, MOUSEION_DOMAINS
 import ai_client
 
 router = APIRouter()
@@ -216,28 +217,11 @@ class SeedProgressDomainsRequest(_BaseModel):
     wants_to_do: Optional[str] = None
 
 
-# The 8 Mouseion domains and their 48 skills, mirrored 1:1 from frontend/app.js's
-# _DOMS (inside Mouseion()) — that array is the sole source of truth for this
-# grouping and is entirely client-side/hardcoded, NOT sourced from any DB column.
-# Deliberately matching by Skill.name here rather than trusting Skill.learning_domain:
-# that DB column is populated with a different, older subject-matter taxonomy
-# (Physiology, Physics, etc. — see backend/routes/generate.py's skill_id lookup
-# path, and models.Lecko.learning_domain, which shares the same legacy values).
-# Per 2026-08-20 decision, that legacy taxonomy is retired everywhere it's not
-# load-bearing for real functionality; Skill.learning_domain itself is left alone
-# here since generate.py's LECKO-similarity matching still depends on its current
-# values — repurposing that column is a separate, bigger decision, not this one.
-MOUSEION_DOMAIN_SKILLS = {
-    "Cognitive & Intellectual": ["Critical Thinking","Problem Solving","Systems Thinking","Memory & Retention","Decision Making","Project Management"],
-    "Creative & Artistic": ["Visual Art","Music & Rhythm","Creative Writing","Drama & Theatre","Improvisation & Public Speaking","Craftsmanship & Making"],
-    "Physical & Motor": ["Gross Motor","Fine Motor","Physical Fitness","Dance & Movement","Body Awareness","First Aid & Nursing"],
-    "Social & Relational": ["Collaboration","Conflict Resolution","Empathetic Leadership","Negotiation","Cultural Competence","Parenting & Caregiving"],
-    "Language & Communication": ["Active Reading","Active Listening","Storytelling","Debate & Argumentation","Foreign Language Acquisition","Rhetoric & Persuasion"],
-    "Emotional & Psychological": ["Self-Awareness","Emotional Regulation","Empathy and Compassion","Self-Efficacy","Contemplative Practice","Gratitude & Appreciation"],
-    "Meta-Learning": ["Learning How to Learn","Self-Regulation","Personal Values","Curiosity and Exploration","Vision, Mission and Purpose","Mentorship & Teaching"],
-    "Tools & Systems": ["Digital Literacy","Data Analysis & Statistics","Design Thinking","Philosophy & Ethics","Permaculture","Cooking & Nutrition"],
-}
-MOUSEION_DOMAINS = list(MOUSEION_DOMAIN_SKILLS.keys())
+# The 8 Mouseion domains and their 48 skills. Added 2026-08-22: this used to
+# be hardcoded inline here as a second copy of frontend/app.js's _DOMS; it now
+# imports the single shared backend copy in mouseion_domains.py (see that
+# module's header for the full "why," including why it's still a separate
+# copy from _DOMS and why matching is by Skill.name, not Skill.learning_domain).
 
 
 @router.post("/me/seed-progress-domains")

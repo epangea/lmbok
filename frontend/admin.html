@@ -1032,6 +1032,28 @@ function orgsReactivate(orgId) {
 }
 
 var lecsState = { lecs: null };
+var adminMouseionDomains = null; // cached [{domain, skills}], lazily fetched from /api/mouseion-domains
+
+function ensureAdminMouseionDomains() {
+  if (adminMouseionDomains) return Promise.resolve(adminMouseionDomains);
+  return adminFetch('/mouseion-domains').then(function(data) {
+    adminMouseionDomains = data || [];
+    return adminMouseionDomains;
+  }).catch(function(e) {
+    console.warn('Could not load Mouseion domains for LECKO editor', e);
+    adminMouseionDomains = [];
+    return adminMouseionDomains;
+  });
+}
+
+function adminOnLeDomainChange() {
+  var domain = document.getElementById('le-domain').value;
+  var skillSel = document.getElementById('le-related-skill');
+  var match = (adminMouseionDomains || []).filter(function(d){ return d.domain === domain; })[0];
+  skillSel.innerHTML = '<option value="">\u2014</option>' + (match ? match.skills : []).map(function(sk) {
+    return '<option value="' + escH(sk) + '">' + escH(sk) + '</option>';
+  }).join('');
+}
 
 function AdminLecKos() {
   var body;
@@ -1108,52 +1130,75 @@ function lecsEdit(leckoId) {
   var l = (lecsState.lecs || []).find(function(x){ return x.id === leckoId; });
   if (!l) return;
 
-  var html = '<div style="display:flex;flex-direction:column;gap:12px;max-width:520px;width:100%">'
-    + '<div style="display:flex;justify-content:space-between;align-items:center">'
-    + '<span style="color:var(--text3);font-size:12px">LECKO #' + l.id + '</span>'
-    + '<button class="btn btn-ghost btn-sm" onclick="adminCloseModal()">Close</button>'
-    + '</div>'
-    + '<div><label class="form-label">Title</label>'
-    + '<input id="le-title" class="form-input" value="' + escH(l.title || '') + '"/></div>'
-    + '<div style="display:flex;gap:12px">'
-    + '<div style="flex:1"><label class="form-label">Art ID</label>'
-    + '<input id="le-art" class="form-input" type="number" value="' + escH(String(l.art_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.art_name || '') + '</span></div>'
-    + '<div style="flex:1"><label class="form-label">Phase ID</label>'
-    + '<input id="le-phase" class="form-input" type="number" value="' + escH(String(l.phase_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.phase_name || '') + '</span></div>'
-    + '</div>'
-    + '<div style="display:flex;gap:12px">'
-    + '<div style="flex:1"><label class="form-label">Skill type</label>'
-    + '<input id="le-skill" class="form-input" value="' + escH(l.skill_type || '') + '"/></div>'
-    + '<div style="flex:1"><label class="form-label">Assessment type</label>'
-    + '<input id="le-assess" class="form-input" value="' + escH(l.assessment_type || '') + '"/></div>'
-    + '</div>'
-    + '<div><label class="form-label">Community need</label>'
-    + '<textarea id="le-comm" class="form-input" rows="2">' + escH(l.community_need || '') + '</textarea></div>'
-    + '<div><label class="form-label">Source credit</label>'
-    + '<input id="le-src" class="form-input" value="' + escH(l.source_credit || '') + '"/></div>'
-    + '<div><label class="form-label">Evidence URL</label>'
-    + '<input id="le-ev" class="form-input" value="' + escH(l.evidence_url || '') + '"/></div>'
-    + '<div style="display:flex;align-items:center;gap:8px">'
-    + '<input id="le-active" type="checkbox" ' + (l.is_active ? 'checked' : '') + '/>'
-    + '<label class="form-label" style="margin:0">Active</label>'
-    + '</div>'
-    + '<div><label class="form-label">Description</label>'
-    + '<textarea id="le-desc" class="form-input" rows="2">' + escH(l.description || '') + '</textarea></div>'
-    + '<div style="display:flex;gap:12px">'
-    + '<div style="flex:1"><label class="form-label">Learning domain</label>'
-    + '<input id="le-domain" class="form-input" value="' + escH(l.learning_domain || '') + '"/></div>'
-    + '<div style="flex:1"><label class="form-label">Assessment description</label>'
-    + '<textarea id="le-assess-desc" class="form-input" rows="2">' + escH(l.assessment_desc || '') + '</textarea></div>'
-    + '</div>'
-    + '<div style="display:flex;gap:12px">'
-    + '<div style="flex:1"><label class="form-label">Utility score</label>'
-    + '<input id="le-util" class="form-input" type="number" step="0.1" value="' + escH(String(l.utility_score ?? '')) + '"/></div>'
-    + '</div>'
-    + '</div>'
-    + '<button class="btn btn-wave btn-sm" onclick="lecsSave(' + l.id + ')">Save changes</button>'
-    + '</div>';
+  ensureAdminMouseionDomains().then(function(domains) {
+    // Domain select: known 8, plus a visible fallback option if this LECKO's
+    // current value isn't one of them (legacy/freeform data), so it's never
+    // silently hidden or lost by switching to a select.
+    var domainKnown = domains.some(function(d){ return d.domain === l.learning_domain; });
+    var domainOpts = '<option value="">\u2014</option>'
+      + (l.learning_domain && !domainKnown ? '<option value="' + escH(l.learning_domain) + '" selected>\u26A0 ' + escH(l.learning_domain) + ' (not in current 8)</option>' : '')
+      + domains.map(function(d) {
+          return '<option value="' + escH(d.domain) + '"' + (d.domain === l.learning_domain ? ' selected' : '') + '>' + escH(d.domain) + '</option>';
+        }).join('');
 
-  adminShowModal('Edit LECKO — ' + escH(l.title), html);
+    var domainMatch = domains.filter(function(d){ return d.domain === l.learning_domain; })[0];
+    var skillList = domainMatch ? domainMatch.skills : [];
+    var skillKnown = skillList.indexOf(l.related_skill) !== -1;
+    var skillOpts = '<option value="">\u2014</option>'
+      + (l.related_skill && !skillKnown ? '<option value="' + escH(l.related_skill) + '" selected>\u26A0 ' + escH(l.related_skill) + ' (not in this domain)</option>' : '')
+      + skillList.map(function(sk) {
+          return '<option value="' + escH(sk) + '"' + (sk === l.related_skill ? ' selected' : '') + '>' + escH(sk) + '</option>';
+        }).join('');
+
+    var html = '<div style="display:flex;flex-direction:column;gap:12px;max-width:520px;width:100%">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center">'
+      + '<span style="color:var(--text3);font-size:12px">LECKO #' + l.id + '</span>'
+      + '<button class="btn btn-ghost btn-sm" onclick="adminCloseModal()">Close</button>'
+      + '</div>'
+      + '<div><label class="form-label">Title</label>'
+      + '<input id="le-title" class="form-input" value="' + escH(l.title || '') + '"/></div>'
+      + '<div style="display:flex;gap:12px">'
+      + '<div style="flex:1"><label class="form-label">Art ID</label>'
+      + '<input id="le-art" class="form-input" type="number" value="' + escH(String(l.art_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.art_name || '') + '</span></div>'
+      + '<div style="flex:1"><label class="form-label">Phase ID</label>'
+      + '<input id="le-phase" class="form-input" type="number" value="' + escH(String(l.phase_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.phase_name || '') + '</span></div>'
+      + '</div>'
+      + '<div style="display:flex;gap:12px">'
+      + '<div style="flex:1"><label class="form-label">Skill type</label>'
+      + '<input id="le-skill" class="form-input" value="' + escH(l.skill_type || '') + '"/></div>'
+      + '<div style="flex:1"><label class="form-label">Assessment type</label>'
+      + '<input id="le-assess" class="form-input" value="' + escH(l.assessment_type || '') + '"/></div>'
+      + '</div>'
+      + '<div><label class="form-label">Community need</label>'
+      + '<textarea id="le-comm" class="form-input" rows="2">' + escH(l.community_need || '') + '</textarea></div>'
+      + '<div><label class="form-label">Source credit</label>'
+      + '<input id="le-src" class="form-input" value="' + escH(l.source_credit || '') + '"/></div>'
+      + '<div><label class="form-label">Evidence URL</label>'
+      + '<input id="le-ev" class="form-input" value="' + escH(l.evidence_url || '') + '"/></div>'
+      + '<div style="display:flex;align-items:center;gap:8px">'
+      + '<input id="le-active" type="checkbox" ' + (l.is_active ? 'checked' : '') + '/>'
+      + '<label class="form-label" style="margin:0">Active</label>'
+      + '</div>'
+      + '<div><label class="form-label">Description</label>'
+      + '<textarea id="le-desc" class="form-input" rows="2">' + escH(l.description || '') + '</textarea></div>'
+      + '<div style="display:flex;gap:12px">'
+      + '<div style="flex:1"><label class="form-label">Learning domain</label>'
+      + '<select id="le-domain" class="form-input" onchange="adminOnLeDomainChange()">' + domainOpts + '</select></div>'
+      + '<div style="flex:1"><label class="form-label">Related skill</label>'
+      + '<select id="le-related-skill" class="form-input">' + skillOpts + '</select></div>'
+      + '</div>'
+      + '<div style="display:flex;gap:12px">'
+      + '<div style="flex:1"><label class="form-label">Assessment description</label>'
+      + '<textarea id="le-assess-desc" class="form-input" rows="2">' + escH(l.assessment_desc || '') + '</textarea></div>'
+      + '<div style="flex:1"><label class="form-label">Utility score</label>'
+      + '<input id="le-util" class="form-input" type="number" step="0.1" value="' + escH(String(l.utility_score ?? '')) + '"/></div>'
+      + '</div>'
+      + '</div>'
+      + '<button class="btn btn-wave btn-sm" onclick="lecsSave(' + l.id + ')">Save changes</button>'
+      + '</div>';
+
+    adminShowModal('Edit LECKO — ' + escH(l.title), html);
+  });
 }
 
 function lecsSave(leckoId) {
@@ -1168,12 +1213,14 @@ function lecsSave(leckoId) {
   };
   var descVal = (document.getElementById('le-desc') || {}).value;
   var domVal  = (document.getElementById('le-domain') || {}).value;
+  var relVal  = (document.getElementById('le-related-skill') || {}).value;
   var aDesc   = (document.getElementById('le-assess-desc') || {}).value;
   var utilVal = (document.getElementById('le-util') || {}).value;
   var artVal  = (document.getElementById('le-art') || {}).value;
   var phVal   = (document.getElementById('le-phase') || {}).value;
   if (descVal) body.description = descVal;
   if (domVal)  body.learning_domain = domVal;
+  if (relVal)  body.related_skill = relVal;
   if (aDesc)   body.assessment_desc = aDesc;
   if (utilVal !== '') body.utility_score = parseFloat(utilVal) || 0;
   if (artVal) body.art_id = parseInt(artVal, 10) || artVal;
@@ -2210,6 +2257,7 @@ function AdminModerate() {
       + '<div style="flex:1;min-width:0">'
       + '<h3 style="margin-bottom:4px">' + escH(l.title || '(untitled)') + '</h3>'
       + '<p style="font-size:12px;color:var(--text3);margin:0">' + escH(l.art_name || '') + ' &middot; ' + escH(l.phase_name || '') + ' &middot; submitted ' + escH(createdDate) + '</p>'
+      + (l.learning_domain ? '<p style="font-size:11px;color:var(--text3);margin:4px 0 0">' + escH(l.learning_domain) + (l.related_skill ? ' &rarr; ' + escH(l.related_skill) : '') + '</p>' : '')
       + '</div>'
       + '<span class="badge badge-amber">Pending</span>'
       + '</div>'

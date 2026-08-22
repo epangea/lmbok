@@ -34,6 +34,7 @@ class LeckoSubmit(BaseModel):
     source_credit:   Optional[str] = None
     evidence_url:    Optional[str] = None
     learning_domain: Optional[str] = None
+    related_skill:   Optional[str] = None   # optional; one of the 48 Mouseion skill names
     submitter_name:  Optional[str] = None   # not stored in DB, kept for future contact log
 
 
@@ -51,6 +52,7 @@ def _lecko_dict(lecko: Lecko, art_name: str = "", phase_name: str = "") -> dict:
         "assessment_desc": lecko.assessment_desc,
         "assessment_type": lecko.assessment_type,
         "learning_domain": lecko.learning_domain,
+        "related_skill":   lecko.related_skill,
         "source_credit":   lecko.source_credit,
         "evidence_url":    lecko.evidence_url,
         "utility_score":   lecko.utility_score,
@@ -146,6 +148,7 @@ async def submit_lecko(
         assessment_desc = req.assessment_desc,
         assessment_type = "task",
         learning_domain = req.learning_domain,
+        related_skill   = req.related_skill,
         source_credit   = req.source_credit,
         evidence_url    = req.evidence_url,
         utility_score   = 0.0,

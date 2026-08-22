@@ -16,7 +16,7 @@ from db import Base
 class DevPhase(Base):
     __tablename__ = "dev_phases"
     id:          Mapped[int]           = mapped_column(Integer, primary_key=True)
-    name:        Mapped[str]           = mapped_column(String(30), nullable=False)
+    name:        Mapped[str]           = mapped_column(String(50), nullable=False)
     slug:        Mapped[str]           = mapped_column(String(30), unique=True, nullable=False)
     age_range:   Mapped[Optional[str]] = mapped_column(String(20))
     description: Mapped[Optional[str]] = mapped_column(Text)
@@ -365,6 +365,7 @@ class Lecko(Base):
     title:           Mapped[str]           = mapped_column(String(200), nullable=False)
     description:     Mapped[Optional[str]] = mapped_column(Text)
     learning_domain: Mapped[Optional[str]] = mapped_column(String(80))
+    related_skill:   Mapped[Optional[str]] = mapped_column(String(120))  # optional; one of the 48 Mouseion skill names, see 2026-08-22-add-leckos-related-skill.sql
     skill_type:      Mapped[str]           = mapped_column(String(40), default="cognitive")
     assessment_type: Mapped[str]           = mapped_column(String(60), default="task")
     assessment_desc: Mapped[Optional[str]] = mapped_column(Text)

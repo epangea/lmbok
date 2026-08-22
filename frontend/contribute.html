@@ -94,18 +94,32 @@
             <label>Who is it for? <span>*</span></label>
             <select id="f-phase">
               <option value="">Select a phase…</option>
-              <option value="prenascent">Prenascent (0–2, caregiver-led)</option>
-              <option value="child">Child (3–11)</option>
-              <option value="adolescent">Adolescent (12–17)</option>
-              <option value="adult">Adult (18–60)</option>
-              <option value="elder">Elder (61+)</option>
+              <!-- Populated on load from GET /api/phases (dev_phases table) —
+                   the same source as onboarding/preferences' PHASES array.
+                   Static fallback options below are only used if that fetch fails. -->
+              <option value="prenascent">Expecting a child (ParentGuide) — Pregnancy</option>
+              <option value="nascent">Newborn & Infant (GuardianGuide) — Ages 0~2</option>
+              <option value="child">Child (GuardianGuide) — Ages 3~11</option>
+              <option value="adolescent">Adolescent — Ages 12~19</option>
+              <option value="adult">Adult — Ages 20~59</option>
+              <option value="elder">Elder — Ages 60+</option>
             </select>
           </div>
         </div>
-        <div class="form-group">
-          <label>Domain / field of knowledge</label>
-          <input type="text" id="f-domain" placeholder="e.g. Traditional ecology, Music theory, Conflict resolution…"/>
-          <div class="form-hint">The broader field this knowledge comes from.</div>
+        <div class="form-row">
+          <div class="form-group">
+            <label>Domain / field of knowledge</label>
+            <select id="f-domain" onchange="onDomainChange()">
+              <option value="">Select a domain… (optional)</option>
+            </select>
+            <div class="form-hint">The broader field this knowledge comes from — same 8 domains as the Mouseion.</div>
+          </div>
+          <div class="form-group">
+            <label>Related skill</label>
+            <select id="f-related-skill" disabled>
+              <option value="">Select a domain first (optional)</option>
+            </select>
+          </div>
         </div>
         <div style="display:flex;gap:10px;justify-content:space-between">
           <button class="btn btn-ghost" onclick="goStep(1)">← Back</button>
@@ -130,7 +144,7 @@
         </div>
         <div class="form-group">
           <label>Your name (optional)</label>
-          <input type="text" id="f-name" placeholder="How should we credit you if this is approved?"/>
+          <input type="text" id="f-name" placeholder="Who should we credit if this is approved?"/>
         </div>
         <div style="display:flex;gap:10px;justify-content:space-between">
           <button class="btn btn-ghost" onclick="goStep(2)">← Back</button>
@@ -171,6 +185,65 @@
 var API_BASE = '/api';
 var currentArtFilter = '';
 var allLeckos = [];
+var mouseionDomains = [];   // [{domain, skills:[...]}, ...] from GET /api/mouseion-domains
+
+// ── Context selects: domains/skills + phases, fetched from the same
+//    canonical backend sources onboarding/preferences and the Mouseion use
+//    (mouseion_domains.py and the dev_phases table), instead of a fourth
+//    hardcoded copy living in this file. ──────────────────────
+async function loadContextOptions() {
+  try {
+    var resp = await fetch(API_BASE + '/mouseion-domains');
+    mouseionDomains = await resp.json();
+    var sel = document.getElementById('f-domain');
+    mouseionDomains.forEach(function(d) {
+      var opt = document.createElement('option');
+      opt.value = d.domain;
+      opt.textContent = d.domain;
+      sel.appendChild(opt);
+    });
+  } catch (e) {
+    console.warn('Could not load Mouseion domains — domain/skill selects will stay empty.', e);
+  }
+
+  try {
+    var resp2 = await fetch(API_BASE + '/phases');
+    var phases = await resp2.json();
+    if (phases && phases.length) {
+      var phaseSel = document.getElementById('f-phase');
+      phaseSel.innerHTML = '<option value="">Select a phase…</option>';
+      phases.forEach(function(p) {
+        var opt = document.createElement('option');
+        opt.value = p.slug;
+        opt.textContent = p.name + (p.age_range ? ' — ' + p.age_range : '');
+        phaseSel.appendChild(opt);
+      });
+    }
+    // If the fetch succeeds but returns nothing, the static fallback options
+    // already in the HTML are left in place untouched.
+  } catch (e) {
+    console.warn('Could not load phases — keeping static fallback options.', e);
+  }
+}
+
+function onDomainChange() {
+  var domain = document.getElementById('f-domain').value;
+  var skillSel = document.getElementById('f-related-skill');
+  skillSel.innerHTML = '';
+
+  if (!domain) {
+    skillSel.disabled = true;
+    skillSel.innerHTML = '<option value="">Select a domain first (optional)</option>';
+    return;
+  }
+
+  var match = mouseionDomains.filter(function(d) { return d.domain === domain; })[0];
+  skillSel.disabled = false;
+  skillSel.appendChild(new Option('Select a skill… (optional)', ''));
+  (match ? match.skills : []).forEach(function(sk) {
+    skillSel.appendChild(new Option(sk, sk));
+  });
+}
 
 // ── Step navigation ──────────────────────────────────────────
 function goStep(n) {
@@ -208,7 +281,8 @@ async function submitLecko() {
     description:     document.getElementById('f-description').value.trim() || null,
     community_need:  document.getElementById('f-need').value.trim()   || null,
     assessment_desc: document.getElementById('f-assess').value.trim() || null,
-    learning_domain: document.getElementById('f-domain').value.trim() || null,
+    learning_domain: document.getElementById('f-domain').value || null,
+    related_skill:   document.getElementById('f-related-skill').value || null,
     source_credit:   document.getElementById('f-source').value.trim() || null,
     evidence_url:    document.getElementById('f-url').value.trim()    || null,
     submitter_name:  document.getElementById('f-name').value.trim()   || null,
@@ -229,6 +303,7 @@ async function submitLecko() {
 
     // Reset form
     document.getElementById('lecko-form').reset();
+    onDomainChange();   // form.reset() doesn't re-disable/repopulate the cascading skill select
     goStep(1);
     window.scrollTo({top: 0, behavior: 'smooth'});
 
@@ -286,6 +361,7 @@ function esc(s) {
 }
 
 // Boot
+loadContextOptions();
 loadLeckos('');
 </script>
 

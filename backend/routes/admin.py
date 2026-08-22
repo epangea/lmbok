@@ -1245,6 +1245,8 @@ async def admin_list_leckos(
             "art_name": art_map.get(l.art_id, ""),
             "phase_id": l.phase_id,
             "phase_name": ph_map.get(l.phase_id, ""),
+            "learning_domain": l.learning_domain,
+            "related_skill": l.related_skill,
             "skill_type": l.skill_type,
             "assessment_type": l.assessment_type,
             "community_need": l.community_need,
@@ -1271,7 +1273,7 @@ async def admin_update_lecko(
     if not lecko:
         raise HTTPException(404, "LECKO not found")
 
-    for key in ("title", "description", "learning_domain", "skill_type", "assessment_type", "assessment_desc", "community_need", "source_credit", "evidence_url", "utility_score"):
+    for key in ("title", "description", "learning_domain", "related_skill", "skill_type", "assessment_type", "assessment_desc", "community_need", "source_credit", "evidence_url", "utility_score"):
         if key in data:
             setattr(lecko, key, data[key])
 

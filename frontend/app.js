@@ -4403,11 +4403,11 @@ function computeSkillScore(skillName, artScores) {
 
 var PHASES = [
   {slug:'prenascent', icon:'🌱', name:'Expecting a child (ParentGuide)', desc:'Pregnancy \u00B7 preparing for parenthood'},
-  {slug:'nascent',    icon:'🌿', name:'Newborn & Infant (GuardianGuide)',  desc:'Ages 0\u20132 \u00B7 attuning to a new life'},
-  {slug:'child',      icon:'🧒', name:'Child (GuardianGuide)',            desc:'Ages 3\u201311 \u00B7 curiosity-led exploration'},
-  {slug:'adolescent', icon:'🔥', name:'Adolescent',       desc:'Ages 12\u201317 \u00B7 identity & independence'},
-  {slug:'adult',      icon:'🌳', name:'Adult',            desc:'Ages 18\u201360 \u00B7 building & contributing'},
-  {slug:'elder',      icon:'🍂', name:'Elder',            desc:'Ages 61+ \u00B7 wisdom & transmission'},
+  {slug:'nascent',    icon:'🌿', name:'Newborn & Infant (GuardianGuide)',  desc:'Ages 0~2 \u00B7 attuning to a new life'},
+  {slug:'child',      icon:'🧒', name:'Child (GuardianGuide)',            desc:'Ages 3~11 \u00B7 curiosity-led exploration'},
+  {slug:'adolescent', icon:'🔥', name:'Adolescent',       desc:'Ages 12~19 \u00B7 identity & independence'},
+  {slug:'adult',      icon:'🌳', name:'Adult',            desc:'Ages 20~59 \u00B7 building & contributing'},
+  {slug:'elder',      icon:'🍂', name:'Elder',            desc:'Ages 60+ \u00B7 wisdom & transmission'},
 ];
 
 var EMOJIS = ['🌊','🔥','🌿','⚡','🎵','🦋','🌙','🌸','🐉','🦁','🌍','✨'];
