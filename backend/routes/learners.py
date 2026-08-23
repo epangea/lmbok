@@ -11,7 +11,14 @@ import ai_client
 router = APIRouter()
 
 @router.get("/me")
-async def get_me(learner: Learner = Depends(get_current_learner)):
+async def get_me(
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    prefs_result = await db.execute(
+        select(LearnerPreferences).where(LearnerPreferences.learner_id == learner.id)
+    )
+    prefs = prefs_result.scalar_one_or_none()
     return {
         "id":           learner.id,
         "username":     learner.username,
@@ -22,6 +29,12 @@ async def get_me(learner: Learner = Depends(get_current_learner)):
         "phase_id":     learner.phase_id,
         "language":     learner.language or "en",
         "created_at":   learner.created_at,
+        # 2026-08-23d: surfaced here (not a new endpoint) since Preferences'
+        # single PATCH/GET pair already round-trips everything else the
+        # modal shows -- a learner with no LearnerPreferences row at all
+        # (shouldn't happen post-registration) defaults to subscribed,
+        # same as the opt-out column's own DB default.
+        "newsletter_opt_out": bool(prefs.newsletter_opt_out) if prefs else False,
     }
 
 @router.get("/me/streak")
@@ -49,6 +62,11 @@ class PreferencesUpdate(BaseModel):
     display_name:  Optional[str] = None
     first_art:     Optional[str] = None
     language:      Optional[str] = None
+    # 2026-08-23d: lives in LearnerPreferences, not Learner -- everything
+    # else in this endpoint writes straight onto the Learner row, so this
+    # one field needs its own fetch-or-create below rather than a plain
+    # `learner.x = req.x` assignment.
+    newsletter_opt_out: Optional[bool] = None
 
 @router.patch("/me/preferences")
 async def update_preferences(
@@ -71,6 +89,16 @@ async def update_preferences(
         phase = phase_q.scalar_one_or_none()
         if phase:
             learner.phase_id = phase.id
+
+    if req.newsletter_opt_out is not None:
+        prefs_q = await db.execute(sel(LearnerPreferences).where(LearnerPreferences.learner_id == learner.id))
+        prefs = prefs_q.scalar_one_or_none()
+        if not prefs:
+            # Defensive only -- register() always creates this row -- but
+            # don't 500 on a genuinely pre-existing legacy account.
+            prefs = LearnerPreferences(learner_id=learner.id)
+            db.add(prefs)
+        prefs.newsletter_opt_out = req.newsletter_opt_out
 
     await db.commit()
     return {"ok": True}

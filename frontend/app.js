@@ -1075,6 +1075,7 @@ const LANG = {  // Only English ships inline; other languages load
     'prefs.avatar':'Avatar',
     'prefs.language':'Language',
     'prefs.name':'Display name',
+    'prefs.newsletter_optin':'Receive administrative emails and educational newsletters (never spam)',
     'prefs.phase':'Life phase',
     'prefs.save':'Save changes',
     'prefs.title':'Preferences',
@@ -3962,6 +3963,11 @@ window.showPreferences = function() {
     + '<div style="display:flex;flex-wrap:wrap;gap:6px">'+phaseRow+'</div>'
     + '</div>'
 
+    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:20px;cursor:pointer">'
+    + '<input type="checkbox" id="pref-newsletter" ' + (l.newsletter_opt_out ? '' : 'checked') + ' style="margin-top:2px;flex-shrink:0">'
+    + '<span style="font-size:11px;color:var(--text3);line-height:1.5">' + T('prefs.newsletter_optin') + '</span>'
+    + '</label>'
+
     + '<button onclick="savePreferences()" class="btn btn-wave btn-full">' + T('prefs.save') + '</button>'
     + '</div>';
 
@@ -4016,6 +4022,8 @@ window.prefPickPhase = function(slug) {
 
 window.savePreferences = async function() {
   var name = (document.getElementById('pref-name')||{}).value || '';
+  var newsletterEl = document.getElementById('pref-newsletter');
+  var newsletterOptOut = newsletterEl ? !newsletterEl.checked : false;
   try {
     await API.patch('/learners/me/preferences', {
       display_name:  name.trim() || undefined,
@@ -4023,11 +4031,13 @@ window.savePreferences = async function() {
       avatar_color:  window._prefColor,
       phase:         window._prefPhase,
       language:      window._prefLang,
+      newsletter_opt_out: newsletterOptOut,
     });
     var l = Object.assign({}, S.learner||{});
     if (name.trim()) l.display_name = name.trim();
     l.avatar_emoji = window._prefEmoji;
     l.avatar_color = window._prefColor;
+    l.newsletter_opt_out = newsletterOptOut;
     localStorage.setItem('fl_learner', JSON.stringify(l));
     set({learner:l, onboardPhase:window._prefPhase, language: window._prefLang || S.language});
     document.getElementById('prefs-modal').remove();

@@ -101,6 +101,7 @@ class LearnerPreferences(Base):
     allow_matching:         Mapped[bool]          = mapped_column(Boolean, default=True)
     profile_visible:        Mapped[bool]          = mapped_column(Boolean, default=False)
     tier:                   Mapped[int]           = mapped_column(Integer, default=1)
+    newsletter_opt_out:     Mapped[bool]          = mapped_column(Boolean, default=False)
     updated_at:             Mapped[datetime]      = mapped_column(DateTime, default=func.now(), onupdate=func.now())
     learner: Mapped["Learner"] = relationship(back_populates="preferences")
 
@@ -416,6 +417,35 @@ class LearnerAdminMessage(Base):
     subject:    Mapped[str]      = mapped_column(String(500), nullable=False)
     body:       Mapped[str]      = mapped_column(Text, nullable=False)
     sent_at:    Mapped[datetime] = mapped_column(DateTime, default=func.now())
+
+
+class Newsletter(Base):
+    """An admin-composed newsletter broadcast to all subscribed learners.
+    One row per newsletter, not one row per recipient -- recipients aren't
+    individually logged (unlike LearnerAdminMessage), just counted, since a
+    per-recipient audit trail isn't needed for a broadcast and would mean a
+    row per learner per send. sent_count/failed_count are filled in by the
+    background send job once it finishes."""
+    __tablename__ = "newsletters"
+    id:              Mapped[int]           = mapped_column(Integer, primary_key=True, autoincrement=True)
+    subject:         Mapped[str]           = mapped_column(String(500), nullable=False)
+    body:            Mapped[str]           = mapped_column(Text, nullable=False)
+    status:          Mapped[str]           = mapped_column(String(20), default="draft")  # draft | sending | sent
+    recipient_count: Mapped[int]           = mapped_column(Integer, default=0)
+    sent_count:      Mapped[int]           = mapped_column(Integer, default=0)
+    failed_count:    Mapped[int]           = mapped_column(Integer, default=0)
+    # JSON text, not real columns -- both are optional, per-newsletter,
+    # and never queried against (only read back whole and re-applied at
+    # send time), so a normalized table/column-per-filter would just be
+    # more migration churn for no query benefit. audience_filters:
+    # {"language": "vi", "phase_id": 3, "bioregion": "..."} (2026-08-23b).
+    # excluded_learner_ids: [12, 47, ...] -- a per-send-only exclusion
+    # list, deliberately separate from LearnerPreferences.newsletter_opt_out
+    # (which is the permanent, all-future opt-out).
+    audience_filters:      Mapped[Optional[str]] = mapped_column(Text)
+    excluded_learner_ids:  Mapped[Optional[str]] = mapped_column(Text)
+    created_at:      Mapped[datetime]      = mapped_column(DateTime, default=func.now())
+    sent_at:         Mapped[Optional[datetime]] = mapped_column(DateTime)
 
 
 class OutreachDraft(Base):

@@ -930,6 +930,17 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .sidebar-icon{font-size:16px;width:20px;text-align:center}
 .sidebar-section{padding:8px 20px;font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-top:12px}
 .admin-content{padding:28px;overflow-y:auto}
+/* 2026-08-23c: .page carries a 72px top padding meant for app.html's
+   fixed learner-side nav, which admin.html doesn't have -- its own nav
+   clearance is handled separately by .admin-layout's margin-top:56px
+   above. A handful of admin sections (Outreach, Validation, Settings,
+   Sessions, Moderate, Newsletter) reuse .page as a convenient
+   max-width/centering wrapper and inherited that unrelated 72px gap
+   along with it. Scoped to .admin-content so app.html's own .page
+   usage is completely untouched -- only overrides padding-top, so
+   .page's max-width/centering/horizontal-padding/overflow-x behavior
+   (including its own mobile breakpoint) stays identical everywhere. */
+.admin-content .page{padding-top:0}
 .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
 .stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:16px;text-align:center}
 .stat-card .sv{font-family:var(--font-display);font-size:28px;font-weight:800;margin-bottom:4px}

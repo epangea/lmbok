@@ -9,7 +9,7 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="app.css?v=609255717"/>
+<link rel="stylesheet" href="app.css?v=902190621"/>
 <script src="bioregion-utils.js"></script>
 </head>
 <body>
@@ -87,6 +87,9 @@
     <div class="sidebar-section">Synergy</div>
     <div class="sidebar-item" onclick="showAdmin('outreach')" id="si-outreach">
       <span class="sidebar-icon">📨</span> Outreach
+    </div>
+    <div class="sidebar-item" onclick="showAdmin('newsletter')" id="si-newsletter">
+      <span class="sidebar-icon">📰</span> Newsletter
     </div>
     <div class="sidebar-item" onclick="showAdmin('validation')" id="si-validation">
       <span class="sidebar-icon">✅</span> Validation
@@ -185,6 +188,15 @@ var moderateState = { pending: null, loading: false, error: null };
 // filter: 'pending' (default, per Charbel's 2026-08-15 decision) | 'all'
 var outreachState = { drafts: null, loading: false, error: null, filter: 'pending' };
 var validationState = { tab: 'skills', skills: null, tasks: null, loading: false, error: null };
+var newsletterState = {
+  items: null, loading: false, error: null,
+  tab: 'compose',                              // compose | subscribers
+  audienceCount: null,
+  filters: { language: '', phase_id: '', bioregion: '' },
+  languages: null, phases: null, bioregions: null,     // filter dropdown option lists
+  subs: null, subsLoading: false, subsError: null, subsQ: '', subsStatus: '',
+  picker: { newsletterId: null, results: null, q: '', excluded: [] }  // per-send recipient picker
+};
 
 // ── Auth wall ────────────────────────────────────
 // P-SEC2 (2026-07-17): admin session now lives in an httpOnly cookie, not
@@ -334,6 +346,7 @@ function showAdmin(section) {
   if (section === 'moderate') moderateLoad();
   if (section === 'outreach') outreachLoad();
   if (section === 'validation') validationLoad();
+  if (section === 'newsletter') { newsletterLoad(); newsletterLoadAudience(); newsletterLoadFilterOptions(); }
 }
 
 // ── Admin sidebar toggle (mobile hamburger) ────────
@@ -1515,6 +1528,494 @@ function outreachHardDelete(draftId, label) {
   if (typed !== 'DELETE') { alert('Cancelled — no changes made.'); return; }
   adminFetch('/admin/outreach/' + draftId, 'DELETE').then(function() {
     outreachLoad();
+  }).catch(function(e) {
+    alert('Delete failed: ' + (e.message || 'unknown'));
+  });
+}
+
+// ── Newsletter (2026-08-23, expanded 2026-08-23b) ──
+// Bulk broadcast to active, verified, non-opted-out learners, with:
+//   - starter templates (client-side only, no backend/DB involved)
+//   - audience filters (language/phase/bioregion) saved per-draft
+//   - a per-send recipient picker for excluding specific people from
+//     just THIS send, distinct from a learner's own permanent
+//     unsubscribe (LearnerPreferences.newsletter_opt_out)
+//   - a Subscribers tab for viewing/overriding that permanent flag
+//     directly, independent of any single newsletter
+//   - Send test (single address, doesn't touch status/counts) so a
+//     send can be checked without reaching the real audience
+// Composer stays at the top (always available to start a new draft);
+// past newsletters (drafts + sent history) list below, same
+// editable-card pattern Outreach established. Sending happens
+// server-side as a background job (see admin.py) -- this UI just
+// kicks it off and polls by re-fetching the list.
+
+var NEWSLETTER_TEMPLATES = [
+  { id: 'update', label: 'Platform update',
+    subject: "What's new on LMBoK",
+    body: "Hi there,\n\nA quick update on what's new on Surfing the Frequencies since we last wrote.\n\n[Describe the change or feature here — what it is, and why it makes learning better.]\n\nAs always, thank you for being part of this — curiosity is better shared.\n\nWith respect,\nCharbel & the LMBoK team" },
+  { id: 'digest', label: 'Community digest',
+    subject: 'This month across the Mouseion',
+    body: "Hi there,\n\nHere's a look at what learners across the community have been exploring this month.\n\n[Highlight a few learner stories, popular skills, or milestones here.]\n\nWhatever art you're practicing this week, keep surfing the frequencies.\n\nWith respect,\nCharbel & the LMBoK team" },
+  { id: 'event', label: 'Event announcement',
+    subject: "You're invited",
+    body: "Hi there,\n\nWe wanted to let you know about an upcoming event.\n\n[What, when, where/link, and why it's worth joining.]\n\nWe'd love to see you there.\n\nWith respect,\nCharbel & the LMBoK team" },
+  { id: 'reengage', label: 'Re-engagement',
+    subject: "We haven't seen you in a while",
+    body: "Hi there,\n\nIt's been a bit since your last session — no pressure, just a gentle nudge that your next art is waiting whenever curiosity strikes again.\n\n[Optional: mention something new since they left, or a streak/progress detail.]\n\nWith respect,\nCharbel & the LMBoK team" }
+];
+
+function AdminNewsletter() {
+  var s = newsletterState;
+  var body = '<h2 style="margin-bottom:6px">Newsletter</h2>'
+    + '<p style="margin-bottom:20px;font-size:13px;color:var(--text3)">Compose an email and send it to active, verified learners who haven\'t unsubscribed. Sends run in the background — this page will keep showing "Sending…" until it finishes; hit Refresh to check.</p>';
+
+  body += '<div style="display:flex;gap:4px;margin-bottom:16px;background:var(--bg3);border-radius:10px;padding:4px;max-width:340px">'
+    + ['compose', 'subscribers'].map(function(t) {
+        var active = s.tab === t;
+        return '<button onclick="newsletterSetTab(\'' + t + '\')" style="flex:1;padding:7px 4px;font-size:12px;font-weight:' + (active ? '700' : '400') + ';border-radius:7px;border:none;cursor:pointer;background:' + (active ? 'var(--card)' : 'transparent') + ';color:' + (active ? 'var(--text)' : 'var(--text3)') + '">' + (t === 'compose' ? '✉️ Compose' : '👥 Subscribers') + '</button>';
+      }).join('')
+    + '</div>';
+
+  if (s.tab === 'subscribers') {
+    return '<div class="page">' + body + AdminNewsletterSubscribers() + '</div>';
+  }
+
+  return '<div class="page">' + body + AdminNewsletterCompose() + '</div>';
+}
+
+function newsletterSetTab(t) {
+  newsletterState.tab = t;
+  if (t === 'subscribers' && !newsletterState.subs) newsletterSubsLoad();
+  renderAdmin();
+}
+
+// ── Compose tab ─────────────────────────────────────
+function AdminNewsletterCompose() {
+  var s = newsletterState;
+  var body = '';
+
+  body += '<div class="card" style="margin-bottom:20px">'
+    + '<h3 style="margin-bottom:12px">New newsletter</h3>'
+    + '<select class="form-input" id="nl-new-template" onchange="newsletterApplyTemplate(this.value)" style="width:100%;margin-bottom:10px">'
+    + '<option value="">Start from a template… (optional)</option>'
+    + NEWSLETTER_TEMPLATES.map(function(t) { return '<option value="' + t.id + '">' + escH(t.label) + '</option>'; }).join('')
+    + '</select>'
+    + '<input class="form-input" id="nl-new-subj" placeholder="Subject" style="width:100%;margin-bottom:8px;font-weight:500" />'
+    + '<textarea class="form-input" id="nl-new-body" rows="8" placeholder="Write your update here. Separate paragraphs with a blank line." style="width:100%;font-size:13px;line-height:1.6;margin-bottom:12px"></textarea>'
+    + newsletterFilterControls('new')
+    + '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-top:12px">'
+    + '<span style="font-size:12px;color:var(--text3)">'
+    + (s.audienceCount === null ? 'Checking audience size…' : 'Will reach <strong style="color:var(--text)">' + s.audienceCount + '</strong> learner' + (s.audienceCount === 1 ? '' : 's') + ' right now')
+    + '</span>'
+    + '<button class="btn btn-wave btn-sm" onclick="newsletterCreateDraft()">Save as draft</button>'
+    + '</div>'
+    + '</div>';
+
+  body += '<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
+    + '<button class="btn btn-ghost btn-sm" onclick="newsletterLoad()">&#8635; Refresh</button>'
+    + (s.loading ? '<span style="font-size:11px;color:var(--text3)">Loading...</span>' : '')
+    + (s.error ? '<span style="font-size:11px;color:var(--coral)">' + escH(s.error) + '</span>' : '')
+    + '</div>';
+
+  if (!s.items) {
+    body += '<div style="color:var(--text3);font-size:13px">Loading newsletters...</div>';
+    return body;
+  }
+  if (!s.items.length) {
+    body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No newsletters yet — compose one above.</div>';
+    return body;
+  }
+
+  body += s.items.map(function(n) {
+    var badge = n.status === 'draft'
+      ? '<span class="badge badge-amber">Draft</span>'
+      : n.status === 'sending'
+        ? '<span class="badge badge-amber">Sending…</span>'
+        : '<span class="badge badge-green">Sent ' + escH((n.sent_at || '').slice(0, 10)) + '</span>';
+    var editable = n.status === 'draft';
+    var excludedCount = (n.excluded_learner_ids || []).length;
+    var filterSummary = newsletterFilterSummary(n.audience_filters);
+    var stats = n.status === 'sent'
+      ? '<p style="font-size:12px;color:var(--text3);margin-top:2px">' + n.sent_count + ' / ' + n.recipient_count + ' delivered'
+        + (n.failed_count > 0 ? ' · <span style="color:var(--coral)">' + n.failed_count + ' failed</span>' : '')
+        + '</p>'
+      : n.status === 'sending'
+        ? '<p style="font-size:12px;color:var(--text3);margin-top:2px">Sending to ' + n.recipient_count + ' learners — refresh to check progress</p>'
+        : '<p style="font-size:12px;color:var(--text3);margin-top:2px">'
+          + (filterSummary || 'All subscribed learners')
+          + (excludedCount ? ' · ' + excludedCount + ' individually excluded' : '')
+          + '</p>';
+    return '<div class="card" style="margin-bottom:14px">'
+      + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">'
+      + '<div><h3>' + escH(n.subject) + '</h3>' + stats + '</div>'
+      + badge + '</div>'
+      + (editable
+          ? '<input class="form-input" id="nl-subj-' + n.id + '" value="' + escH(n.subject) + '" style="width:100%;margin-bottom:8px;font-weight:500" />'
+            + '<textarea class="form-input" id="nl-body-' + n.id + '" rows="8" style="width:100%;font-size:13px;line-height:1.6;margin-bottom:12px">' + escH(n.body) + '</textarea>'
+          : '<div style="background:var(--bg3);border-radius:var(--r-sm);padding:14px;font-size:13px;line-height:1.8;color:var(--text2);margin-bottom:12px">'
+            + escH(n.body).replace(/\n/g, '<br>')
+            + '</div>')
+      + (editable
+          ? '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px">'
+            + '<input class="form-input" id="nl-test-' + n.id + '" placeholder="you@email.com" style="width:200px;font-size:12px" />'
+            + '<button class="btn btn-ghost btn-sm" onclick="newsletterSendTest(' + n.id + ')">Send test to this address</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="newsletterOpenPicker(' + n.id + ')">Manage recipients for this send</button>'
+            + '</div>'
+          : '')
+      + (editable
+          ? '<div style="display:flex;gap:8px">'
+            + '<button class="btn btn-wave btn-sm" onclick="newsletterSend(' + n.id + ')">Send now ✓</button>'
+            + '<button class="btn btn-ghost btn-sm" onclick="newsletterSaveDraft(' + n.id + ')">Save edits</button>'
+            + '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="newsletterDelete(' + n.id + ')">Delete draft</button>'
+            + '</div>'
+          : n.status === 'sent'
+            ? '<button class="btn btn-ghost btn-sm" style="color:var(--coral)" onclick="newsletterDelete(' + n.id + ')">Delete record</button>'
+            : '')
+      + (s.picker.newsletterId === n.id ? newsletterPickerPanel() : '')
+      + '</div>';
+  }).join('');
+
+  return body;
+}
+
+// Shared language/phase/bioregion <select> row. `prefix` is 'new' for
+// the composer or a newsletter id for an existing draft, matching the
+// id scheme the other paired inputs already use (nl-subj-{id} etc).
+function newsletterFilterControls(prefix) {
+  var s = newsletterState;
+  var f = s.filters;
+  var langOpts = '<option value="">Any language</option>'
+    + (s.languages || []).map(function(l) { return '<option value="' + l + '"' + (f.language === l ? ' selected' : '') + '>' + l.toUpperCase() + '</option>'; }).join('');
+  var phaseOpts = '<option value="">Any dev phase</option>'
+    + (s.phases || []).map(function(p) { return '<option value="' + p.id + '"' + (String(f.phase_id) === String(p.id) ? ' selected' : '') + '>' + escH(p.name) + (p.age_range ? ' (' + escH(p.age_range) + ')' : '') + '</option>'; }).join('');
+  var bioOpts = '<option value="">Any bioregion</option>'
+    + (s.bioregions || []).map(function(b) { return '<option value="' + escH(b) + '"' + (f.bioregion === b ? ' selected' : '') + '>' + escH(b) + '</option>'; }).join('');
+  return '<div style="display:flex;gap:8px;flex-wrap:wrap">'
+    + '<select class="form-input" style="flex:1;min-width:140px;font-size:12px" onchange="newsletterSetFilter(\'language\', this.value)">' + langOpts + '</select>'
+    + '<select class="form-input" style="flex:1;min-width:140px;font-size:12px" onchange="newsletterSetFilter(\'phase_id\', this.value)">' + phaseOpts + '</select>'
+    + '<select class="form-input" style="flex:1;min-width:140px;font-size:12px" onchange="newsletterSetFilter(\'bioregion\', this.value)">' + bioOpts + '</select>'
+    + '</div>';
+}
+
+function newsletterFilterSummary(filters) {
+  if (!filters) return '';
+  var parts = [];
+  if (filters.language) parts.push(filters.language.toUpperCase());
+  if (filters.phase_id) parts.push('phase #' + filters.phase_id);
+  if (filters.bioregion) parts.push(filters.bioregion);
+  return parts.length ? 'Filtered: ' + parts.join(' · ') : '';
+}
+
+function newsletterSetFilter(key, value) {
+  newsletterState.filters[key] = value;
+  newsletterLoadAudience();
+  renderAdmin();
+}
+
+// ── Recipient picker (per-send exclusion) ───────────
+function newsletterOpenPicker(newsletterId) {
+  newsletterState.picker = { newsletterId: newsletterId, results: null, q: '', excluded: [] };
+  var n = (newsletterState.items || []).find(function(x) { return x.id === newsletterId; });
+  if (n) newsletterState.picker.excluded = (n.excluded_learner_ids || []).slice();
+  newsletterPickerSearch();
+  renderAdmin();
+}
+
+function newsletterClosePicker() {
+  newsletterState.picker = { newsletterId: null, results: null, q: '', excluded: [] };
+  renderAdmin();
+}
+
+function newsletterPickerSearch() {
+  var p = newsletterState.picker;
+  var n = (newsletterState.items || []).find(function(x) { return x.id === p.newsletterId; });
+  var filters = (n && n.audience_filters) || {};
+  var params = new URLSearchParams();
+  if (p.q) params.set('q', p.q);
+  if (filters.language) params.set('language', filters.language);
+  if (filters.phase_id) params.set('phase_id', filters.phase_id);
+  if (filters.bioregion) params.set('bioregion', filters.bioregion);
+  adminFetch('/admin/newsletters/audience?' + params.toString()).then(function(data) {
+    newsletterState.picker.results = data || [];
+    renderAdmin();
+  }).catch(function() {
+    newsletterState.picker.results = [];
+    renderAdmin();
+  });
+}
+
+function newsletterPickerSetQuery(q) {
+  newsletterState.picker.q = q;
+  newsletterPickerSearch();
+}
+
+function newsletterPickerToggle(learnerId) {
+  var p = newsletterState.picker;
+  var idx = p.excluded.indexOf(learnerId);
+  if (idx === -1) p.excluded.push(learnerId); else p.excluded.splice(idx, 1);
+  renderAdmin();
+}
+
+function newsletterPickerSave() {
+  var p = newsletterState.picker;
+  adminFetch('/admin/newsletters/' + p.newsletterId, 'PATCH', { excluded_learner_ids: p.excluded }).then(function() {
+    newsletterClosePicker();
+    newsletterLoad();
+  }).catch(function(e) {
+    alert('Save failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function newsletterPickerPanel() {
+  var p = newsletterState.picker;
+  var panel = '<div class="card" style="margin-top:12px;background:var(--bg3)">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    + '<h4 style="font-size:13px">Recipients for this send only</h4>'
+    + '<button class="btn btn-ghost btn-sm" onclick="newsletterClosePicker()">✕ Close</button>'
+    + '</div>'
+    + '<p style="font-size:12px;color:var(--text3);margin-bottom:10px">Unchecking someone here excludes them from just this newsletter — it doesn\'t touch their standing subscription (that\'s the Subscribers tab).</p>'
+    + '<input class="form-input" placeholder="Search by email or username…" value="' + escH(p.q) + '" oninput="newsletterPickerSetQuery(this.value)" style="width:100%;margin-bottom:10px;font-size:12px" />';
+
+  if (!p.results) {
+    panel += '<div style="font-size:12px;color:var(--text3)">Loading…</div>';
+  } else if (!p.results.length) {
+    panel += '<div style="font-size:12px;color:var(--text3)">No matching learners in the current audience.</div>';
+  } else {
+    panel += '<div style="max-height:260px;overflow-y:auto">'
+      + p.results.map(function(r) {
+          var excluded = p.excluded.indexOf(r.id) !== -1;
+          return '<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;font-size:12px;cursor:pointer;' + (excluded ? 'opacity:0.5' : '') + '">'
+            + '<input type="checkbox" ' + (excluded ? '' : 'checked') + ' onchange="newsletterPickerToggle(' + r.id + ')" />'
+            + escH(r.display_name || r.username) + ' &lt;' + escH(r.email) + '&gt;'
+            + '</label>';
+        }).join('')
+      + '</div>';
+  }
+
+  panel += '<div style="margin-top:10px;display:flex;justify-content:space-between;align-items:center">'
+    + '<span style="font-size:11px;color:var(--text3)">' + p.excluded.length + ' excluded from this send</span>'
+    + '<button class="btn btn-wave btn-sm" onclick="newsletterPickerSave()">Save recipient list</button>'
+    + '</div>'
+    + '</div>';
+  return panel;
+}
+
+// ── Subscribers tab ──────────────────────────────────
+function AdminNewsletterSubscribers() {
+  var s = newsletterState;
+  var body = '<p style="margin-bottom:14px;font-size:13px;color:var(--text3)">Every learner\'s standing (all-future) newsletter subscription. Toggling here does the same thing as a learner clicking "unsubscribe" in an email — it\'s permanent until toggled back, and applies to every future newsletter, not just one send.</p>';
+
+  body += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
+    + '<input class="form-input" placeholder="Search by email or username…" value="' + escH(s.subsQ) + '" oninput="newsletterSubsSetQuery(this.value)" style="flex:1;min-width:200px;font-size:13px" />'
+    + '<select class="form-input" style="font-size:13px" onchange="newsletterSubsSetStatus(this.value)">'
+    + '<option value="">All learners</option>'
+    + '<option value="subscribed"' + (s.subsStatus === 'subscribed' ? ' selected' : '') + '>Subscribed</option>'
+    + '<option value="unsubscribed"' + (s.subsStatus === 'unsubscribed' ? ' selected' : '') + '>Unsubscribed</option>'
+    + '<option value="unverified"' + (s.subsStatus === 'unverified' ? ' selected' : '') + '>Email unverified</option>'
+    + '<option value="inactive"' + (s.subsStatus === 'inactive' ? ' selected' : '') + '>Inactive</option>'
+    + '</select>'
+    + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsLoad()">&#8635; Refresh</button>'
+    + (s.subsLoading ? '<span style="font-size:11px;color:var(--text3)">Loading...</span>' : '')
+    + (s.subsError ? '<span style="font-size:11px;color:var(--coral)">' + escH(s.subsError) + '</span>' : '')
+    + '</div>';
+
+  if (!s.subs) {
+    body += '<div style="color:var(--text3);font-size:13px">Loading subscribers...</div>';
+    return body;
+  }
+  if (!s.subs.length) {
+    body += '<div style="padding:32px;text-align:center;color:var(--text3);font-size:13px">No learners match this filter.</div>';
+    return body;
+  }
+
+  body += '<div class="card" style="padding:0;overflow:hidden">'
+    + s.subs.map(function(l) {
+        var reachable = l.is_active && l.email_verified && !l.opted_out;
+        var statusBadge = l.opted_out
+          ? '<span class="badge badge-red">Unsubscribed</span>'
+          : !l.email_verified
+            ? '<span class="badge badge-amber">Unverified</span>'
+            : !l.is_active
+              ? '<span class="badge badge-amber">Inactive</span>'
+              : '<span class="badge badge-green">Subscribed</span>';
+        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">'
+          + '<div><div style="font-size:13px;font-weight:600">' + escH(l.display_name || l.username) + '</div>'
+          + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escH(l.email) + '</div></div>'
+          + '<div style="display:flex;align-items:center;gap:10px">' + statusBadge
+          + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsToggle(' + l.id + ', ' + (!l.opted_out) + ')">'
+          + (l.opted_out ? 'Re-subscribe' : 'Unsubscribe')
+          + '</button></div>'
+          + '</div>';
+      }).join('')
+    + '</div>';
+
+  return body;
+}
+
+function newsletterSubsLoad() {
+  var s = newsletterState;
+  s.subsLoading = true;
+  s.subsError = null;
+  var params = new URLSearchParams();
+  if (s.subsQ) params.set('q', s.subsQ);
+  if (s.subsStatus) params.set('status', s.subsStatus);
+  adminFetch('/admin/newsletters/subscribers?' + params.toString()).then(function(data) {
+    s.subs = data || [];
+    s.subsLoading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    s.subsLoading = false;
+    s.subsError = e.message || 'Failed to load subscribers';
+    s.subs = s.subs || [];
+    renderAdmin();
+  });
+}
+
+function newsletterSubsSetQuery(q) {
+  newsletterState.subsQ = q;
+  newsletterSubsLoad();
+}
+
+function newsletterSubsSetStatus(v) {
+  newsletterState.subsStatus = v;
+  newsletterSubsLoad();
+}
+
+function newsletterSubsToggle(learnerId, optOut) {
+  adminFetch('/admin/newsletters/subscribers/' + learnerId, 'PATCH', { opt_out: optOut }).then(function() {
+    newsletterSubsLoad();
+  }).catch(function(e) {
+    alert('Update failed: ' + (e.message || 'unknown'));
+  });
+}
+
+// ── Shared load/save/send handlers ──────────────────
+function newsletterLoad() {
+  newsletterState.loading = true;
+  newsletterState.error = null;
+  adminFetch('/admin/newsletters').then(function(data) {
+    newsletterState.items = data || [];
+    newsletterState.loading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    newsletterState.loading = false;
+    newsletterState.error = e.message || 'Failed to load newsletters';
+    newsletterState.items = newsletterState.items || [];
+    renderAdmin();
+  });
+}
+
+function newsletterLoadFilterOptions() {
+  var s = newsletterState;
+  adminFetch('/admin/newsletters/languages').then(function(data) { s.languages = data || []; renderAdmin(); }).catch(function() {});
+  adminFetch('/admin/newsletters/phases').then(function(data) { s.phases = data || []; renderAdmin(); }).catch(function() {});
+  adminFetch('/admin/newsletters/bioregions').then(function(data) { s.bioregions = data || []; renderAdmin(); }).catch(function() {});
+}
+
+function newsletterLoadAudience() {
+  var f = newsletterState.filters;
+  var params = new URLSearchParams();
+  if (f.language) params.set('language', f.language);
+  if (f.phase_id) params.set('phase_id', f.phase_id);
+  if (f.bioregion) params.set('bioregion', f.bioregion);
+  adminFetch('/admin/newsletters/audience-count?' + params.toString()).then(function(data) {
+    newsletterState.audienceCount = (data && typeof data.count === 'number') ? data.count : 0;
+    renderAdmin();
+  }).catch(function() {
+    // Non-critical — composer just shows "Checking audience size..." forever, no need to alert.
+  });
+}
+
+function newsletterApplyTemplate(templateId) {
+  var subjEl = document.getElementById('nl-new-subj');
+  var bodyEl = document.getElementById('nl-new-body');
+  if (!subjEl || !bodyEl || !templateId) return;
+  var t = NEWSLETTER_TEMPLATES.find(function(x) { return x.id === templateId; });
+  if (!t) return;
+  if ((subjEl.value.trim() || bodyEl.value.trim()) && !confirm('Replace the current subject/body with the "' + t.label + '" template?')) {
+    document.getElementById('nl-new-template').value = '';
+    return;
+  }
+  subjEl.value = t.subject;
+  bodyEl.value = t.body;
+}
+
+function newsletterCreateDraft() {
+  var subjEl = document.getElementById('nl-new-subj');
+  var bodyEl = document.getElementById('nl-new-body');
+  if (!subjEl || !bodyEl) return;
+  if (!subjEl.value.trim() || !bodyEl.value.trim()) { alert('Subject and body are both required.'); return; }
+  var f = newsletterState.filters;
+  var audienceFilters = {};
+  if (f.language) audienceFilters.language = f.language;
+  if (f.phase_id) audienceFilters.phase_id = parseInt(f.phase_id, 10);
+  if (f.bioregion) audienceFilters.bioregion = f.bioregion;
+  adminFetch('/admin/newsletters', 'POST', {
+    subject: subjEl.value,
+    body: bodyEl.value,
+    audience_filters: Object.keys(audienceFilters).length ? audienceFilters : null,
+  }).then(function() {
+    subjEl.value = '';
+    bodyEl.value = '';
+    document.getElementById('nl-new-template').value = '';
+    newsletterLoad();
+  }).catch(function(e) {
+    alert('Save failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function newsletterSaveDraft(id) {
+  var subjEl = document.getElementById('nl-subj-' + id);
+  var bodyEl = document.getElementById('nl-body-' + id);
+  if (!subjEl || !bodyEl) return;
+  adminFetch('/admin/newsletters/' + id, 'PATCH', { subject: subjEl.value, body: bodyEl.value }).then(function() {
+    newsletterLoad();
+  }).catch(function(e) {
+    alert('Save failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function newsletterSendTest(id) {
+  var testEl = document.getElementById('nl-test-' + id);
+  var email = testEl ? testEl.value.trim() : '';
+  if (!email) { alert('Enter an address to send the test to.'); return; }
+  var subjEl = document.getElementById('nl-subj-' + id);
+  var bodyEl = document.getElementById('nl-body-' + id);
+  var save = (subjEl && bodyEl)
+    ? adminFetch('/admin/newsletters/' + id, 'PATCH', { subject: subjEl.value, body: bodyEl.value })
+    : Promise.resolve();
+  save.then(function() {
+    return adminFetch('/admin/newsletters/' + id + '/send-test', 'POST', { email: email });
+  }).then(function() {
+    alert('Test sent to ' + email + '. Subject is prefixed "[TEST]" and the unsubscribe link is a placeholder — neither shows on the real send.');
+  }).catch(function(e) {
+    alert('Test send failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function newsletterSend(id) {
+  var count = newsletterState.audienceCount;
+  var countMsg = (typeof count === 'number') ? (count + ' learner' + (count === 1 ? '' : 's')) : 'the current audience';
+  if (!confirm('Send this newsletter to ' + countMsg + ' now? This cannot be undone.')) return;
+  var subjEl = document.getElementById('nl-subj-' + id);
+  var bodyEl = document.getElementById('nl-body-' + id);
+  var save = (subjEl && bodyEl)
+    ? adminFetch('/admin/newsletters/' + id, 'PATCH', { subject: subjEl.value, body: bodyEl.value })
+    : Promise.resolve();
+  save.then(function() {
+    return adminFetch('/admin/newsletters/' + id + '/send', 'POST');
+  }).then(function() {
+    newsletterLoad();
+  }).catch(function(e) {
+    alert('Send failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function newsletterDelete(id) {
+  if (!confirm('Delete this newsletter permanently? This cannot be undone.')) return;
+  adminFetch('/admin/newsletters/' + id, 'DELETE').then(function() {
+    newsletterLoad();
   }).catch(function(e) {
     alert('Delete failed: ' + (e.message || 'unknown'));
   });
@@ -2953,6 +3454,7 @@ function renderAdmin() {
     scavenger: AdminScavenger,
     outreach:  AdminOutreach,
     validation: AdminValidation,
+    newsletter: AdminNewsletter,
     ai:        AdminAI,
     promptmap: AdminPromptMap,
     bioregions: AdminBioregions,

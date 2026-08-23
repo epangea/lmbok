@@ -46,20 +46,21 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, desc, func
 from typing import Optional
 from jose import jwt, JWTError
 from pydantic import BaseModel
 
-from db import get_db
+from db import get_db, AsyncSessionLocal
 import ai_client
 from sqlalchemy.exc import IntegrityError
-from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft, Learner, LearnerAdminMessage, TaskCompletion, VerifiedSkill, OpportunityMatch, Skill
+from models import OpportunityListing, Organization, Lecko, Arts, DevPhase, Session, OutreachDraft, Learner, LearnerAdminMessage, LearnerPreferences, Newsletter, TaskCompletion, VerifiedSkill, OpportunityMatch, Skill
 from routes.weekly_report import main as weekly_report_main
+from routes.auth import SUPPORTED_LANGS
 from cookie_auth import ADMIN_ACCESS_COOKIE, set_admin_cookies, clear_admin_cookies
-from mail import send_mail
+from mail import send_mail, unsubscribe_link, newsletter_html, append_unsubscribe_footer
 
 logger = logging.getLogger("freqlearn.admin")
 
@@ -1663,6 +1664,490 @@ async def admin_delete_outreach(
     await db.delete(draft)
     await db.commit()
     return {"ok": True, "id": draft_id, "deleted": True}
+
+
+# ── Newsletter (2026-08-23) ───────────────────────────────
+# Bulk broadcast to learners, separate from Outreach (org-facing, one
+# email at a time) and the per-learner Learner message (P9.2). Audience is
+# every active, email-verified learner who hasn't opted out
+# (LearnerPreferences.newsletter_opt_out, on-by-default like the P30
+# story-email precedent). Orgs are deliberately out of scope for v1 --
+# same "learners are the audience unless stated otherwise" default the
+# existing Learner message feature already uses.
+#   GET    /api/admin/newsletters                    — list all (drafts + sent), most recent first
+#   GET    /api/admin/newsletters/audience-count      — how many learners would receive one right now
+#   POST   /api/admin/newsletters                     — create a draft
+#   PATCH  /api/admin/newsletters/{id}                — edit a draft's subject/body
+#   DELETE /api/admin/newsletters/{id}                 — delete a draft or a completed send record
+#   POST   /api/admin/newsletters/{id}/send            — send to the full audience (background job)
+
+def _newsletter_audience_query(filters: Optional[dict] = None):
+    """Active, verified, not-opted-out learners. A learner with no
+    LearnerPreferences row at all (shouldn't happen post-registration,
+    but plain OUTER JOIN it away rather than assume) is treated as
+    still subscribed, matching the opt-out default.
+
+    `filters` (2026-08-23b) narrows this to a segment instead of
+    everyone: {"language": "vi", "phase_id": 3, "bioregion": "..."}.
+    Any key that's missing or falsy is skipped -- exact match only, no
+    partial/substring matching, since the values offered in the admin
+    UI are drawn from real distinct DB values (see /newsletters/phases
+    and /newsletters/bioregions below), not free text.
+    """
+    q = (
+        select(Learner.id, Learner.email)
+        .select_from(Learner)
+        .join(LearnerPreferences, LearnerPreferences.learner_id == Learner.id, isouter=True)
+        .where(
+            Learner.is_active == True,
+            Learner.email_verified == True,
+            (LearnerPreferences.newsletter_opt_out.is_(None))
+            | (LearnerPreferences.newsletter_opt_out == False),
+        )
+    )
+    filters = filters or {}
+    if filters.get("language"):
+        q = q.where(Learner.language == filters["language"])
+    if filters.get("phase_id"):
+        q = q.where(Learner.phase_id == filters["phase_id"])
+    if filters.get("bioregion"):
+        q = q.where(Learner.bioregion == filters["bioregion"])
+    return q
+
+
+def _parse_json_dict(raw: Optional[str]) -> dict:
+    if not raw:
+        return {}
+    try:
+        val = json.loads(raw)
+        return val if isinstance(val, dict) else {}
+    except (json.JSONDecodeError, TypeError):
+        return {}
+
+
+def _parse_json_int_list(raw: Optional[str]) -> list[int]:
+    if not raw:
+        return []
+    try:
+        val = json.loads(raw)
+        return [int(x) for x in val] if isinstance(val, list) else []
+    except (json.JSONDecodeError, TypeError, ValueError):
+        return []
+
+
+@router.get("/newsletters")
+async def admin_list_newsletters(
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List every newsletter, drafts and sent, most recent first."""
+    result = await db.execute(select(Newsletter).order_by(desc(Newsletter.created_at)))
+    items = result.scalars().all()
+    return [
+        {
+            "id": n.id,
+            "subject": n.subject,
+            "body": n.body,
+            "status": n.status,
+            "recipient_count": n.recipient_count,
+            "sent_count": n.sent_count,
+            "failed_count": n.failed_count,
+            "audience_filters": _parse_json_dict(n.audience_filters),
+            "excluded_learner_ids": _parse_json_int_list(n.excluded_learner_ids),
+            "created_at": n.created_at.isoformat() if n.created_at else None,
+            "sent_at": n.sent_at.isoformat() if n.sent_at else None,
+        }
+        for n in items
+    ]
+
+
+@router.get("/newsletters/audience-count")
+async def admin_newsletter_audience_count(
+    language: Optional[str] = Query(None),
+    phase_id: Optional[int] = Query(None),
+    bioregion: Optional[str] = Query(None),
+    excluded: Optional[str] = Query(None, description="Comma-separated learner ids to subtract from the count"),
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """How many learners are eligible right now — shown in the composer
+    before Send so an admin can sanity-check the blast radius. Accepts
+    the same optional filters the send itself will apply, so the number
+    updates live as an admin narrows the segment or excludes people."""
+    filters = {"language": language, "phase_id": phase_id, "bioregion": bioregion}
+    result = await db.execute(
+        select(func.count()).select_from(_newsletter_audience_query(filters).subquery())
+    )
+    count = result.scalar_one()
+    if excluded:
+        excluded_ids = {int(x) for x in excluded.split(",") if x.strip().isdigit()}
+        if excluded_ids:
+            # Cheap correction rather than a second, exclusion-aware query --
+            # good enough for a live preview number, exact recipient list is
+            # still recomputed properly at actual send time.
+            recount = await db.execute(_newsletter_audience_query(filters))
+            ids_in_audience = {row.id for row in recount.all()}
+            count = len(ids_in_audience - excluded_ids)
+    return {"count": count}
+
+
+@router.get("/newsletters/audience")
+async def admin_newsletter_audience(
+    q: Optional[str] = Query(None),
+    language: Optional[str] = Query(None),
+    phase_id: Optional[int] = Query(None),
+    bioregion: Optional[str] = Query(None),
+    limit: int = Query(200, le=500),
+    offset: int = Query(0),
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """The actual list (not just count) behind a filtered audience, for
+    the per-send recipient picker. `q` searches email/username. Capped
+    at 500/request (2026.111's pagination lesson applied up front here,
+    rather than discovered later against a live unbounded list)."""
+    query = (
+        select(Learner.id, Learner.email, Learner.username, Learner.display_name)
+        .select_from(Learner)
+        .join(LearnerPreferences, LearnerPreferences.learner_id == Learner.id, isouter=True)
+        .where(
+            Learner.is_active == True,
+            Learner.email_verified == True,
+            (LearnerPreferences.newsletter_opt_out.is_(None))
+            | (LearnerPreferences.newsletter_opt_out == False),
+        )
+    )
+    if language:
+        query = query.where(Learner.language == language)
+    if phase_id:
+        query = query.where(Learner.phase_id == phase_id)
+    if bioregion:
+        query = query.where(Learner.bioregion == bioregion)
+    if q:
+        like = f"%{q}%"
+        query = query.where((Learner.email.like(like)) | (Learner.username.like(like)))
+    query = query.order_by(Learner.email).limit(limit).offset(offset)
+
+    result = await db.execute(query)
+    rows = result.all()
+    return [
+        {"id": r.id, "email": r.email, "username": r.username, "display_name": r.display_name}
+        for r in rows
+    ]
+
+
+@router.get("/newsletters/subscribers")
+async def admin_list_subscribers(
+    q: Optional[str] = Query(None),
+    status_filter: Optional[str] = Query(None, alias="status", description="subscribed | unsubscribed | inactive | unverified"),
+    limit: int = Query(200, le=500),
+    offset: int = Query(0),
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every learner's newsletter subscription status, independent of
+    any single newsletter -- separate from /audience above, which is
+    scoped to who's eligible for a send right now. This view is meant
+    to answer 'who's on the list' generally, including learners a send
+    wouldn't reach anyway (inactive/unverified), so an admin can see
+    why, not just that they're excluded."""
+    query = (
+        select(
+            Learner.id, Learner.email, Learner.username, Learner.display_name,
+            Learner.is_active, Learner.email_verified,
+            LearnerPreferences.newsletter_opt_out,
+        )
+        .select_from(Learner)
+        .join(LearnerPreferences, LearnerPreferences.learner_id == Learner.id, isouter=True)
+    )
+    if q:
+        like = f"%{q}%"
+        query = query.where((Learner.email.like(like)) | (Learner.username.like(like)))
+    if status_filter == "subscribed":
+        query = query.where(
+            (LearnerPreferences.newsletter_opt_out.is_(None)) | (LearnerPreferences.newsletter_opt_out == False)
+        )
+    elif status_filter == "unsubscribed":
+        query = query.where(LearnerPreferences.newsletter_opt_out == True)
+    elif status_filter == "inactive":
+        query = query.where(Learner.is_active == False)
+    elif status_filter == "unverified":
+        query = query.where(Learner.email_verified == False)
+    query = query.order_by(Learner.email).limit(limit).offset(offset)
+
+    result = await db.execute(query)
+    rows = result.all()
+    return [
+        {
+            "id": r.id,
+            "email": r.email,
+            "username": r.username,
+            "display_name": r.display_name,
+            "is_active": bool(r.is_active),
+            "email_verified": bool(r.email_verified),
+            "opted_out": bool(r.newsletter_opt_out) if r.newsletter_opt_out is not None else False,
+        }
+        for r in rows
+    ]
+
+
+@router.patch("/newsletters/subscribers/{learner_id}")
+async def admin_set_subscriber_status(
+    learner_id: int,
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin override of a single learner's standing (all-future)
+    newsletter subscription -- the same flag a learner's own
+    unsubscribe-link click sets, just settable from this side too.
+    Body: {"opt_out": true|false}."""
+    if "opt_out" not in data:
+        raise HTTPException(400, "opt_out (bool) is required")
+
+    result = await db.execute(select(Learner).where(Learner.id == learner_id))
+    learner = result.scalar_one_or_none()
+    if not learner:
+        raise HTTPException(404, "Learner not found")
+
+    prefs_result = await db.execute(select(LearnerPreferences).where(LearnerPreferences.learner_id == learner_id))
+    prefs = prefs_result.scalar_one_or_none()
+    if not prefs:
+        # Defensive only -- register() always creates this row -- but don't
+        # 500 on a genuinely pre-existing legacy account that predates it.
+        prefs = LearnerPreferences(learner_id=learner_id)
+        db.add(prefs)
+
+    prefs.newsletter_opt_out = bool(data["opt_out"])
+    await db.commit()
+    return {"ok": True, "id": learner_id, "opted_out": prefs.newsletter_opt_out}
+
+
+@router.get("/newsletters/languages")
+async def admin_newsletter_languages(
+    _: None = Depends(require_admin),
+):
+    """The platform's supported language codes, for the audience-filter
+    dropdown — reuses auth.py's SUPPORTED_LANGS (the same set registration
+    validates a learner's language against) rather than hardcoding a
+    second copy of the list in the frontend."""
+    return sorted(SUPPORTED_LANGS)
+
+
+@router.get("/newsletters/phases")
+async def admin_newsletter_phases(
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Dev phases for the audience-filter dropdown (composer)."""
+    result = await db.execute(select(DevPhase).order_by(DevPhase.sort_order))
+    return [{"id": p.id, "name": p.name, "age_range": p.age_range} for p in result.scalars().all()]
+
+
+@router.get("/newsletters/bioregions")
+async def admin_newsletter_bioregions(
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Distinct bioregion values actually present among learners, for
+    the audience-filter dropdown -- real values only, not free text, so
+    the filter can't silently match zero rows on a typo."""
+    result = await db.execute(
+        select(Learner.bioregion)
+        .where(Learner.bioregion.is_not(None), Learner.bioregion != "")
+        .distinct()
+        .order_by(Learner.bioregion)
+    )
+    return [row[0] for row in result.all()]
+
+
+@router.post("/newsletters")
+async def admin_create_newsletter(
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a newsletter draft. Nothing is sent yet."""
+    subject = (data.get("subject") or "").strip()
+    body = (data.get("body") or "").strip()
+    if not subject or not body:
+        raise HTTPException(400, "subject and body are required")
+
+    n = Newsletter(
+        subject=subject,
+        body=body,
+        status="draft",
+        audience_filters=json.dumps(data["audience_filters"]) if data.get("audience_filters") else None,
+        excluded_learner_ids=json.dumps(data["excluded_learner_ids"]) if data.get("excluded_learner_ids") else None,
+    )
+    db.add(n)
+    await db.commit()
+    await db.refresh(n)
+    return {"ok": True, "id": n.id}
+
+
+@router.patch("/newsletters/{newsletter_id}")
+async def admin_update_newsletter(
+    newsletter_id: int,
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Edit a draft's subject/body/audience. Only drafts are editable —
+    once a send has started or finished the row is a historical record."""
+    result = await db.execute(select(Newsletter).where(Newsletter.id == newsletter_id))
+    n = result.scalar_one_or_none()
+    if not n:
+        raise HTTPException(404, "Newsletter not found")
+    if n.status != "draft":
+        raise HTTPException(400, f"Cannot edit a newsletter that is already '{n.status}'")
+
+    for key in ("subject", "body"):
+        if key in data:
+            setattr(n, key, data[key])
+    if "audience_filters" in data:
+        n.audience_filters = json.dumps(data["audience_filters"]) if data["audience_filters"] else None
+    if "excluded_learner_ids" in data:
+        n.excluded_learner_ids = json.dumps(data["excluded_learner_ids"]) if data["excluded_learner_ids"] else None
+    await db.commit()
+    return {"ok": True, "id": newsletter_id}
+
+
+@router.delete("/newsletters/{newsletter_id}")
+async def admin_delete_newsletter(
+    newsletter_id: int,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete a draft, or a completed send record kept only for history.
+    A newsletter that's actively 'sending' can't be deleted — the
+    background job holds no lock on the row, but pulling it out from
+    under an in-flight send would just orphan the job's own final
+    status update; let it finish first."""
+    result = await db.execute(select(Newsletter).where(Newsletter.id == newsletter_id))
+    n = result.scalar_one_or_none()
+    if not n:
+        raise HTTPException(404, "Newsletter not found")
+    if n.status == "sending":
+        raise HTTPException(400, "Newsletter is currently sending — wait for it to finish")
+
+    await db.delete(n)
+    await db.commit()
+    return {"ok": True, "id": newsletter_id, "deleted": True}
+
+
+@router.post("/newsletters/{newsletter_id}/send-test")
+async def admin_send_newsletter_test(
+    newsletter_id: int,
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send the current draft to a single address (typically the admin's
+    own inbox) without touching status/counts or the real audience — so
+    an admin can check rendering/deliverability before ever broadcasting.
+    Synchronous (single recipient, not the bulk job below) since one
+    sendmail call is fast enough not to matter."""
+    email = (data.get("email") or "").strip()
+    if not email:
+        raise HTTPException(400, "email is required")
+
+    result = await db.execute(select(Newsletter).where(Newsletter.id == newsletter_id))
+    n = result.scalar_one_or_none()
+    if not n:
+        raise HTTPException(404, "Newsletter not found")
+
+    subject = f"[TEST] {n.subject}"
+    # No real learner behind a test send, so the unsubscribe link can't
+    # verify against anything real -- point it at "#" rather than
+    # generating a token for a nonexistent learner id, which would just
+    # 404 with "invalid link" if clicked.
+    html = newsletter_html(n.subject, n.body, "#")
+    text_body = append_unsubscribe_footer(n.body, "(unsubscribe link omitted in test sends)")
+    try:
+        send_mail(to=email, subject=subject, body=text_body, html=html)
+    except Exception as e:
+        logger.error(f"Newsletter {newsletter_id} test send failed to {email}: {e}")
+        raise HTTPException(502, f"Test send failed: {e}")
+    return {"ok": True, "sent_to": email}
+
+
+@router.post("/newsletters/{newsletter_id}/send")
+async def admin_send_newsletter(
+    newsletter_id: int,
+    background_tasks: BackgroundTasks,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Kick off a send to the current audience (respecting any saved
+    filters and per-send exclusions). The actual sending happens in a
+    background task (see _send_newsletter_job below) so this request
+    returns immediately — mail.send_mail() shells out to sendmail
+    synchronously per recipient (same as every other call site in this
+    file), and with real learner counts in the hundreds+ that would
+    otherwise block this single-process app's whole event loop, for
+    every user, for as long as the send takes."""
+    result = await db.execute(select(Newsletter).where(Newsletter.id == newsletter_id))
+    n = result.scalar_one_or_none()
+    if not n:
+        raise HTTPException(404, "Newsletter not found")
+    if n.status != "draft":
+        raise HTTPException(400, f"Newsletter is already '{n.status}'")
+
+    filters = _parse_json_dict(n.audience_filters)
+    excluded_ids = set(_parse_json_int_list(n.excluded_learner_ids))
+
+    recipients_result = await db.execute(_newsletter_audience_query(filters))
+    recipients = [(row.id, row.email) for row in recipients_result.all() if row.id not in excluded_ids]
+
+    n.status = "sending"
+    n.recipient_count = len(recipients)
+    await db.commit()
+
+    background_tasks.add_task(
+        _send_newsletter_job, newsletter_id, n.subject, n.body, recipients
+    )
+    return {"ok": True, "id": newsletter_id, "status": "sending", "recipient_count": len(recipients)}
+
+
+async def _send_newsletter_job(
+    newsletter_id: int, subject: str, body: str, recipients: list[tuple[int, str]]
+):
+    """Runs after the /send response has already gone out (FastAPI
+    BackgroundTasks). The request's own DB session is closed by the time
+    this runs, so it opens a fresh one via AsyncSessionLocal, same
+    pattern scripts/weekly_report.py uses for its own out-of-request
+    sends. Each email is sent one at a time, off the event loop thread
+    (asyncio.to_thread) so send_mail()'s blocking sendmail subprocess
+    call never freezes the app for other users, with a short delay
+    between sends so a large audience doesn't hammer the MTA in a tight
+    loop. A per-recipient failure is caught and logged, not raised — one
+    bad address shouldn't stop the rest of the send."""
+    sent = 0
+    failed = 0
+    for learner_id, email in recipients:
+        try:
+            unsub_url = unsubscribe_link(learner_id, email)
+            html = newsletter_html(subject, body, unsub_url)
+            text_body = append_unsubscribe_footer(body, unsub_url)
+            await asyncio.to_thread(send_mail, to=email, subject=subject, body=text_body, html=html)
+            sent += 1
+        except Exception as e:
+            failed += 1
+            logger.error(f"Newsletter {newsletter_id} send failed for learner {learner_id}: {e}")
+        await asyncio.sleep(0.3)
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(Newsletter).where(Newsletter.id == newsletter_id))
+        n = result.scalar_one_or_none()
+        if n:
+            n.status = "sent"
+            n.sent_count = sent
+            n.failed_count = failed
+            n.sent_at = datetime.now(timezone.utc)
+            await session.commit()
+        else:
+            logger.error(f"Newsletter {newsletter_id} vanished before its send job could record results")
 
 
 # ── P8 — Validation section (2026-07-25) ────────────────────
