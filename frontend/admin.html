@@ -151,7 +151,7 @@ function T(k){ var d = _LANG[localStorage.getItem('fl_lang')||'en'] || _LANG.en;
 // P-SEC2 (2026-07-17): no more fl_admin_key in localStorage — the real
 // secret never comes back to the browser. AS.authed is just a UI flag;
 // the actual session lives in an httpOnly cookie the server checks.
-var AS = { section: 'dashboard', authed: false };
+var AS = { section: 'dashboard', authed: false, phases: [] };
 
 // ── Settings state (survives section switches) ────
 var SETTINGS = {
@@ -1173,8 +1173,14 @@ function lecsEdit(leckoId) {
       + '<div style="display:flex;gap:12px">'
       + '<div style="flex:1"><label class="form-label">Art ID</label>'
       + '<input id="le-art" class="form-input" type="number" value="' + escH(String(l.art_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.art_name || '') + '</span></div>'
-      + '<div style="flex:1"><label class="form-label">Phase ID</label>'
-      + '<input id="le-phase" class="form-input" type="number" value="' + escH(String(l.phase_id || '')) + '"/><span style="font-size:11px;color:var(--text3)">' + escH(l.phase_name || '') + '</span></div>'
+      + '<div style="flex:1"><label class="form-label">Phase</label>'
+      + '<select id="le-phase" class="form-input">'
+      + '<option value="">\u2014 unresolved (excluded from serving) \u2014</option>'
+      + (AS.phases || []).map(function(p) {
+          return '<option value="' + p.id + '"' + (String(l.phase_id) === String(p.id) ? ' selected' : '') + '>'
+            + (p.icon ? p.icon + ' ' : '') + escH(p.name) + (p.age_range ? ' (' + escH(p.age_range) + ')' : '') + '</option>';
+        }).join('')
+      + '</select></div>'
       + '</div>'
       + '<div style="display:flex;gap:12px">'
       + '<div style="flex:1"><label class="form-label">Skill type</label>'
@@ -1237,7 +1243,14 @@ function lecsSave(leckoId) {
   if (aDesc)   body.assessment_desc = aDesc;
   if (utilVal !== '') body.utility_score = parseFloat(utilVal) || 0;
   if (artVal) body.art_id = parseInt(artVal, 10) || artVal;
-  if (phVal)  body.phase_id = parseInt(phVal, 10) || phVal;
+  // phase_id: explicit null when "unresolved" is selected must be SENT,
+  // not omitted -- omitting the key means "don't change this field" to
+  // the PATCH handler, which would silently fail to clear a previously
+  // set phase. The <select> always has a value (possibly ""), so this
+  // is always included once the field exists in the form.
+  if (document.getElementById('le-phase')) {
+    body.phase_id = phVal ? (parseInt(phVal, 10) || phVal) : null;
+  }
 
   adminFetch('/admin/leckos/' + leckoId, {
     method: 'PATCH',
@@ -2384,8 +2397,8 @@ ART DESCRIPTION: {art.description or art.tagline}`
 {phase guidance for this phase, below}`,
       variants: [
         { key: 'prenascent', text: 'CRITICAL: The learner is an ADULT who is pregnant or expecting a child. This session is FOR THE EXPECTING PARENT, not for an infant or toddler. Do NOT write about playing with babies, sensory infant activities, or caregiver-infant interactions. The learner is a thinking, feeling adult in a major life transition. Frame skill practice as quiet inner preparation — emotional, relational, and practical. Honour the enormity of the transition without dramatising it. Language: warm, grounding, and unhurried — no urgency or performance pressure. Connect to the adult\'s own body, sleep, overwhelm, identity shift from individual to parent, and partnership. The warmup should invite the adult to gently notice something about themselves — their body, their fears, their hopes, their relationship. The challenge should be a reflective adult practice: a journal entry, a conversation with a partner, a quiet observation, a personal decision. The reflection should open into questions about the adult\'s own readiness, values, and vision of parenthood. The assess question should test the adult\'s self-understanding or emotional literacy — grounded in lived experience, not infant-care theory.' },
-        { key: 'nascent',    text: 'CRITICAL: The learner is an ADULT caring for a newborn or infant aged 0–2. This session is FOR THE PARENT OR CAREGIVER, not written for the baby. The adult is navigating sleep deprivation, identity upheaval, relational strain, and the overwhelming newness of a tiny dependent life. They may have 10 minutes of fractured attention. Language: warm, honest, non-performative — never cheerful in a hollow way. Acknowledge the exhaustion and the wonder as inseparable. Frame skill practice around attunement: reading the infant\'s cues, co-regulation, the parent\'s own nervous system, and the slow rebuilding of self amid caregiving. The warmup should invite the adult to pause and notice something about this moment — their body, their breath, the weight of the baby, the sound in the room. The challenge should be a micro-practice: brief, doable in fragments, requiring no materials — a 60-second body scan, a whispered intention, a single observation recorded, a small act of self-kindness. The reflection should open toward the parent\'s inner experience — not infant-care technique. The assess question should be about self-awareness, attunement, or the parent\'s emotional landscape — not infant development milestones or pediatric theory.' },
-        { key: 'child',      text: 'The learner is a child, ages 3–11. Default your language and complexity to a curious 8–10 year old — younger children will follow along, and older ones won\'t feel talked down to. Language: warm, concrete, and playful. Short sentences. Ground every idea in something the child can see, touch, taste, hear, or do right now — never abstract theory or adult concerns. Use analogies from animals, games, school, family, and nature. Never use jargon. WARMUP: Must be 2–3 sentences. Ask the child to notice or remember something specific and sensory — a smell, a sound, a texture, a memory of doing something with their hands. CHALLENGE: This is the most important rule — DO NOT default to \'draw a picture\'. Rotate through: doing a real experiment (mixing, growing, building, measuring), writing or telling a short story, making something physical, playing a simple game with rules, going outside to observe and record, or interviewing a family member. Drawing is allowed occasionally but must not be the default. The challenge must feel like play, never homework. It should be completable in 10–20 minutes with things found at home. REFLECT: Ask one question the child might lie awake wondering about — genuine curiosity, not a consequence question (\'what would happen if\'). Aim for something that opens the world: \'Why do you think...\', \'Have you ever noticed...\', \'What does it feel like when...\'. ASSESS: Simple enough for a curious 8–10 year old without adult help. Everyday words, relatable scenarios, no technical terms. Options must be short and clearly different.' },
+        { key: 'nascent',    text: 'CRITICAL: The learner is an ADULT caring for a newborn or infant aged 0~2. This session is FOR THE PARENT OR CAREGIVER, not written for the baby. The adult is navigating sleep deprivation, identity upheaval, relational strain, and the overwhelming newness of a tiny dependent life. They may have 10 minutes of fractured attention. Language: warm, honest, non-performative — never cheerful in a hollow way. Acknowledge the exhaustion and the wonder as inseparable. Frame skill practice around attunement: reading the infant\'s cues, co-regulation, the parent\'s own nervous system, and the slow rebuilding of self amid caregiving. The warmup should invite the adult to pause and notice something about this moment — their body, their breath, the weight of the baby, the sound in the room. The challenge should be a micro-practice: brief, doable in fragments, requiring no materials — a 60-second body scan, a whispered intention, a single observation recorded, a small act of self-kindness. The reflection should open toward the parent\'s inner experience — not infant-care technique. The assess question should be about self-awareness, attunement, or the parent\'s emotional landscape — not infant development milestones or pediatric theory.' },
+        { key: 'child',      text: 'The learner is a child, ages 3~11. Default your language and complexity to a curious 8–10 year old — younger children will follow along, and older ones won\'t feel talked down to. Language: warm, concrete, and playful. Short sentences. Ground every idea in something the child can see, touch, taste, hear, or do right now — never abstract theory or adult concerns. Use analogies from animals, games, school, family, and nature. Never use jargon. WARMUP: Must be 2–3 sentences. Ask the child to notice or remember something specific and sensory — a smell, a sound, a texture, a memory of doing something with their hands. CHALLENGE: This is the most important rule — DO NOT default to \'draw a picture\'. Rotate through: doing a real experiment (mixing, growing, building, measuring), writing or telling a short story, making something physical, playing a simple game with rules, going outside to observe and record, or interviewing a family member. Drawing is allowed occasionally but must not be the default. The challenge must feel like play, never homework. It should be completable in 10–20 minutes with things found at home. REFLECT: Ask one question the child might lie awake wondering about — genuine curiosity, not a consequence question (\'what would happen if\'). Aim for something that opens the world: \'Why do you think...\', \'Have you ever noticed...\', \'What does it feel like when...\'. ASSESS: Simple enough for a curious 8–10 year old without adult help. Everyday words, relatable scenarios, no technical terms. Options must be short and clearly different.' },
         { key: 'adolescent', text: 'Language: direct, honest, and peer-respecting — never condescending. Connect to identity, social belonging, fairness, and real-world stakes. The challenge should feel worth doing because it matters, not because it was assigned. The reflection should invite genuine self-inquiry, not performative answers. Assess options can handle moderate complexity but stay concrete and grounded in lived experience.' },
         { key: 'adult',      text: 'Language: warm, curious, and non-judgmental. Treat the learner as a capable, thoughtful adult. Connect concepts to work, relationships, creative practice, and personal meaning. The challenge should produce something immediately useful, beautiful, or worth sharing.' },
         { key: 'elder',      text: 'Language: respectful, reflective, and wisdom-honoring. Acknowledge that this learner has lived. Connect to legacy, community contribution, and accumulated insight. Avoid tech-heavy or pop-culture examples. The challenge should connect learning to passing wisdom forward or deepening an existing practice. Assess options should honor depth of experience rather than testing rote recall.' },
@@ -3520,6 +3533,10 @@ document.addEventListener('DOMContentLoaded', function() {
       var inp = document.getElementById('auth-key-input');
       if (inp) inp.focus();
     } else {
+      // 2026-08-26 (Step E): fetch once here, shared by any admin UI that
+      // needs the phase list (currently the LECKO edit modal) -- avoids
+      // each consumer maintaining its own separate phases fetch.
+      adminFetch('/phases').then(function(data) { AS.phases = data || []; }).catch(function() { AS.phases = []; });
       renderAdmin();
       showAdmin(AS.section);
     }

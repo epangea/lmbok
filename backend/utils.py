@@ -3,10 +3,58 @@
 # Shared utilities imported by multiple route modules.
 # ============================================================
 
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
-from models import Learner, LearnerStreak
+from models import Learner, LearnerStreak, DevPhase, SessionConfig
+
+
+# ── Session config ───────────────────────────────────────────
+# 2026-08-25: shared session-generation values (currently just the
+# phase-guidance disclaimer) live in one DB table instead of being
+# duplicated across generate.py / seed_sessions.py. Not yet exposed in
+# admin -- see session_config table's own migration comment for why.
+
+async def get_session_config(key: str, db: AsyncSession, default: str = "") -> str:
+    """Fetch a session_config value by key. Returns `default` if the key
+    doesn't exist, rather than raising -- a missing config value should
+    degrade gracefully, not break session generation."""
+    result = await db.execute(select(SessionConfig).where(SessionConfig.config_key == key))
+    row = result.scalar_one_or_none()
+    return row.config_value if row else default
+
+
+# ── Developmental phase ──────────────────────────────────────
+# 2026-08-24/25: elemental phases redesign. Phase is a DERIVED value —
+# computed fresh from birth_year/is_expecting_parent rather than trusted
+# from a possibly-stale stored phase_id, so a learner drifts forward to
+# their next phase automatically as they age, with no cron job needed.
+# Callers that want the result persisted (e.g. /me, /me/preferences)
+# write it back to learner.phase_id themselves after calling this.
+#
+# is_expecting_parent overrides birth_year entirely and always resolves
+# to "light". No birth_year and not expecting means unresolved (None) —
+# deliberate: the strict phase-matching policy (2026-08-24) means an
+# unresolved phase must never be used to serve a session.
+
+async def compute_current_phase(learner: Learner, db: AsyncSession) -> DevPhase | None:
+    """Resolve a learner's current developmental phase. See module note above."""
+    if learner.is_expecting_parent:
+        light_q = await db.execute(select(DevPhase).where(DevPhase.slug == "light"))
+        return light_q.scalar_one_or_none()
+
+    if not learner.birth_year:
+        return None
+
+    age = datetime.now(timezone.utc).year - learner.birth_year
+    phases_q = await db.execute(
+        select(DevPhase).where(DevPhase.age_min.isnot(None)).order_by(DevPhase.sort_order)
+    )
+    for phase in phases_q.scalars().all():
+        if age >= phase.age_min and (phase.age_max is None or age <= phase.age_max):
+            return phase
+    return None
 
 
 # ── Avatar stage ─────────────────────────────────────────────

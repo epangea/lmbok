@@ -433,7 +433,7 @@ async def reject_listing(
 # ── Seed session endpoints ─────────────────────────────────
 
 VENV_PYTHON  = "/var/www/freqlearn/backend/venv/bin/python3"
-SEED_SCRIPT  = "/var/www/freqlearn/scripts/seed_sessions.py"
+SEED_SCRIPT  = "/var/www/freqlearn/backend/routes/seed_sessions.py"
 
 # In-memory job store (single admin user, one job at a time)
 _seed_job: dict = {"running": False, "progress": 0, "total": 0,
@@ -1284,7 +1284,11 @@ async def admin_update_lecko(
     if "art_id" in data:
         lecko.art_id = int(data["art_id"])
     if "phase_id" in data:
-        lecko.phase_id = int(data["phase_id"])
+        # leckos.phase_id is nullable since the 2026-08-24 elemental-phases
+        # migration -- explicit null (the dropdown's "unresolved" option)
+        # must clear it, not crash int(None). Same pattern as
+        # session.dev_phase_id below.
+        lecko.phase_id = int(data["phase_id"]) if data["phase_id"] else None
 
     await db.commit()
     await db.refresh(lecko)

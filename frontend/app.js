@@ -287,7 +287,8 @@ const S = {
   pendingVerifyEmail: '', verifyStatus: null, resendSent: false, resendLoading: false, resendError: '',
   onboardStep: 1,      // 0-4
   onboardName: '',
-  onboardPhase: '',
+  onboardBirthYear: '',
+  onboardExpecting: false,
   onboardArt: '',       // no longer set during onboarding; kept for the loadAISession() fallback chain
   onboardColor: '#00E5C8',
   // Prosopon onboarding card (step 4) — replaces the old first-art pick +
@@ -398,6 +399,21 @@ const S = {
 // Preferences again. Calling it here, synchronously, before boot() and
 // before the first draw(), means the very first paint is already correct.
 applyLang();
+
+// Shared birth-year <option> list for both the onboarding card and the
+// Preferences modal. A <select> avoids the focus-loss bug a plain
+// number <input> has here: every keystroke's oninput calls set(), which
+// always ends in a full draw() re-render, destroying and recreating the
+// <input> DOM node mid-type. Picking one option is a single action, so
+// that re-render is no longer disruptive.
+function birthYearOptions(selectedVal) {
+  var thisYear = new Date().getFullYear();
+  var opts = '<option value="">' + T('onboard.birth_year_placeholder') + '</option>';
+  for (var y = thisYear; y >= thisYear - 110; y--) {
+    opts += '<option value="' + y + '"' + (String(selectedVal) === String(y) ? ' selected' : '') + '>' + y + '</option>';
+  }
+  return opts;
+}
 
 function set(p) {
   // Trigger profile update when leaving the Mouseion sandbox
@@ -1037,7 +1053,9 @@ const LANG = {  // Only English ships inline; other languages load
     'onboard.name_desc':'This is how you will appear on your journey.',
     'onboard.name_placeholder':'Your name...',
     'onboard.new_to_this':'New to this',
-    'onboard.phase_body':'Every phase has its own gifts. There is no better or worse — just where you are right now.',
+    'onboard.birth_year_placeholder':'Select year',
+    'onboard.expecting_label':'Expecting parent (Little human in the making)',
+    'onboard.phase_body':'This is how we tune your sessions to where you actually are in life. Honest input, resonant sessions.',
     'onboard.some_experience':'Some experience',
     'onboard.step_progress':'Step {n} of {total}',
     'onboard.sub_name':'Your name',
@@ -1052,7 +1070,7 @@ const LANG = {  // Only English ships inline; other languages load
     'onboard.welcome_title':'Welcome to the frequency 🌊',
     'onboard.what_call':'What shall we call you?',
     'onboard.what_pulls':'What pulls you right now?',
-    'onboard.where_life':'Where are you in life?',
+    'onboard.where_life':'What year were you born?',
     'peripatos.companion_my_story':'Companion · My Story',
     'peripatos.confirm_delete':'Delete this exchange?',
     'peripatos.loading_journal':'Loading your journal…',
@@ -1073,10 +1091,13 @@ const LANG = {  // Only English ships inline; other languages load
     'polis.opens_practice':'The Polis opens with practice',
     'polis.unlock_desc':'Complete 5 learning days or earn 50 XP to unlock civic participation. The Polis works best when its members have practiced listening, understanding and respect.',
     'prefs.avatar':'Avatar',
+    'prefs.birth_year':'Birth year',
+    'prefs.expecting_label':'Expecting parent (Little human in the making)',
     'prefs.language':'Language',
     'prefs.name':'Display name',
     'prefs.newsletter_optin':'Receive administrative emails and educational newsletters (never spam)',
     'prefs.phase':'Life phase',
+    'prefs.phase_unknown':'Set your birth year below to see your phase',
     'prefs.save':'Save changes',
     'prefs.title':'Preferences',
     'quiz.closed_loops':'Closed loops',
@@ -2295,7 +2316,9 @@ async function loadAISession(artSlug) {
   try {
     var res = await API.post('/generate/session', {
       art_slug:          slug,
-      phase_slug:        S.onboardPhase || 'adult',
+      // phase_slug intentionally omitted — generate_session resolves phase
+      // server-side from the learner's own stored phase_id (2026-08-24/25
+      // elemental phases redesign; see backend/routes/generate.py).
       learner_interests: learnerInterests || null,
       // Only pass skill_id from engine recommendation when NOT in a skill-click session
       skill_id:          (!S.skillContext && S.nextRec) ? S.nextRec.skill_id : null,
@@ -3918,10 +3941,16 @@ window.showPreferences = function() {
     return '<div onclick="prefPickColor(\''+c+'\')" style="width:26px;height:26px;border-radius:50%;background:'+c+';cursor:pointer;border:3px solid '+(sel?'#fff':'transparent')+';display:inline-block;margin:2px" id="pcl-'+c.replace('#','')+'"></div>';
   }).join('');
 
-  var phaseRow = PHASES.map(function(p) {
-    var sel = (S.onboardPhase||'adult') === p.slug;
-    return '<button onclick="prefPickPhase(\''+p.slug+'\')" id="pph-'+p.slug+'" style="padding:7px 10px;font-size:12px;border-radius:6px;cursor:pointer;border:1px solid '+(sel?'var(--wave)':'var(--border)')+';background:'+(sel?'var(--wave-dim)':'var(--bg3)')+';color:'+(sel?'var(--wave)':'var(--text2)')+'">'+p.icon+' '+p.name+'</button>';
-  }).join('');
+  var curPhase   = l.phase || null;
+  var curBirthYear  = l.birth_year || '';
+  var curExpecting  = !!l.is_expecting_parent;
+
+  var phaseDisplay = curPhase
+    ? '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);margin-bottom:10px">'
+      + '<span style="font-size:20px">'+curPhase.icon+'</span>'
+      + '<span style="color:'+curPhase.color+';font-weight:600;font-size:13px">'+curPhase.name+'</span>'
+      + '</div>'
+    : '<div style="font-size:12px;color:var(--text3);margin-bottom:10px">' + T('prefs.phase_unknown') + '</div>';
 
   var modal = document.createElement('div');
   modal.id = 'prefs-modal';
@@ -3960,7 +3989,16 @@ window.showPreferences = function() {
 
     + '<div style="margin-bottom:24px">'
     + '<label style="font-size:12px;color:var(--text2);display:block;margin-bottom:8px">' + T('prefs.phase') + '</label>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:6px">'+phaseRow+'</div>'
+    + phaseDisplay
+    + '<select id="pref-birth-year-input" '
+    + (curExpecting ? 'disabled ' : '')
+    + 'onchange="prefSetBirthYear(this.value)" '
+    + 'style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--text);font-size:14px;box-sizing:border-box;margin-bottom:10px">'
+    + birthYearOptions(curBirthYear) + '</select>'
+    + '<label style="display:flex;align-items:flex-start;gap:8px;cursor:pointer">'
+    + '<input type="checkbox" id="pref-expecting" ' + (curExpecting ? 'checked ' : '') + 'onchange="prefToggleExpecting(this.checked)" style="margin-top:2px;flex-shrink:0">'
+    + '<span style="font-size:12px;color:var(--text2);line-height:1.5">' + T('prefs.expecting_label') + '</span>'
+    + '</label>'
     + '</div>'
 
     + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:20px;cursor:pointer">'
@@ -3978,7 +4016,8 @@ window.showPreferences = function() {
   // Track current selections in closure via temp state
   window._prefEmoji = curEmoji;
   window._prefColor = curColor;
-  window._prefPhase = S.onboardPhase || 'adult';
+  window._prefBirthYear = curBirthYear;
+  window._prefExpecting = curExpecting;
   window._prefLang  = S.language || 'en';
 };
 
@@ -4011,35 +4050,39 @@ window.prefPickLang = function(lang) {
   if (el) { el.style.border='1px solid var(--wave)'; el.style.background='var(--wave-dim)'; el.style.color='var(--wave)'; }
 };
 
-window.prefPickPhase = function(slug) {
-  window._prefPhase = slug;
-  document.querySelectorAll('[id^="pph-"]').forEach(function(el){
-    el.style.border='1px solid var(--border)'; el.style.background='var(--bg3)'; el.style.color='var(--text2)';
-  });
-  var el = document.getElementById('pph-'+slug);
-  if (el) { el.style.border='1px solid var(--wave)'; el.style.background='var(--wave-dim)'; el.style.color='var(--wave)'; }
+window.prefSetBirthYear = function(val) { window._prefBirthYear = val; };
+
+window.prefToggleExpecting = function(checked) {
+  window._prefExpecting = checked;
+  var input = document.getElementById('pref-birth-year-input');
+  if (input) input.disabled = checked;
 };
 
 window.savePreferences = async function() {
   var name = (document.getElementById('pref-name')||{}).value || '';
   var newsletterEl = document.getElementById('pref-newsletter');
   var newsletterOptOut = newsletterEl ? !newsletterEl.checked : false;
+  var byRaw = window._prefExpecting ? null : parseInt(window._prefBirthYear, 10);
   try {
     await API.patch('/learners/me/preferences', {
       display_name:  name.trim() || undefined,
       avatar_emoji:  window._prefEmoji,
       avatar_color:  window._prefColor,
-      phase:         window._prefPhase,
+      birth_year:    (byRaw && !isNaN(byRaw)) ? byRaw : null,
+      is_expecting_parent: !!window._prefExpecting,
       language:      window._prefLang,
       newsletter_opt_out: newsletterOptOut,
     });
-    var l = Object.assign({}, S.learner||{});
+    // Phase is derived server-side -- re-fetch /me rather than guess it
+    // locally, so the cached learner always reflects the real computed
+    // phase (icon/color/name), not a stale client-side assumption.
+    var fresh = await API.get('/learners/me');
+    var l = Object.assign({}, S.learner||{}, fresh||{});
     if (name.trim()) l.display_name = name.trim();
     l.avatar_emoji = window._prefEmoji;
     l.avatar_color = window._prefColor;
-    l.newsletter_opt_out = newsletterOptOut;
     localStorage.setItem('fl_learner', JSON.stringify(l));
-    set({learner:l, onboardPhase:window._prefPhase, language: window._prefLang || S.language});
+    set({learner:l, language: window._prefLang || S.language});
     document.getElementById('prefs-modal').remove();
   } catch(e) {
     console.log('Save prefs error:', e.message);
@@ -4411,15 +4454,6 @@ function computeSkillScore(skillName, artScores) {
   return norm > 0 ? Math.min(raw / norm, 1.0) : 0;
 }
 
-var PHASES = [
-  {slug:'prenascent', icon:'🌱', name:'Expecting a child (ParentGuide)', desc:'Pregnancy \u00B7 preparing for parenthood'},
-  {slug:'nascent',    icon:'🌿', name:'Newborn & Infant (GuardianGuide)',  desc:'Ages 0~2 \u00B7 attuning to a new life'},
-  {slug:'child',      icon:'🧒', name:'Child (GuardianGuide)',            desc:'Ages 3~11 \u00B7 curiosity-led exploration'},
-  {slug:'adolescent', icon:'🔥', name:'Adolescent',       desc:'Ages 12~19 \u00B7 identity & independence'},
-  {slug:'adult',      icon:'🌳', name:'Adult',            desc:'Ages 20~59 \u00B7 building & contributing'},
-  {slug:'elder',      icon:'🍂', name:'Elder',            desc:'Ages 60+ \u00B7 wisdom & transmission'},
-];
-
 var EMOJIS = ['🌊','🔥','🌿','⚡','🎵','🦋','🌙','🌸','🐉','🦁','🌍','✨'];
 var COLORS = ['#00E5C8','#3D7BFF','#FF6B6B','#FFD166','#9B72FF','#6DC86D','#FF9F43','#EE5A24','#0652DD','#C4E538'];
 var LANGUAGES = [
@@ -4474,20 +4508,23 @@ function OnboardPage() {
   }
 
   else if (step === 3) {
-    var phaseCards = PHASES.map(function(p) {
-      var sel = S.onboardPhase === p.slug ? " sel" : "";
-      return "<div class=\"phase-card" + sel + "\" onclick=\"obPhase('" + p.slug + "');\">"
-        + "<div class=\"phase-icon\">" + p.icon + "</div>"
-        + "<div class=\"phase-name\">" + p.name + "</div>"
-        + "<div class=\"phase-desc\">" + p.desc + "</div>"
-        + "</div>";
-    }).join('');
+    var expChecked = S.onboardExpecting ? " checked" : "";
+    var byDisabled = S.onboardExpecting ? " disabled" : "";
+    var byValue    = S.onboardBirthYear || "";
+    var validYear  = /^[0-9]{4}$/.test(String(S.onboardBirthYear || ""));
+    var canContinue = S.onboardExpecting || validYear;
     inner = "<div class=\"onboard-step\">" + T('onboard.step_progress', {n:3, total:4}) + " \u00B7 " + T('onboard.sub_phase') + "</div>"
       + "<div class=\"onboard-title\">" + T('onboard.where_life') + "</div>"
       + "<div class=\"onboard-sub\">" + T('onboard.phase_body') + "</div>"
-      + "<div class=\"phase-grid\">" + phaseCards + "</div>"
+      + "<div class=\"form-group\"><select class=\"form-input\" id=\"ob-birth-year\" "
+      + byDisabled + " onchange=\"obSetBirthYear(this.value)\" style=\"font-size:18px;padding:14px\">"
+      + birthYearOptions(byValue) + "</select></div>"
+      + "<label style=\"display:flex;align-items:flex-start;gap:8px;margin:16px 0;cursor:pointer\">"
+      + "<input type=\"checkbox\" id=\"ob-expecting\"" + expChecked + " onchange=\"obToggleExpecting(this.checked)\" style=\"margin-top:2px;flex-shrink:0\">"
+      + "<span style=\"font-size:13px;color:var(--text2);line-height:1.5\">" + T('onboard.expecting_label') + "</span>"
+      + "</label>"
       + "<button class=\"btn btn-wave btn-full btn-lg\" "
-      + (S.onboardPhase ? "" : "disabled ")
+      + (canContinue ? "" : "disabled ")
       + "onclick=\"set({onboardStep:4})\">" + T('common.continue') + " \u2192</button>";
   }
 
@@ -4539,7 +4576,8 @@ window.obConfirmLanguage = async function() {
   catch(e) { console.log('Language preference save:', e.message); }
   set({onboardStep: 1});
 };
-window.obPhase  = function(slug) { SND.step(); set({onboardPhase: slug}); };
+window.obSetBirthYear = function(val) { set({onboardBirthYear: val}); };
+window.obToggleExpecting = function(checked) { SND.step(); set({onboardExpecting: checked}); };
 
 window.obSetName = function() {
   var name = document.getElementById('ob-name');
@@ -4565,7 +4603,8 @@ window.obComplete = async function() {
     await API.patch('/learners/me/preferences', {
       avatar_emoji:  randEmoji,
       avatar_color:  randColor,
-      phase:         S.onboardPhase,
+      birth_year:    S.onboardExpecting ? null : parseInt(S.onboardBirthYear, 10),
+      is_expecting_parent: !!S.onboardExpecting,
       display_name:  S.onboardName,
     });
   } catch(e) { console.log('Preferences save:', e.message); }

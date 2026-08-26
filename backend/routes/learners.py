@@ -15,18 +15,37 @@ async def get_me(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db),
 ):
+    from utils import compute_current_phase
+
     prefs_result = await db.execute(
         select(LearnerPreferences).where(LearnerPreferences.learner_id == learner.id)
     )
     prefs = prefs_result.scalar_one_or_none()
+
+    # 2026-08-25: phase is derived, not stored-and-trusted -- recompute
+    # on every read so a learner drifts to their next phase automatically
+    # as they age, with no cron job needed. Self-heals learner.phase_id
+    # if it's drifted from what birth_year/is_expecting_parent now imply.
+    current_phase = await compute_current_phase(learner, db)
+    if current_phase and learner.phase_id != current_phase.id:
+        learner.phase_id = current_phase.id
+        await db.commit()
+
     return {
         "id":           learner.id,
         "username":     learner.username,
         "display_name": learner.display_name,
         "birth_year":   learner.birth_year,
+        "is_expecting_parent": learner.is_expecting_parent,
         "avatar_emoji": learner.avatar_emoji,
         "avatar_color": learner.avatar_color,
-        "phase_id":     learner.phase_id,
+        "phase": {
+            "id":    current_phase.id,
+            "slug":  current_phase.slug,
+            "name":  current_phase.name,
+            "icon":  current_phase.icon,
+            "color": current_phase.color,
+        } if current_phase else None,
         "language":     learner.language or "en",
         "created_at":   learner.created_at,
         # 2026-08-23d: surfaced here (not a new endpoint) since Preferences'
@@ -58,7 +77,8 @@ from sqlalchemy import update
 class PreferencesUpdate(BaseModel):
     avatar_emoji:  Optional[str] = None
     avatar_color:  Optional[str] = None
-    phase:         Optional[str] = None
+    birth_year:    Optional[int] = None
+    is_expecting_parent: Optional[bool] = None
     display_name:  Optional[str] = None
     first_art:     Optional[str] = None
     language:      Optional[str] = None
@@ -74,8 +94,8 @@ async def update_preferences(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db)
 ):
-    from models import DevPhase
     from sqlalchemy import select as sel
+    from utils import compute_current_phase
 
     # Update learner fields
     if req.avatar_emoji:  learner.avatar_emoji = req.avatar_emoji
@@ -83,12 +103,22 @@ async def update_preferences(
     if req.display_name:  learner.display_name  = req.display_name
     if req.language:      learner.language       = req.language
 
-    # Update phase
-    if req.phase:
-        phase_q = await db.execute(sel(DevPhase).where(DevPhase.slug == req.phase))
-        phase = phase_q.scalar_one_or_none()
-        if phase:
-            learner.phase_id = phase.id
+    # 2026-08-25: phase is no longer a manual selection -- it's derived
+    # from birth_year / is_expecting_parent. Recompute whenever either
+    # input changes (checked via "is not None" rather than truthiness,
+    # since a learner un-checking "expecting" is a real, meaningful
+    # False, not an absent field).
+    phase_inputs_changed = False
+    if req.birth_year is not None:
+        learner.birth_year = req.birth_year
+        phase_inputs_changed = True
+    if req.is_expecting_parent is not None:
+        learner.is_expecting_parent = req.is_expecting_parent
+        phase_inputs_changed = True
+
+    if phase_inputs_changed:
+        current_phase = await compute_current_phase(learner, db)
+        learner.phase_id = current_phase.id if current_phase else None
 
     if req.newsletter_opt_out is not None:
         prefs_q = await db.execute(sel(LearnerPreferences).where(LearnerPreferences.learner_id == learner.id))

@@ -26,6 +26,7 @@ from db import get_db
 # FIX: ArtsSkills added here — it was missing from this import,
 # causing NameError in the reuse branch before the inline import was reached.
 from models import Session, Arts, DevPhase, Skill, Learner, Lecko, ArtsSkills
+from utils import get_session_config
 from routes.auth import get_current_learner
 from prior_session_context import get_prior_session_context
 import ai_client
@@ -72,8 +73,15 @@ async def _select_reusable_pool(
 
     Filters, in order:
       1. art_id (hard — caller already knows the art)
-      2. dev_phase_id — SOFT: prefer phase-matched, fall back to untagged/
-         legacy content if no phase match exists. Unchanged from pre-P6.
+      2. dev_phase_id — HARD, no fallback (2026-08-24 policy change: an
+         unresolved/untagged phase must never be served — see the
+         elemental-phases restructure). A missing phase_id on the
+         request, or no phase-matched sessions, both yield an empty
+         pool rather than falling back to untagged/legacy content.
+         Previously SOFT (pre-2026-08-24): fell back to untagged
+         content or served without any phase filter when the learner's
+         own phase was unset. That fallback is what let unknown-phase
+         learners be served arbitrary content; removed per Charbel.
       3. language — HARD, no fallback. Serving the wrong language is worse
          than no reuse at all (2026-07-20 fix). Unchanged from pre-P6.
       4. skill (P6, new) — TIERED, only applied when req.skill_id is set
@@ -105,15 +113,13 @@ async def _select_reusable_pool(
     if not all_stored:
         return []
 
-    # Phase: soft fallback to untagged/legacy if no phase match.
-    if phase_id:
-        existing = [s for s in all_stored
-                    if getattr(s, 'dev_phase_id', None) in (None, phase_id)]
-        if not existing:
-            existing = [s for s in all_stored
-                        if getattr(s, 'dev_phase_id', None) is None]
-    else:
-        existing = all_stored
+    # Phase: HARD filter, no fallback (2026-08-24 policy). Unresolved
+    # phase or no phase-matched sessions both mean "don't serve" now.
+    if not phase_id:
+        return []
+    existing = [s for s in all_stored if getattr(s, 'dev_phase_id', None) == phase_id]
+    if not existing:
+        return []
 
     # Language: hard filter, no fallback.
     req_language = req.language or "en"
@@ -178,11 +184,27 @@ async def generate_session(
     if not art:
         raise HTTPException(404, f"Art not found: {req.art_slug}")
 
-    phase_slug = req.phase_slug or "adult"
-    phase_q = await db.execute(select(DevPhase).where(DevPhase.slug == phase_slug))
-    phase   = phase_q.scalar_one_or_none()
-    phase_name = phase.name if phase else "Adult"
-    age_range  = phase.age_range if phase else "18-60"
+    # ── Resolve developmental phase — HARD requirement (2026-08-24) ──
+    # No more silent "adult" default. Try the request's explicit
+    # phase_slug first, then the learner's own stored phase_id (set via
+    # /me/preferences, computed from birth_year once that logic ships).
+    # If neither resolves, refuse to generate rather than guess.
+    phase = None
+    if req.phase_slug:
+        phase_q = await db.execute(select(DevPhase).where(DevPhase.slug == req.phase_slug))
+        phase = phase_q.scalar_one_or_none()
+    if not phase and learner.phase_id:
+        phase_q = await db.execute(select(DevPhase).where(DevPhase.id == learner.phase_id))
+        phase = phase_q.scalar_one_or_none()
+    if not phase:
+        raise HTTPException(
+            422,
+            "Unable to determine a developmental phase for this session. "
+            "Set your birth year in preferences, or specify a phase explicitly."
+        )
+    phase_name = phase.name
+    phase_slug = phase.slug
+    age_range  = phase.age_range
 
     # ── Fetch skill context if provided ──────────────────────
     skill_name   = None
@@ -385,79 +407,179 @@ async def generate_session(
         )
 
     # Phase-specific language and pedagogy guidance
+    # 2026-08-25: 13-phase elemental redesign, research-grounded (Step C).
+    # Each block is parts 1-3 of the standing template (what's known /
+    # likely motivational terrain / suggested register) -- the 4th part,
+    # the standing caveat, lives in session_config (one row, not
+    # duplicated 13x) and is fetched + appended below, not baked in here.
     phase_guides = {
-        "nascent": (
-            "CRITICAL: The learner is an ADULT caring for a newborn or infant aged 0–2. "
-            "This session is FOR THE PARENT OR CAREGIVER, not written for the baby. "
-            "The adult is navigating sleep deprivation, identity upheaval, relational strain, and the overwhelming "
-            "newness of a tiny dependent life. They may have 10 minutes of fractured attention. "
-            "Language: warm, honest, non-performative — never cheerful in a hollow way. "
-            "Acknowledge the exhaustion and the wonder as inseparable. "
-            "Frame skill practice around attunement: reading the infant's cues, co-regulation, "
-            "the parent's own nervous system, and the slow rebuilding of self amid caregiving. "
-            "The warmup should invite the adult to pause and notice something about this moment — "
-            "their body, their breath, the weight of the baby, the sound in the room. "
-            "The challenge should be a micro-practice: brief, doable in fragments, requiring no materials — "
-            "a 60-second body scan, a whispered intention, a single observation recorded, a small act of self-kindness. "
-            "The reflection should open toward the parent's inner experience — not infant-care technique. "
-            "The assess question should be about self-awareness, attunement, or the parent's emotional landscape — "
-            "not infant development milestones or pediatric theory."
-        ),
-        "prenascent": (
-            "CRITICAL: The learner is an ADULT who is pregnant or expecting a child. "
+        "light": (
+            "The learner is an adult who is pregnant or expecting a child (via any path to parenthood). "
             "This session is FOR THE EXPECTING PARENT, not for an infant or toddler. "
-            "Do NOT write about playing with babies, sensory infant activities, or caregiver-infant interactions. "
-            "The learner is a thinking, feeling adult in a major life transition. "
-            "Frame skill practice as quiet inner preparation — emotional, relational, and practical. "
-            "Honour the enormity of the transition without dramatising it. "
-            "Language: warm, grounding, and unhurried — no urgency or performance pressure. "
-            "Connect to the adult's own body, sleep, overwhelm, identity shift from individual to parent, and partnership. "
-            "The warmup should invite the adult to gently notice something about themselves — their body, their fears, their hopes, their relationship. "
-            "The challenge should be a reflective adult practice: a journal entry, a conversation with a partner, a quiet observation, a personal decision. "
-            "The reflection should open into questions about the adult's own readiness, values, and vision of parenthood. "
-            "The assess question should test the adult's self-understanding or emotional literacy — grounded in lived experience, not infant-care theory."
+            "What's known: research on the transition to parenthood -- increasingly called \"matrescence\" for the "
+            "birthing parent, with growing recognition that any primary caregiver's brain and identity reorganize "
+            "through caregiving regardless of biological role -- describes this transition as developmentally "
+            "comparable in magnitude to adolescence: significant neuroplasticity, identity reorganization, and "
+            "relational change, though without adolescence's cultural scaffolding for support. "
+            "Likely motivational terrain: autonomy may feel newly complicated as identity reorganizes around a role "
+            "not yet begun; relatedness (to a partner, to the child-to-come, to one's own parents) and competence "
+            "(\"will I be able to do this?\") both tend to be live and often anxious. "
+            "Suggested register: warm, grounding, unhurried. This learner is a capable adult in transition, not a "
+            "novice. Let the Art's own lens shape the actual content and format."
         ),
-        "child": (
-            "The learner is a child, ages 3–11. Default your language and complexity to a curious 8–10 year old "
-            "— younger children will follow along, and older ones won't feel talked down to. "
-            "Language: warm, concrete, and playful. Short sentences. Ground every idea in something the child "
-            "can see, touch, taste, hear, or do right now — never abstract theory or adult concerns. "
-            "Use analogies from animals, games, school, family, and nature. Never use jargon. "
-            "WARMUP: Must be 2–3 sentences. Ask the child to notice or remember something specific and sensory "
-            "— a smell, a sound, a texture, a memory of doing something with their hands. "
-            "CHALLENGE: This is the most important rule — DO NOT default to 'draw a picture'. "
-            "Rotate through: doing a real experiment (mixing, growing, building, measuring), "
-            "writing or telling a short story, making something physical, playing a simple game with rules, "
-            "going outside to observe and record, or interviewing a family member. "
-            "Drawing is allowed occasionally but must not be the default. The challenge must feel like play, "
-            "never homework. It should be completable in 10–20 minutes with things found at home. "
-            "REFLECT: Ask one question the child might lie awake wondering about — genuine curiosity, "
-            "not a consequence question ('what would happen if'). Aim for something that opens the world: "
-            "'Why do you think...', 'Have you ever noticed...', 'What does it feel like when...'. "
-            "ASSESS: Simple enough for a curious 8–10 year old without adult help. "
-            "Everyday words, relatable scenarios, no technical terms. Options must be short and clearly different."
+        "sandy-soil": (
+            "The learner is an adult caring for an infant aged 0~2. This session is FOR THE PARENT OR CAREGIVER, "
+            "not written for the baby. "
+            "What's known: attachment research (Bowlby, Ainsworth) and the co-regulation literature describe this "
+            "period as one where the caregiver's own regulation and attunement shape the infant's developing sense "
+            "of security, and where caregivers themselves are often depleted -- fragmented attention and disrupted "
+            "sleep are the norm, not the exception. "
+            "Likely motivational terrain: competence (am I doing this right?) and relatedness (to the infant, to a "
+            "partner, to one's own support network) tend to dominate; autonomy may feel very reduced right now. "
+            "Suggested register: warm and honest, never performatively cheerful. Whatever this looks like, it "
+            "likely needs to survive being read in fragments. Let the Art's own lens shape the actual content and format."
         ),
-        "adolescent": (
-            "Language: direct, honest, and peer-respecting — never condescending. "
-            "Connect to identity, social belonging, fairness, and real-world stakes. "
-            "The challenge should feel worth doing because it matters, not because it was assigned. "
-            "The reflection should invite genuine self-inquiry, not performative answers. "
-            "Assess options can handle moderate complexity but stay concrete and grounded in lived experience."
+        "moist-soil": (
+            "The learner is a preschooler, ages 3~5. "
+            "What's known: Piaget's preoperational stage (roughly 2-7, though cross-cultural research finds these "
+            "boundaries shift with schooling access and culture) describes children at this age as thinking "
+            "symbolically -- pretend play, drawing, and language all represent ideas -- but still reasoning from "
+            "what they perceive rather than logically, and typically struggling to take another's perspective. "
+            "Most children this age are pre- or early-literate. "
+            "Likely motivational terrain: competence shows up as delight in doing something themselves, however "
+            "small; relatedness to a caregiver reading or playing alongside them matters a great deal. "
+            "Suggested register: concrete, sensory, likely caregiver-mediated given typical literacy at this age. "
+            "Abstract or hypothetical framing is unlikely to land here regardless of the art. Let the Art's own lens shape the actual content and format."
         ),
-        "adult": (
-            "Language: warm, curious, and non-judgmental. Treat the learner as a capable, thoughtful adult. "
-            "Connect concepts to work, relationships, creative practice, and personal meaning. "
-            "The challenge should produce something immediately useful, beautiful, or worth sharing."
+        "humus-soil": (
+            "The learner is a child, ages 6~8. "
+            "What's known: this age sits at the boundary Piaget described between preoperational and "
+            "concrete-operational thinking -- logical reasoning about concrete, tangible things is emerging, but "
+            "abstract or hypothetical reasoning typically isn't yet reliable. Most children this age are becoming "
+            "independent readers. "
+            "Likely motivational terrain: competence and mastery become more central than at earlier ages -- this "
+            "learner increasingly wants to do things well, not just explore; relatedness to peers begins to matter "
+            "alongside caregivers. "
+            "Suggested register: concrete and playful, grounded in things the child can see, touch, or do. Let the Art's own lens shape the actual content and format."
         ),
-        "elder": (
-            "Language: respectful, reflective, and wisdom-honoring. Acknowledge that this learner has lived. "
-            "Connect to legacy, community contribution, and accumulated insight. "
-            "Avoid tech-heavy or pop-culture examples. "
-            "The challenge should connect learning to passing wisdom forward or deepening an existing practice. "
-            "Assess options should honor depth of experience rather than testing rote recall."
+        "low-fire": (
+            "The learner is ages 9~11. "
+            "What's known: puberty timing varies enormously at this age -- typical onset ranges from 8-12 in girls "
+            "and 9-14 in boys, so some learners in this band are pre-pubertal and others are well into it. "
+            "Cognitively, most are consolidating concrete-operational reasoning while executive function and "
+            "impulse control continue developing gradually. "
+            "Likely motivational terrain: autonomy begins mattering more than at earlier ages -- this is often the "
+            "first age where working independently for a real stretch becomes possible; competence and relatedness "
+            "to peers both remain central. "
+            "Suggested register: respectful and clear, treating the learner as capable of real independence in "
+            "doses, without assuming the identity questions or peer intensity that tend to arrive later. Let the Art's own lens shape the actual content and format."
+        ),
+        "medium-fire": (
+            "The learner is an early teen, ages 12~14. "
+            "What's known: developmental neuroscience describes this period as one of heightened sensitivity to "
+            "social and identity-relevant information -- a capacity, not simply a vulnerability -- coinciding with "
+            "identity formation becoming a central psychological task. "
+            "Likely motivational terrain: relatedness (peer belonging, being seen accurately) and autonomy (having "
+            "and defending one's own views) both tend to intensify here; competence still matters but is "
+            "increasingly filtered through how it makes them look. "
+            "Suggested register: direct and honest, never condescending -- but this age can swing between confident "
+            "and self-conscious within a single session, so don't assume steadiness. Let the Art's own lens shape the actual content and format."
+        ),
+        "high-fire": (
+            "The learner is a late teen, ages 15~17. "
+            "What's known: the same heightened social-learning capacity from earlier adolescence continues here and, "
+            "per current research, extends into the mid-20s rather than ending sharply at 18 -- there is no hard "
+            "neurological cutoff at the adult boundary this platform draws for other reasons. "
+            "Likely motivational terrain: autonomy tends to matter more here than at any earlier phase -- research "
+            "links a felt sense of choice to deeper engagement specifically at this age; relatedness and competence "
+            "remain live alongside it. "
+            "Suggested register: direct and honest, treating the learner as very nearly an adult, because in most "
+            "respects they are. Let the Art's own lens shape the actual content and format."
+        ),
+        "low-wind": (
+            "The learner is newly independent, ages 18~22. "
+            "What's known: \"emerging adulthood\" research describes this period as one of identity exploration and "
+            "instability across love, work, and worldview -- but the theory's own originator notes it's culturally "
+            "constructed, drawn largely from American samples, and not claimed as universal. Treat it as one lens "
+            "among others, not a settled fact about every learner in this band. "
+            "Likely motivational terrain: autonomy and identity exploration tend to be central -- this is often a "
+            "period with more freedom than structure; \"I don't know yet\" is common and not itself a problem to "
+            "solve. "
+            "Suggested register: warm and non-judgmental, comfortable with uncertainty rather than pushing toward "
+            "premature resolution. Let the Art's own lens shape the actual content and format."
+        ),
+        "high-wind": (
+            "The learner is building momentum, ages 23~27. "
+            "What's known: still within the age range emerging-adulthood research covers, though the same research "
+            "and its critics note wide individual and cultural variation in how quickly people move from "
+            "exploration toward more settled commitments -- some at this age are still fully in exploration, others "
+            "have already largely settled. "
+            "Likely motivational terrain: competence tends to grow in weight relative to pure exploration -- early "
+            "mastery in a domain becomes motivating in its own right; autonomy and relatedness (peer and partner "
+            "relationships increasingly chosen rather than circumstantial) both remain active. "
+            "Suggested register: warm and curious, respectful of developing competence without assuming full "
+            "settledness. Let the Art's own lens shape the actual content and format."
+        ),
+        "water": (
+            "The learner is an adult, ages 28~38. "
+            "What's known: adult-learning research describes adult learners generally as self-directed, motivated "
+            "by relevance and real-world application, and learning through integrating new material with lived "
+            "experience -- a genuinely different starting point than pedagogy designed for children. "
+            "Likely motivational terrain: competence and relatedness (to work, partnership, community, possibly "
+            "parenting) tend to dominate, with autonomy expressed through wanting a say in how, not just what, is "
+            "learned. "
+            "Suggested register: warm, curious, and non-judgmental -- a capable adult with real stakes and limited "
+            "spare time. Let the Art's own lens shape the actual content and format."
+        ),
+        "metal": (
+            "The learner is in the load-bearing years, ages 39~59. "
+            "What's known: Erikson's generativity-vs-stagnation framing describes this period's central task as "
+            "contributing something that outlasts the self -- and longitudinal research links higher midlife "
+            "generativity to stronger cognitive functioning and lower depression decades later. Adult-learning "
+            "research's emphasis on drawing from lived experience applies with particular force here, given the "
+            "accumulated experience this learner likely has. "
+            "Likely motivational terrain: relatedness through mentoring and contribution tends to matter more than "
+            "at earlier adult phases; competence remains central, but often expressed as depth in an existing "
+            "domain rather than breadth across new ones. "
+            "Suggested register: warm, direct, and respectful of real expertise -- this learner may know more in "
+            "some areas than the platform does. Let the Art's own lens shape the actual content and format."
+        ),
+        "stone": (
+            "The learner is ages 60~80. "
+            "What's known: socioemotional selectivity theory describes a shift toward emotionally meaningful goals "
+            "as time horizons narrow -- but the theory is explicit that this shift tracks perceived time horizon, "
+            "not chronological age itself, and doesn't apply uniformly to everyone in a given age band. Research "
+            "applying \"successful aging\" frameworks to this age range finds meaningful rates of continued high "
+            "function and engagement -- this is not, on average, a winding-down phase. "
+            "Likely motivational terrain: relatedness (particularly close, existing relationships) and "
+            "meaning-making tend to carry more weight relative to novelty-seeking than at earlier phases -- but "
+            "competence and genuine autonomy remain fully present and shouldn't be assumed away. "
+            "Suggested register: respectful and wisdom-honoring, without assuming decline unless the learner has "
+            "indicated it. Let the Art's own lens shape the actual content and format."
+        ),
+        "wood": (
+            "The learner is ages 81+. "
+            "What's known: this is the age range where the standard \"successful aging\" model becomes least "
+            "representative on its own terms -- applying its strict physical-function criteria, essentially no "
+            "centenarians and few octogenarians qualify, while subjective-wellbeing and engagement-based models find "
+            "far higher rates of thriving in the same population. The research literature itself treats this as a "
+            "sign the strict model under-represents this group, not that this group is uniformly declining. "
+            "Socioemotional selectivity research also finds older adults often report better emotional well-being "
+            "than younger adults, on average. "
+            "Likely motivational terrain: highly individual at this age more than any other -- some learners here "
+            "have real physical limitation, others remain remarkably active; assume neither without the learner's "
+            "own signal. Relatedness and meaning-making are likely central; competence and autonomy should never be "
+            "assumed absent. "
+            "Suggested register: warm, dignified, and present-tense -- this learner is here now, not a memory of "
+            "themselves. Favor depth and story over anything time-pressured, but without assuming physical "
+            "limitation. Let the Art's own lens shape the actual content and format."
         ),
     }
-    phase_guidance = phase_guides.get(phase_slug, phase_guides["adult"])
+    _disclaimer = await get_session_config(
+        "phase_guidance_disclaimer", db,
+        default="This is a starting point, not a rule about this specific learner."
+    )
+    phase_guidance = phase_guides.get(phase_slug, phase_guides["water"]) + " " + _disclaimer
 
     # ── Contextual lens: frame each art in its own domain ──────────────
     # Source of truth: "To Be Human" by Charbel Haddad (Feb 2026).

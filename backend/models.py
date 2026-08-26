@@ -13,12 +13,24 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from db import Base
 
 
+class SessionConfig(Base):
+    __tablename__ = "session_config"
+    id:           Mapped[int]           = mapped_column(Integer, primary_key=True)
+    config_key:   Mapped[str]           = mapped_column(String(64), unique=True, nullable=False)
+    config_value: Mapped[str]           = mapped_column(Text, nullable=False)
+    description:  Mapped[Optional[str]] = mapped_column(Text)
+
+
 class DevPhase(Base):
     __tablename__ = "dev_phases"
     id:          Mapped[int]           = mapped_column(Integer, primary_key=True)
     name:        Mapped[str]           = mapped_column(String(50), nullable=False)
     slug:        Mapped[str]           = mapped_column(String(30), unique=True, nullable=False)
     age_range:   Mapped[Optional[str]] = mapped_column(String(20))
+    age_min:     Mapped[Optional[int]] = mapped_column(SmallInteger)
+    age_max:     Mapped[Optional[int]] = mapped_column(SmallInteger)
+    icon:        Mapped[Optional[str]] = mapped_column(String(8))
+    color:       Mapped[Optional[str]] = mapped_column(String(7))
     description: Mapped[Optional[str]] = mapped_column(Text)
     sort_order:  Mapped[int]           = mapped_column(Integer, default=0)
 
@@ -70,6 +82,7 @@ class Learner(Base):
     password_hash: Mapped[str]           = mapped_column(String(255), nullable=False)
     display_name:  Mapped[Optional[str]] = mapped_column(String(80))
     birth_year:    Mapped[Optional[int]] = mapped_column(SmallInteger)
+    is_expecting_parent: Mapped[bool]    = mapped_column(Boolean, default=False)
     phase_id:      Mapped[Optional[int]] = mapped_column(ForeignKey("dev_phases.id"))
     avatar_emoji:  Mapped[Optional[str]] = mapped_column(String(8))
     avatar_color:  Mapped[str]           = mapped_column(String(7), default="#1D9E75")

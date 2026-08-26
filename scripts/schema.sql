@@ -4,7 +4,9 @@
 -- by Charbel Haddad, Vietnam 2026
 --
 -- Three arts → 15 individual arts → 78 base skills
--- Five development phases: prenascent, child, adolescent, adult, elder
+-- Thirteen development phases (elemental naming, 2026-08-24):
+--   Light · Sandy/Moist/Humus Soil · Low/Medium/High Fire ·
+--   Low/High Wind · Water · Metal · Stone · Wood
 -- Greek space naming: Agora · Academy · Mouseion · Stoa · Pnyx
 --
 -- Run as: mysql -u freqlearn -p freqlearn < schema.sql
@@ -23,12 +25,32 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- ── Development phases ────────────────────────────────────────
 CREATE TABLE dev_phases (
     id          TINYINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    name        VARCHAR(30) NOT NULL,
+    name        VARCHAR(50) NOT NULL,
     slug        VARCHAR(30) NOT NULL UNIQUE,
     age_range   VARCHAR(20),
+    age_min     SMALLINT UNSIGNED,
+    age_max     SMALLINT UNSIGNED,
+    icon        VARCHAR(8) CHARACTER SET utf8mb4,
+    color       VARCHAR(7),
     description TEXT,
     sort_order  TINYINT UNSIGNED DEFAULT 0
 ) ENGINE=InnoDB;
+
+-- ── Shared session-generation config values (2026-08-25) ────────
+-- Forward-compatible with a future admin-editable config panel +
+-- change ledger; for now, edited directly via SQL.
+CREATE TABLE session_config (
+    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    config_key   VARCHAR(64) NOT NULL UNIQUE,
+    config_value TEXT NOT NULL,
+    description  TEXT,
+    updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+INSERT INTO session_config (config_key, config_value, description) VALUES
+('phase_guidance_disclaimer',
+ 'This is a starting point drawn from general research on this phase, not a rule about this specific learner. Adjust freely to what the art, the skill, and the moment actually call for.',
+ 'Appended to every phase''s pedagogy guidance when building an AI generation prompt (generate.py, seed_sessions.py). Edit this row to update the disclaimer everywhere at once, instead of touching each phase block.');
 
 -- ── The three arts groups ─────────────────────────────────────
 CREATE TABLE arts_group (
@@ -92,7 +114,8 @@ CREATE TABLE skill_prerequisites (
 CREATE TABLE leckos (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     art_id          TINYINT UNSIGNED NOT NULL,
-    phase_id        TINYINT UNSIGNED NOT NULL,
+    phase_id        TINYINT UNSIGNED,
+    legacy_phase_slug VARCHAR(20) NULL,
     title           VARCHAR(200) NOT NULL,
     description     TEXT,
     learning_domain VARCHAR(80),
@@ -118,8 +141,9 @@ CREATE TABLE learners (
     password_hash   VARCHAR(255) NOT NULL,
     display_name    VARCHAR(80),
     birth_year      SMALLINT UNSIGNED,
+    is_expecting_parent BOOLEAN NOT NULL DEFAULT FALSE,
     phase_id        TINYINT UNSIGNED,
-    avatar_emoji    VARCHAR(8)   DEFAULT NULL,
+    avatar_emoji    VARCHAR(8) CHARACTER SET utf8mb4 DEFAULT NULL,
     avatar_color    VARCHAR(7)   DEFAULT '#1D9E75',
     timezone        VARCHAR(50)  DEFAULT 'UTC',
     language        VARCHAR(10)  DEFAULT 'en',
@@ -189,6 +213,8 @@ CREATE TABLE sessions (
     id                  INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     learner_id          INT UNSIGNED      NOT NULL,
     art_id              TINYINT UNSIGNED  NOT NULL,
+    dev_phase_id        INT NULL DEFAULT NULL,
+    legacy_phase_slug   VARCHAR(20) NULL,
     lecko_id            INT UNSIGNED,
     primary_skill_id    SMALLINT UNSIGNED NOT NULL,
     secondary_skill_ids JSON,
@@ -343,12 +369,20 @@ CREATE TABLE refresh_tokens (
 -- SEED DATA
 -- ════════════════════════════════════════════════════════════
 
-INSERT INTO dev_phases (name, slug, age_range, description, sort_order) VALUES
-('Prenascent', 'prenascent', '0–2',   'The parent is the primary learner. The child absorbs everything.',         1),
-('Child',       'child',      '3–11',  'Curiosity-led exploration. Play as the primary mode of learning.',        2),
-('Adolescent',  'adolescent', '12–17', 'Identity formation. Abstract reasoning emerges. Peers deepen.',          3),
-('Adult',       'adult',      '18–60', 'Generativity. Building, leading, contributing, mentoring.',              4),
-('Elder',       'elder',      '61+',   'Wisdom transmission. Integration. Legacy and acceptance.',               5);
+INSERT INTO dev_phases (name, slug, age_range, age_min, age_max, icon, color, description, sort_order) VALUES
+('Light (Unborn)',              'light',      NULL,    NULL, NULL, '☀️', '#FFC93C', 'The parent is the primary learner, tuning in before the child arrives.', 1),
+('Sandy Soil (Depending 1)',    'sandy-soil', '0~2',   0,    2,    '🌱', '#8BC34A', 'Loose, absorbent, entirely dependent on what surrounds it.',             2),
+('Moist Soil (Depending 2)',    'moist-soil', '3~5',   3,    5,    '🌱', '#4CAF50', 'Holding and retaining — curiosity-led exploration takes root.',          3),
+('Humus Soil (Depending 3)',    'humus-soil', '6~8',   6,    8,    '🌱', '#2E7D32', 'Rich and self-sustaining — the most fertile ground for growth.',         4),
+('Low Fire (Weaning 1)',        'low-fire',   '9~11',  9,    11,   '🔥', '#FF8A50', 'A first spark of independence, still close to the hearth.',              5),
+('Medium Fire (Weaning 2)',     'medium-fire','12~14', 12,   14,   '🔥', '#FF5722', 'Identity catching alight. Peers become a second family.',                6),
+('High Fire (Weaning 3)',       'high-fire',  '15~17', 15,   17,   '🔥', '#E53935', 'Full blaze — pushing outward, testing independence in earnest.',         7),
+('Low Wind (Adulting 1)',       'low-wind',   '18~22', 18,   22,   '🪁', '#4FC3F7', 'Newly airborne, finding direction through movement.',                    8),
+('High Wind (Adulting 2)',      'high-wind',  '23~27', 23,   27,   '🪁', '#00ACC1', 'A steadier current — building momentum toward a chosen path.',           9),
+('Water (Adult)',               'water',      '28~38', 28,   38,   '💧', '#1E88E5', 'Flowing and shaping — building, leading, contributing.',                10),
+('Metal (Maturing)',            'metal',      '39~59', 39,   59,   '⚙️', '#C9A227', 'Forged and dependable — the load-bearing years.',                       11),
+('Stone (Mature)',              'stone',      '60~80', 60,   80,   '🪨', '#8D6E63', 'Weathered and solid — wisdom transmission, legacy taking shape.',       12),
+('Wood (Cresting)',             'wood',       '81+',   81,   NULL, '🌳', '#A0672E', 'Rooted, weathered, still standing — integration and acceptance.',       13);
 
 INSERT INTO arts_group (name, slug, tagline, color_hex, sort_order) VALUES
 ('Being',      'being',      'Developing the self through inward awareness',       '#1D9E75', 1),
