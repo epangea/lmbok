@@ -36,6 +36,9 @@
 #   GET    /api/admin/coverage                      — Phase × Art session counts (P24)
 #   GET    /api/admin/seed-profiles                 — read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
 #   GET    /api/admin/learners                      — all learners with streak/XP stats (real data)
+#   GET    /api/admin/session-config                — list all session_config rows (Prompt Anatomy content)
+#   PUT    /api/admin/session-config/{key}           — update one row's value; logs to session_config_ledger
+#   GET    /api/admin/session-config/{key}/ledger    — change history for one key (2026-08-26)
 # ============================================================
 
 import os
@@ -51,7 +54,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text, desc, func
 from typing import Optional
 from jose import jwt, JWTError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from db import get_db, AsyncSessionLocal
 import ai_client
@@ -1375,6 +1378,133 @@ async def admin_delete_setting(
     await db.execute(text("DELETE FROM platform_settings WHERE key_name = :k"), {"k": key_name})
     await db.commit()
     return {"ok": True, "deleted": key_name}
+
+
+# Session Config / Prompt Anatomy (admin-editable AI generation prompt blocks)
+# Added 2026-08-26 -- backed by session_config table (migration 2026-08-25b,
+# extended by 2026-08-26-session-config-prompt-anatomy.sql). Separate from
+# platform_settings above: these values feed generate.py's AI prompt directly
+# and are deliberately paired with a change ledger for tamper visibility,
+# since editing them changes what every learner's AI-generated session says.
+# Note: single shared ADMIN_KEY means there's no per-admin login identity --
+# the ledger records timestamp + request IP, not a named editor.
+
+def _client_ip(request: Request) -> Optional[str]:
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else None
+
+
+class SessionConfigUpdate(BaseModel):
+    # 20,000 chars comfortably covers the largest current block (platform_identity,
+    # ~4.6KB) with headroom, while still failing fast with a clean 400 instead of
+    # a raw MySQL error if something absurd gets pasted in (TEXT caps at 64KB).
+    config_value: str = Field(..., min_length=1, max_length=20000)
+
+    @field_validator("config_value")
+    @classmethod
+    def _not_blank(cls, v: str) -> str:
+        if not v.strip():
+            raise ValueError("config_value cannot be blank")
+        return v
+
+
+@router.get("/session-config")
+async def admin_list_session_config(_: None = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    """List every session_config row (Prompt Anatomy content + the phase
+    guidance disclaimer). Ordered so the panel can group by prefix
+    (art_lens:*, domain_guidance:*, phase_guide:*, ungrouped)."""
+    result = await db.execute(text(
+        "SELECT config_key, config_value, description, updated_at FROM session_config ORDER BY config_key"
+    ))
+    rows = result.fetchall()
+    return {
+        "config": [
+            {
+                "config_key": row.config_key,
+                "config_value": row.config_value,
+                "description": row.description,
+                "updated_at": row.updated_at.isoformat() if row.updated_at else None,
+            }
+            for row in rows
+        ],
+        "count": len(rows),
+    }
+
+
+@router.put("/session-config/{config_key}")
+async def admin_update_session_config(
+    config_key: str,
+    data: SessionConfigUpdate,
+    request: Request,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update one session_config row's value and log the change to
+    session_config_ledger. Only edits existing rows -- this endpoint
+    deliberately does not create new config keys, since generate.py's
+    and seed_sessions.py's lookups are hardcoded to a fixed set of keys
+    and an orphaned row would just be dead data nothing reads."""
+    new_value = data.config_value
+
+    result = await db.execute(
+        text("SELECT config_value FROM session_config WHERE config_key = :k"), {"k": config_key}
+    )
+    row = result.fetchone()
+    if not row:
+        raise HTTPException(404, f"Unknown session_config key: {config_key}")
+    old_value = row.config_value
+
+    if new_value == old_value:
+        return {"ok": True, "changed": False, "config_key": config_key}
+
+    await db.execute(
+        text("UPDATE session_config SET config_value = :v WHERE config_key = :k"),
+        {"v": new_value, "k": config_key},
+    )
+    await db.execute(
+        text(
+            "INSERT INTO session_config_ledger (config_key, old_value, new_value, changed_ip) "
+            "VALUES (:k, :old, :new, :ip)"
+        ),
+        {"k": config_key, "old": old_value, "new": new_value, "ip": _client_ip(request)},
+    )
+    await db.commit()
+    return {"ok": True, "changed": True, "config_key": config_key}
+
+
+@router.get("/session-config/{config_key}/ledger")
+async def admin_session_config_ledger(
+    config_key: str,
+    limit: int = 50,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Recent change history for one session_config key, newest first."""
+    limit = max(1, min(limit, 200))
+    result = await db.execute(
+        text(
+            "SELECT id, old_value, new_value, changed_at, changed_ip FROM session_config_ledger "
+            "WHERE config_key = :k ORDER BY changed_at DESC, id DESC LIMIT :lim"
+        ),
+        {"k": config_key, "lim": limit},
+    )
+    rows = result.fetchall()
+    return {
+        "config_key": config_key,
+        "entries": [
+            {
+                "id": r.id,
+                "old_value": r.old_value,
+                "new_value": r.new_value,
+                "changed_at": r.changed_at.isoformat() if r.changed_at else None,
+                "changed_ip": r.changed_ip,
+            }
+            for r in rows
+        ],
+        "count": len(rows),
+    }
 
 
 # Admin Sessions Library (template browser for AI generation)

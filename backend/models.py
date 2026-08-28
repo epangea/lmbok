@@ -19,6 +19,24 @@ class SessionConfig(Base):
     config_key:   Mapped[str]           = mapped_column(String(64), unique=True, nullable=False)
     config_value: Mapped[str]           = mapped_column(Text, nullable=False)
     description:  Mapped[Optional[str]] = mapped_column(Text)
+    # NOTE: DB column has DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    # (schema migration 2026-08-25b) -- this Mapped field was missing from the
+    # model since that migration; added 2026-08-26 to match live schema.
+    updated_at:   Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class SessionConfigLedger(Base):
+    """Change history for session_config edits (2026-08-26). Single shared
+    ADMIN_KEY means there's no per-admin identity to log -- this records
+    timestamp + request IP + old/new value instead, for tamper visibility,
+    not attribution to a specific admin."""
+    __tablename__ = "session_config_ledger"
+    id:          Mapped[int]           = mapped_column(Integer, primary_key=True)
+    config_key:  Mapped[str]           = mapped_column(String(64), nullable=False)
+    old_value:   Mapped[Optional[str]] = mapped_column(Text)
+    new_value:   Mapped[str]           = mapped_column(Text, nullable=False)
+    changed_at:  Mapped[Optional[datetime]] = mapped_column(DateTime)
+    changed_ip:  Mapped[Optional[str]] = mapped_column(String(45))
 
 
 class DevPhase(Base):

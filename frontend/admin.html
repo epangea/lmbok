@@ -179,6 +179,11 @@ var logsState = { logs: null, polling: null };
 
 // ── Settings live state ──────────────────────────────
 var settingsState = { data: null, loading: false, error: null, lastSaved: null };
+// 2026-08-26: session_config-backed Prompt Anatomy fields (platform identity,
+// art lens, domain guidance, phase guides) -- editable, DB-sourced, logged
+// to session_config_ledger. openLedger holds the config_key currently
+// showing its history panel (one at a time), or null.
+var promptMapState = { data: null, loading: false, error: null, lastSaved: null, openLedger: null, ledgerLoading: false };
 
 // ── Sessions library live state ──────────────────────────────
 var sessionsState = { sessions: null, total: 0, loading: false, error: null, offset: 0, limit: 50, artFilter: null, searchQ: '' };
@@ -300,7 +305,16 @@ function adminFetch(path, methodOrOpts, body) {
   return fetch('/api' + path, opts).then(function(r) {
     if (r.status === 401) { showAuthWall(); throw new Error('Not authenticated'); }
     if (r.status === 403) throw new Error('Forbidden');
-    if (!r.ok) return r.json().then(function(e) { throw new Error(e.detail || 'HTTP ' + r.status); });
+    if (!r.ok) return r.json().then(function(e) {
+      // FastAPI/pydantic validation errors (422) return `detail` as a list of
+      // {loc, msg, ...} objects, not a string -- flatten those to something
+      // readable instead of the raw manual-400 assumption of a string detail.
+      var msg = e.detail;
+      if (Array.isArray(msg)) {
+        msg = msg.map(function(d) { return (d && d.msg) ? d.msg : JSON.stringify(d); }).join('; ');
+      }
+      throw new Error(msg || 'HTTP ' + r.status);
+    });
     return r.json();
   });
 }
@@ -340,6 +354,7 @@ function showAdmin(section) {
   if (section === 'learners')   learnersLoad();
   if (section === 'scavenger') scavLoad();
   if (section === 'ai') aiLoad();
+  if (section === 'promptmap') promptMapLoad();
   if (section === 'bioregions') { bioLoadPending(); bioLoadPortraits(); bioLoadSeedProfiles(); }
   if (section === 'settings') settingsLoad();
   if (section === 'sessions') sessionsLoad();
@@ -2284,29 +2299,9 @@ function AdminPromptMap() {
   var parts = [
     {
       title: 'Platform identity & pedagogical lineage',
-      loc:   'backend/routes/generate.py — static text at the top of the prompt template',
-      desc:  'Fixed framing sent with every single generation request: names the platform, and lists the educational/developmental thinkers and books "To Be Human" draws on. Identical for every learner, art, and phase.',
-      text: `You are the learning engine for "Surfing the Frequencies" — a free, lifelong learning platform built on the philosophy of "To Be Human" by Charbel Haddad.
-
-The platform draws on these works and thinkers (let their ideas breathe naturally into sessions — never cite by name in learner-facing content):
-
-Alternative education thinkers: Maria Montessori, Rudolf Steiner (Waldorf), John Dewey (experiential reflection), Paulo Freire (democracy begins in the classroom through dialogue; the word — communicating, expressing, listening — as the path to freedom; learning as a dialogic act between equals, never banking education), Célestin Freinet (cooperative work), A.S. Neill (Summerhill), Loris Malaguzzi (Reggio Emilia), Carl Rogers (student-centred learning), Ken Robinson (authentic curriculum), John Taylor Gatto (homeschooling), Yaacov Hecht (democratic education/IDEC), David Sobel (forest school).
-
-Developmental psychology: Jean Piaget, Lev Vygotsky, Erik Erikson, Friedrich Fröbel, Lawrence Kohlberg, Abraham Maslow, Jerome Bruner, Emmi Pikler, Margaret Mead, Howard Gardner, Daniel Goleman.
-
-Books: Pedagogy of the Oppressed (Freire), Mind in Society (Vygotsky), The Absorbent Mind (Montessori), Democracy and Education (Dewey), Summerhill (Neill), Freedom to Learn (Rogers), Frames of Mind (Gardner), Emotional Intelligence (Goleman), Beyond Ecophobia (Sobel), Productive Failure (Kapur), Peak (Ericsson & Pool), Uncommon Sense Teaching / Learn Like a Pro (Oakley et al.), The Developing Mind (Siegel), Self-Compassion (Neff), Mastery / The Education of Man (Fröbel), The Psychology of the Child (Piaget), Culture and Commitment (Mead), Motivation and Personality (Maslow), The Centenary of Loris Malaguzzi (Reggio Children Collective), Micromastery (Greene / Twigger), Beginners (Vanderbilt), Conscious (Harris), The Art of Logic (Cheng), Thinking 101 (Ahn), The Beginning of Infinity (Deutsch), Ethics of Ambiguity (de Beauvoir), Dumbing Us Down (Gatto), The Hundred Languages of Children (Malaguzzi), The Pikler Collection (Pikler), Democratic Education (Hecht), Everything is Obvious (Watts), Artificial Intelligence for Learning (Clark), Shared Wisdom (Pentland), Shape (Ellenberg), How to Raise Successful People (Wojcicki), Adventures in Human Being, Wisdom Takes Work (Holiday), A Brief History of Thought (Ferry), The Art of Insubordination (Kashdan), Presence (Cuddy), Brain Wash (Perlmutter et al.), Win Every Argument (Hasan), Breath (Nestor), Awaken Your Genius (Varol), The Genius of Empathy (Orloff), How to Listen (Trimboli), Principles / How Countries Go Broke (Dalio), Uncompete (Malhotra), Aware (Csorba), The Shape of Wonder (Lightman & Rees), When AI Tutors Fake Critical Thinking (Purdy & Cook), Process! (Paton & Gonzalez), Salt (Kurlansky), Junglekeeper (Rosolie), Every Living Thing (Roberts), The Story of Stories (Ashton), The Compass Within (Glazer), Robin Hood Math (Giansiracusa). Communication teaching by Vinh Giang (presence, clarity, self-expression).
-
-Core philosophy (from "To Be Human" by Charbel Haddad):
-- Every human has the right to tools that develop their potential as a healthy, independent, free-thinking, self-aware, self-reliant, self-regulating, intrinsically motivated, reflective, environmentally-aware, and collaborative unique individual — capable of expressing themselves creatively, defining their own meanings, visions, and missions, and leading with love, respect, compassion, confidence and courage
-- Learning should be enjoyable even when it demands hard work; a little struggle is fun, especially when those around you assist and support
-- The 15 Arts span three domains: Being (inward awareness) · Becoming (outward awareness) · Connecting (with environments) — these are fractal: every age can practice every art, at different depth
-- Assessment is formative, not competitive — Developing, Proficient, Master (never shame, never ranking)
-- The MKO (More Knowledgeable Other) guides without dominating — a slightly-more-knowledgeable-other-but-not-always; a fellow learner, not an authority
-- Errors are the learning path, not failures to be ashamed of; the challenge is travelled together
-- Intrinsic motivation over extrinsic: curiosity, ambition and admiration — not envy, jealousy or greed
-- Self-reliance and community interdependence are inseparable: individual empowerment enriches the collective
-- Learning domains (cognitive · affective · psychomotor) and arts intersect — sessions may develop any combination
-- The platform draws on the LECKO framework: each session is a chunked learning experience that can be assessed, mapped to community needs, and justified by evidence`
+      loc:   'session_config table, key "platform_identity" — admin-editable below, was static text in generate.py',
+      desc:  'Fixed framing sent with every single generation request: names the platform, and lists the educational/developmental thinkers and books "To Be Human" draws on. Identical for every learner, art, and phase. Edit with care — this sets tone platform-wide.',
+      dbKey: 'platform_identity'
     },
     {
       title: 'Learner continuity block',
@@ -2331,7 +2326,7 @@ ART DESCRIPTION: {art.description or art.tagline}`
     {
       title: 'Development phase context (name / age range)',
       loc:   'dev_phases table — looked up live by phase_slug',
-      desc:  'Which of the 6 life stages (prenascent \u2192 elder) this learner is in. Sets the age framing for everything downstream — no fixed text, shown here is the template it fills in.',
+      desc:  'Which of the 13 developmental phases (Light \u2192 Wood, elemental model) this learner is in. Sets the age framing for everything downstream — no fixed text, shown here is the template it fills in.',
       template: `DEVELOPMENT PHASE: {phase_name} (ages {age_range})`
     },
     {
@@ -2342,17 +2337,11 @@ ART DESCRIPTION: {art.description or art.tagline}`
     },
     {
       title: 'Domain guidance',
-      loc:   'backend/routes/generate.py — DOMAIN_GUIDANCE dict, hardcoded, 6 entries (cognitive / affective / psychomotor + 3 combinations)',
+      loc:   'session_config table, keys "domain_guidance:*" (6) — admin-editable below, was a hardcoded DOMAIN_GUIDANCE dict in generate.py',
       desc:  'Bloom-taxonomy-style framing telling the AI whether to lean on reasoning, emotion, or the body, based on the skill\u2019s type. Only appears if the skill has a domain and/or type set.',
       template: `The learner approaches this session from a background in {learning_domain} ({skill_type}). {domain guidance for that type, below} Let this inform their starting point and comfort zone — but follow the art's own frame for direction and examples, never reducing the session to domain content.`,
-      variants: [
-        { key: 'cognitive',              text: 'Engage the learner\'s reasoning, analysis, and understanding. Build conceptual clarity through comparison, questioning, and structured inquiry.' },
-        { key: 'affective',               text: 'Engage the learner\'s emotions, values, and relational awareness. Surface inner experience, perspective-taking, and what matters to them personally.' },
-        { key: 'psychomotor',             text: 'Ground the session in the body — physical sensation, movement, coordination, and hands-on practice. Theory should serve the doing, not replace it.' },
-        { key: 'cognitive, affective',    text: 'Engage both intellectual understanding and emotional resonance. Help the learner think clearly about something they also feel deeply.' },
-        { key: 'affective, psychomotor',  text: 'Connect inner emotional experience with physical expression — how the body carries feeling, and how movement shapes mood and meaning.' },
-        { key: 'cognitive, psychomotor',  text: 'Link conceptual understanding with skilled physical action — the knowledge that only becomes real when practiced in the body.' },
-      ]
+      dbVariantPrefix: 'domain_guidance:',
+      variantOrder: ['cognitive', 'affective', 'psychomotor', 'cognitive,affective', 'affective,psychomotor', 'cognitive,psychomotor']
     },
     {
       title: 'Interests line',
@@ -2368,41 +2357,26 @@ ART DESCRIPTION: {art.description or art.tagline}`
     },
     {
       title: 'Contextual Art Lens',
-      loc:   'backend/routes/generate.py — ART_LENS dict, hardcoded, 15 entries (one per art)',
+      loc:   'session_config table, keys "art_lens:*" (15) — admin-editable below, was a hardcoded ART_LENS dict in generate.py',
       desc:  'The precise definition of each art from "To Be Human," so a session doesn\u2019t default to a permaculture/land-and-ecology frame regardless of which art is being taught.',
       template: `CONTEXTUAL FRAME — this art is defined as: {art lens for this art, below}. Ground every example, metaphor, and challenge in THIS domain. Permaculture principles may appear where the art explicitly includes them (build, grow, consume, live, eat) — but must NOT be the default frame for arts like move, feel, notice, listen, give, receive, understand, respect, express, or collaborate.`,
-      variants: [
-        { key: 'move',        text: 'inner-connectedness and physical growth — embodied movement in all its forms: walking, breath work, tai chi, yoga, dance, sport, swimming, daily physical labour, working the land, helping a neighbour; movement as thinking, as regulation, as presence; the body as the first home' },
-        { key: 'eat',         text: 'outer-connectedness, microbiome and bodily nourishment — holistic eating from garden to table, food as relationship with living systems, urban and vertical growing, fermentation, food culture, the gut-brain connection, mindful consumption, traditional food knowledge' },
-        { key: 'feel',        text: 'inward awareness and personal/emotional growth — identifying and mediating bodily sensations, emotional literacy, naming feelings, Erikson\'s psychosocial stages, the nervous system, grief and joy as equally valid, self-compassion, somatic experiencing, the difference between reaction and response' },
-        { key: 'notice',      text: 'outward-awareness-openness — childlike perception free of prejudice and preconceived notions; noticing textures, colours, animals, moods, patterns in self and society; curiosity as play; contradiction and paradox; social fields; what is fading, arising, enduring; personal journey of exploration and discovery without judgement' },
-        { key: 'express',     text: 'inward-outward clarity, creative growth, arts, self-determination — self-expression in solitude, with others, and with land/space/field; journaling, voice notes, self-inquiry; breathwork, movement, physical presence; structured conversation, mirroring, council circle; drawing, collage, music, improvisation; time in nature, wandering, pilgrimage; finding and using one\'s voice' },
-        { key: 'live',        text: 'personal needs and rights, civil duties, consumption, footprint and waste byproducts — living lightly and intentionally; understanding one\'s ecological and civic footprint; circular economies; waste repurposing; resource awareness; the rights and responsibilities of being a citizen of both a community and a planet' },
-        { key: 'listen',      text: 'empathy, civil and political discourse, understanding — deep listening as a practice; audio diary; active listening exchange; listening to soundscapes; the difference between hearing and listening; listening in conflict, in friendship, in public life; Vinh Giang on presence and clarity; Oscar Trimboli on listening as gift' },
-        { key: 'give',        text: 'compassion, care, kindness, scaffolding, selflessness — the practice of giving without expectation; generosity as a skill; mentoring and scaffolding others; community contribution; the MKO who loves the learner; service as meaning-making' },
-        { key: 'receive',     text: 'acceptance, humility, equity — the art of receiving gracefully; asking for help; acknowledging others\' gifts; equity as mutual recognition; the relationship between giving and receiving; interdependence as strength' },
-        { key: 'collaborate', text: 'shared vision, mission and values — universal inclusivity, cherished diversity, greater good valuing every unique member, synergy; co-creation, conflict resolution, trust, shared decision-making; team dynamics; the distinction between cooperation and collaboration; community organising; supercollaboration' },
-        { key: 'understand',  text: 'elements, fractals, class-category, first principles, sciences, theory of knowledge — how do we know what we know; epistemology as lived practice; systems thinking; pattern recognition; scientific method as curiosity tool; chemistry, physics, biology, mathematics as lenses on the world; sense-making in complexity' },
-        { key: 'respect',     text: 'the golden rule extended to all living things — treating all things the way we wish to be treated; mindful pragmatic utilitarianism; respect for biodiversity, other species, elders, children, strangers; boundaries and consent; the ethics of care; anti-bullying as respect in practice' },
-        { key: 'build',       text: 'bioconstruction, green architecture and design, accessibility — designing and constructing shelter, tools, infrastructure with and from the land; natural building techniques (cob, rammed earth, bamboo, straw bale); permaculture design principles as they apply to structure; accessible and inclusive design; the build as a community act; proof of concept to delivery and back to drawing board' },
-        { key: 'grow',        text: 'regenerative agriculture, harvesting, conserving — working with living systems; permaculture ethics and principles; soil health, composting, seed saving; agroforestry, aquaculture, hydroponics, chinampas, hugelkultur; seasonal rhythms; the do-nothing farming approach; tending to plant and animal needs; food forest design' },
-        { key: 'consume',     text: 'water and resource management, energy creation and distribution — circular economies; waste as resource; water harvesting and filtration; renewable energy systems; reducing footprint; repair culture; the politics of consumption; local vs global supply chains; permaculture\'s waste-is-a-resource ethic applied to energy and materials' },
-      ]
+      dbVariantPrefix: 'art_lens:',
+      variantOrder: ['move', 'eat', 'feel', 'notice', 'express', 'live', 'listen', 'give', 'receive', 'collaborate', 'understand', 'respect', 'build', 'grow', 'consume']
     },
     {
       title: 'Phase-specific pedagogy guidance',
-      loc:   'backend/routes/generate.py — phase_guides dict, hardcoded, 6 entries (prenascent, nascent, child, adolescent, adult, elder)',
-      desc:  'Tone, complexity, and challenge-type rules matched to the learner\u2019s life stage — e.g. "nascent" sessions are written for the sleep-deprived parent, not the infant.',
+      loc:   'session_config table, keys "phase_guide:*" (13) — admin-editable below, was a hardcoded phase_guides dict in generate.py',
+      desc:  'Tone, complexity, and challenge-type rules matched to the learner\u2019s developmental phase (13-phase elemental model: Light \u2192 Wood). The standing phase_guidance_disclaimer row is appended automatically to every phase and is not shown per-variant below.',
       template: `PHASE-SPECIFIC GUIDANCE — this is critical, apply it to every part of the session:
 {phase guidance for this phase, below}`,
-      variants: [
-        { key: 'prenascent', text: 'CRITICAL: The learner is an ADULT who is pregnant or expecting a child. This session is FOR THE EXPECTING PARENT, not for an infant or toddler. Do NOT write about playing with babies, sensory infant activities, or caregiver-infant interactions. The learner is a thinking, feeling adult in a major life transition. Frame skill practice as quiet inner preparation — emotional, relational, and practical. Honour the enormity of the transition without dramatising it. Language: warm, grounding, and unhurried — no urgency or performance pressure. Connect to the adult\'s own body, sleep, overwhelm, identity shift from individual to parent, and partnership. The warmup should invite the adult to gently notice something about themselves — their body, their fears, their hopes, their relationship. The challenge should be a reflective adult practice: a journal entry, a conversation with a partner, a quiet observation, a personal decision. The reflection should open into questions about the adult\'s own readiness, values, and vision of parenthood. The assess question should test the adult\'s self-understanding or emotional literacy — grounded in lived experience, not infant-care theory.' },
-        { key: 'nascent',    text: 'CRITICAL: The learner is an ADULT caring for a newborn or infant aged 0~2. This session is FOR THE PARENT OR CAREGIVER, not written for the baby. The adult is navigating sleep deprivation, identity upheaval, relational strain, and the overwhelming newness of a tiny dependent life. They may have 10 minutes of fractured attention. Language: warm, honest, non-performative — never cheerful in a hollow way. Acknowledge the exhaustion and the wonder as inseparable. Frame skill practice around attunement: reading the infant\'s cues, co-regulation, the parent\'s own nervous system, and the slow rebuilding of self amid caregiving. The warmup should invite the adult to pause and notice something about this moment — their body, their breath, the weight of the baby, the sound in the room. The challenge should be a micro-practice: brief, doable in fragments, requiring no materials — a 60-second body scan, a whispered intention, a single observation recorded, a small act of self-kindness. The reflection should open toward the parent\'s inner experience — not infant-care technique. The assess question should be about self-awareness, attunement, or the parent\'s emotional landscape — not infant development milestones or pediatric theory.' },
-        { key: 'child',      text: 'The learner is a child, ages 3~11. Default your language and complexity to a curious 8–10 year old — younger children will follow along, and older ones won\'t feel talked down to. Language: warm, concrete, and playful. Short sentences. Ground every idea in something the child can see, touch, taste, hear, or do right now — never abstract theory or adult concerns. Use analogies from animals, games, school, family, and nature. Never use jargon. WARMUP: Must be 2–3 sentences. Ask the child to notice or remember something specific and sensory — a smell, a sound, a texture, a memory of doing something with their hands. CHALLENGE: This is the most important rule — DO NOT default to \'draw a picture\'. Rotate through: doing a real experiment (mixing, growing, building, measuring), writing or telling a short story, making something physical, playing a simple game with rules, going outside to observe and record, or interviewing a family member. Drawing is allowed occasionally but must not be the default. The challenge must feel like play, never homework. It should be completable in 10–20 minutes with things found at home. REFLECT: Ask one question the child might lie awake wondering about — genuine curiosity, not a consequence question (\'what would happen if\'). Aim for something that opens the world: \'Why do you think...\', \'Have you ever noticed...\', \'What does it feel like when...\'. ASSESS: Simple enough for a curious 8–10 year old without adult help. Everyday words, relatable scenarios, no technical terms. Options must be short and clearly different.' },
-        { key: 'adolescent', text: 'Language: direct, honest, and peer-respecting — never condescending. Connect to identity, social belonging, fairness, and real-world stakes. The challenge should feel worth doing because it matters, not because it was assigned. The reflection should invite genuine self-inquiry, not performative answers. Assess options can handle moderate complexity but stay concrete and grounded in lived experience.' },
-        { key: 'adult',      text: 'Language: warm, curious, and non-judgmental. Treat the learner as a capable, thoughtful adult. Connect concepts to work, relationships, creative practice, and personal meaning. The challenge should produce something immediately useful, beautiful, or worth sharing.' },
-        { key: 'elder',      text: 'Language: respectful, reflective, and wisdom-honoring. Acknowledge that this learner has lived. Connect to legacy, community contribution, and accumulated insight. Avoid tech-heavy or pop-culture examples. The challenge should connect learning to passing wisdom forward or deepening an existing practice. Assess options should honor depth of experience rather than testing rote recall.' },
-      ]
+      dbVariantPrefix: 'phase_guide:',
+      variantOrder: ['light', 'sandy-soil', 'moist-soil', 'humus-soil', 'low-fire', 'medium-fire', 'high-fire', 'low-wind', 'high-wind', 'water', 'metal', 'stone', 'wood']
+    },
+    {
+      title: 'Phase guidance disclaimer',
+      loc:   'session_config table, key "phase_guidance_disclaimer" — admin-editable below',
+      desc:  'Appended automatically to every phase\u2019s pedagogy guidance above (not repeated in each of the 13 rows). Reframes the phase guidance as a starting point, not a rule about this specific learner.',
+      dbKey: 'phase_guidance_disclaimer'
     },
     {
       title: 'Session design rules & output schema',
@@ -2443,14 +2417,14 @@ Supported {lang_name} values: fr → French (français) · es → Spanish (espa�
   ];
 
   var rows = parts.map(function(p, i) {
-    var hasBody = !!(p.text || p.template || (p.variants && p.variants.length));
+    var hasBody = !!(p.text || p.template || (p.variants && p.variants.length) || p.dbKey || p.dbVariantPrefix);
     var bodyHtml = '';
     if (p.text) {
       bodyHtml += '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7;background:var(--bg4);border-radius:var(--r-sm);padding:12px;margin-bottom:' + (p.variants ? '10px' : '0') + '">' + p.text + '</div>';
     }
     if (p.template) {
-      bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">' + (p.variants ? 'Template (fills in the variant below):' : 'Template:') + '</div>'
-        + '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7;background:var(--bg4);border-radius:var(--r-sm);padding:12px;margin-bottom:' + (p.variants ? '10px' : '0') + '">' + p.template + '</div>';
+      bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:4px">' + ((p.variants || p.dbVariantPrefix) ? 'Template (fills in the variant below):' : 'Template:') + '</div>'
+        + '<div style="font-size:12px;color:var(--text2);white-space:pre-wrap;line-height:1.7;background:var(--bg4);border-radius:var(--r-sm);padding:12px;margin-bottom:' + ((p.variants || p.dbVariantPrefix) ? '10px' : '0') + '">' + p.template + '</div>';
     }
     if (p.variants && p.variants.length) {
       bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">All ' + p.variants.length + ' variants:</div>'
@@ -2461,11 +2435,32 @@ Supported {lang_name} values: fr → French (français) · es → Spanish (espa�
               + '</div>';
           }).join('');
     }
+    // 2026-08-26: dbKey (single editable field) / dbVariantPrefix + variantOrder
+    // (multiple editable fields, one per variant) — live-fetched from
+    // session_config via promptMapState, editable, logged to the ledger.
+    if (p.dbKey) {
+      if (!promptMapState.data) {
+        bodyHtml += '<div style="font-size:11px;color:var(--text3)">Loading live value\u2026</div>';
+      } else {
+        bodyHtml += promptMapRenderField(p.dbKey, 'Live value (editable)');
+      }
+    }
+    if (p.dbVariantPrefix) {
+      if (!promptMapState.data) {
+        bodyHtml += '<div style="font-size:11px;color:var(--text3)">Loading live values\u2026</div>';
+      } else {
+        bodyHtml += '<div style="font-size:11px;color:var(--text3);margin-bottom:6px">All ' + p.variantOrder.length + ' variants (editable):</div>'
+          + p.variantOrder.map(function(k) {
+              return promptMapRenderField(p.dbVariantPrefix + k, k);
+            }).join('');
+      }
+    }
 
     return '<div class="card" style="margin-bottom:12px">'
       + '<div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px">'
       + '<span style="font-size:11px;color:var(--text3);font-weight:700;min-width:18px">' + (i + 1) + '</span>'
       + '<h3 style="margin:0;flex:1">' + p.title + '</h3>'
+      + ((p.dbKey || p.dbVariantPrefix) ? '<span style="font-size:10px;color:var(--gold,#E8C87C);border:1px solid var(--gold,#E8C87C);border-radius:10px;padding:1px 8px">editable</span>' : '')
       + (hasBody ? '<button class="btn btn-ghost btn-sm" onclick="promptMapToggle(' + i + ')" id="pm-btn-' + i + '">Show text \u25be</button>' : '')
       + '</div>'
       + '<div style="font-size:11px;color:var(--wave);font-family:monospace;margin-bottom:8px;padding-left:28px">' + p.loc + '</div>'
@@ -2474,12 +2469,125 @@ Supported {lang_name} values: fr → French (français) · es → Spanish (espa�
       + '</div>';
   }).join('');
 
+  var headerMsg = promptMapState.error
+    ? '<span style="font-size:11px;color:var(--coral)">&#10007; ' + escH(promptMapState.error) + '</span>'
+    : (promptMapState.data ? '' : '<span style="font-size:11px;color:var(--text3)">Loading live values\u2026</span>');
+
   return '<h2 style="margin-bottom:6px">Prompt anatomy</h2>'
+    + '<div style="margin-bottom:14px;display:flex;gap:8px;align-items:center">'
+    + '<button class="btn btn-ghost btn-sm" onclick="promptMapLoad()">&#8635; Refresh</button>'
+    + headerMsg
+    + '</div>'
     + '<p style="margin-bottom:20px;color:var(--text2);font-size:13px">'
-    + 'Read-only reference \u2014 the parts that assemble into every AI session-generation prompt, in the order they appear, with the actual static text (or the template, for parts built live per learner). '
-    + 'This page displays the current structure for visibility only; it does not edit anything, and editing here is not yet built.'
+    + 'The parts that assemble into every AI session-generation prompt, in the order they appear. Fields marked "editable" are admin-editable and pull their current value from the database; every save is logged (timestamp + IP) and viewable via "History". Everything else here is either fixed in code (shown for reference) or built live per learner (shown as a template).'
     + '</p>'
     + rows;
+}
+
+function promptMapFieldId(configKey) {
+  return 'pm-field-' + configKey.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function promptMapRenderField(configKey, label) {
+  var row = (promptMapState.data || {})[configKey];
+  var value = row ? row.config_value : '';
+  var updatedAt = row && row.updated_at ? String(row.updated_at).slice(0, 16).replace('T', ' ') : null;
+  var id = promptMapFieldId(configKey);
+  var isOpen = promptMapState.openLedger === configKey;
+
+  var html = '<div style="margin-bottom:12px;border:1px solid var(--border,rgba(255,255,255,.08));border-radius:8px;padding:10px">';
+  html += '<div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;flex-wrap:wrap">';
+  html += '<span style="font-size:11px;color:var(--gold,#E8C87C);font-weight:700">' + escH(label) + '</span>';
+  if (updatedAt) html += '<span style="font-size:10px;color:var(--text3)">updated ' + escH(updatedAt) + '</span>';
+  if (!row) html += '<span style="font-size:10px;color:var(--coral)">not found in session_config \u2014 saving will fail</span>';
+  html += '<button class="btn btn-ghost btn-sm" style="margin-left:auto;font-size:11px;padding:2px 8px" onclick="promptMapToggleLedger(\'' + configKey.replace(/'/g, "\\'") + '\')">' + (isOpen ? 'Hide history' : 'History') + '</button>';
+  html += '</div>';
+  html += '<textarea id="' + id + '" class="form-input" style="width:100%;min-height:90px;font-size:12px;line-height:1.6;font-family:inherit" rows="4">' + escH(value) + '</textarea>';
+  html += '<div style="margin-top:6px;display:flex;gap:8px;align-items:center">';
+  html += '<button class="btn btn-wave btn-sm" onclick="promptMapSave(\'' + configKey.replace(/'/g, "\\'") + '\')">Save</button>';
+  if (promptMapState.lastSaved === configKey) html += '<span style="font-size:11px;color:var(--wave)">&#10003; Saved</span>';
+  html += '</div>';
+
+  if (isOpen) {
+    html += '<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border,rgba(255,255,255,.08))">';
+    if (promptMapState.ledgerLoading) {
+      html += '<div style="font-size:11px;color:var(--text3)">Loading history\u2026</div>';
+    } else {
+      var entries = promptMapState.ledgerData || [];
+      if (!entries.length) {
+        html += '<div style="font-size:11px;color:var(--text3)">No edits recorded yet.</div>';
+      } else {
+        entries.forEach(function(e) {
+          html += '<div style="margin-bottom:8px;font-size:11px">'
+            + '<div style="color:var(--text3);margin-bottom:2px">' + escH(String(e.changed_at || '').slice(0, 16).replace('T', ' ')) + (e.changed_ip ? ' \u2014 ' + escH(e.changed_ip) : '') + '</div>'
+            + (e.old_value != null ? '<div style="color:var(--coral);white-space:pre-wrap;background:var(--bg4);border-radius:4px;padding:6px;margin-bottom:2px;text-decoration:line-through;opacity:.85">' + escH(e.old_value) + '</div>' : '')
+            + '<div style="color:var(--wave);white-space:pre-wrap;background:var(--bg4);border-radius:4px;padding:6px">' + escH(e.new_value) + '</div>'
+            + '</div>';
+        });
+      }
+    }
+    html += '</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+function promptMapLoad() {
+  promptMapState.loading = true;
+  promptMapState.error = null;
+  adminFetch('/admin/session-config').then(function(data) {
+    var byKey = {};
+    (data.config || []).forEach(function(row) { byKey[row.config_key] = row; });
+    promptMapState.data = byKey;
+    promptMapState.loading = false;
+    renderAdmin();
+  }).catch(function(e) {
+    promptMapState.loading = false;
+    promptMapState.error = e.message || 'Failed to load';
+    renderAdmin();
+  });
+}
+
+function promptMapSave(configKey) {
+  var el = document.getElementById(promptMapFieldId(configKey));
+  if (!el) return;
+  var value = el.value;
+  if (!value.trim()) {
+    promptMapState.error = 'config_value cannot be blank';
+    renderAdmin();
+    return;
+  }
+  promptMapState.error = null;
+  promptMapState.lastSaved = null;
+  adminFetch('/admin/session-config/' + encodeURIComponent(configKey), 'PUT', { config_value: value }).then(function() {
+    promptMapState.lastSaved = configKey;
+    promptMapLoad();
+  }).catch(function(e) {
+    promptMapState.error = e.message || 'Save failed';
+    renderAdmin();
+  });
+}
+
+function promptMapToggleLedger(configKey) {
+  if (promptMapState.openLedger === configKey) {
+    promptMapState.openLedger = null;
+    renderAdmin();
+    return;
+  }
+  promptMapState.openLedger = configKey;
+  promptMapState.ledgerData = null;
+  promptMapState.ledgerLoading = true;
+  renderAdmin();
+  adminFetch('/admin/session-config/' + encodeURIComponent(configKey) + '/ledger').then(function(data) {
+    promptMapState.ledgerLoading = false;
+    promptMapState.ledgerData = data.entries || [];
+    renderAdmin();
+  }).catch(function() {
+    promptMapState.ledgerLoading = false;
+    promptMapState.ledgerData = [];
+    renderAdmin();
+  });
 }
 
 function promptMapToggle(i) {
@@ -3489,6 +3597,9 @@ window.scavApprove           = scavApprove;
 window.scavReject            = scavReject;
 window.aiLoad                = aiLoad;
 window.promptMapToggle       = promptMapToggle;
+window.promptMapLoad         = promptMapLoad;
+window.promptMapSave         = promptMapSave;
+window.promptMapToggleLedger = promptMapToggleLedger;
 window.seedDryRun            = seedDryRun;
 window.seedRun               = seedRun;
 window.bioLoadPending    = bioLoadPending;

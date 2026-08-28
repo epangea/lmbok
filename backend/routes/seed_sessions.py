@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # ============================================================
 # FreqLearn — seed_sessions.py  (v3)
-# Pre-generates session content for all 15 arts × 5 phases,
+# Pre-generates session content for all 15 arts × 13 phases,
 # storing everything in MariaDB so the platform runs at zero AI cost.
 #
 # P41 (2026-07-29): dropped the paid-Anthropic path (Anthropic was removed
@@ -20,7 +20,7 @@
 #
 # Run:
 #   python3 seed_sessions.py                    # all arts, all phases, 2 per combo
-#   python3 seed_sessions.py --phases child,adolescent --per-art 3
+#   python3 seed_sessions.py --phases humus-soil,medium-fire --per-art 3
 #   python3 seed_sessions.py --arts move,feel --dry-run
 # ============================================================
 
@@ -74,6 +74,39 @@ async def _load_settings(conn) -> None:
             out[k] = str(v)
     _settings = out
 
+
+# 2026-08-26: platform identity, phase pedagogy guidance, contextual art
+# lenses, and the phase_guidance_disclaimer all now live in session_config
+# -- the same table and the same admin-editable content generate.py's live
+# session-generation prompt pulls from (see admin panel's Prompt Anatomy
+# section). This replaces what used to be a second, independently
+# maintained copy of the same content baked into this file. Fallback
+# strings below are intentionally short and generic -- not a duplicate of
+# the full research-grounded essays -- since the migration always seeds
+# every row and a missing key here should be treated as a bug to notice,
+# not silently papered over with a full copy of the content again.
+_PLATFORM_IDENTITY_FALLBACK = (
+    'You are the learning engine for "Surfing the Frequencies" -- a free, lifelong learning '
+    'platform built on the philosophy of "To Be Human" by Charbel Haddad.'
+)
+_PHASE_GUIDANCE_FALLBACK = (
+    "Adapt tone, complexity, and challenge-type to this learner's developmental phase. "
+    "This is a starting point, not a rule about this specific learner."
+)
+_session_config: dict = {}
+
+
+async def _load_session_config(conn) -> None:
+    """Bulk-fetch every session_config row once per run -- platform_identity,
+    the 15 art_lens:*, the 13 phase_guide:*, and phase_guidance_disclaimer
+    -- so PHASES/ARTS below can be rebuilt from the live, admin-editable
+    values instead of a hardcoded independent copy."""
+    global _session_config
+    async with conn.cursor() as cur:
+        await cur.execute("SELECT config_key, config_value FROM session_config")
+        rows = await cur.fetchall()
+    _session_config = {k: v for k, v in rows if v is not None and str(v).strip() != ""}
+
 # ── All 15 arts (gerund names match DB after migration) ──────
 ARTS = [
     ("move",        "Moving",        "Inner-connectedness and physical growth",
@@ -109,201 +142,35 @@ ARTS = [
 ]
 
 PHASES = [
-    ("light",         "Light",         "expecting",
-     "The learner is an adult who is pregnant or expecting a child (via any path to parenthood). "
-     "This session is FOR THE EXPECTING PARENT, not for an infant or toddler. "
-     "What's known: research on the transition to parenthood -- increasingly called \"matrescence\" for the "
-     "birthing parent, with growing recognition that any primary caregiver's brain and identity reorganize "
-     "through caregiving regardless of biological role -- describes this transition as developmentally "
-     "comparable in magnitude to adolescence: significant neuroplasticity, identity reorganization, and "
-     "relational change, though without adolescence's cultural scaffolding for support. "
-     "Likely motivational terrain: autonomy may feel newly complicated as identity reorganizes around a role "
-     "not yet begun; relatedness (to a partner, to the child-to-come, to one's own parents) and competence "
-     "(\"will I be able to do this?\") both tend to be live and often anxious. "
-     "Suggested register: warm, grounding, unhurried. This learner is a capable adult in transition, not a "
-     "novice. Let the Art's own lens shape the actual content and format."),
-
-    ("sandy-soil",    "Sandy Soil",    "0~2",
-     "The learner is an adult caring for an infant aged 0~2. This session is FOR THE PARENT OR CAREGIVER, "
-     "not written for the baby. "
-     "What's known: attachment research (Bowlby, Ainsworth) and the co-regulation literature describe this "
-     "period as one where the caregiver's own regulation and attunement shape the infant's developing sense "
-     "of security, and where caregivers themselves are often depleted -- fragmented attention and disrupted "
-     "sleep are the norm, not the exception. "
-     "Likely motivational terrain: competence (am I doing this right?) and relatedness (to the infant, to a "
-     "partner, to one's own support network) tend to dominate; autonomy may feel very reduced right now. "
-     "Suggested register: warm and honest, never performatively cheerful. Whatever this looks like, it "
-     "likely needs to survive being read in fragments. Let the Art's own lens shape the actual content and format."),
-
-    ("moist-soil",    "Moist Soil",    "3~5",
-     "The learner is a preschooler, ages 3~5. "
-     "What's known: Piaget's preoperational stage (roughly 2-7, though cross-cultural research finds these "
-     "boundaries shift with schooling access and culture) describes children at this age as thinking "
-     "symbolically -- pretend play, drawing, and language all represent ideas -- but still reasoning from "
-     "what they perceive rather than logically, and typically struggling to take another's perspective. "
-     "Most children this age are pre- or early-literate. "
-     "Likely motivational terrain: competence shows up as delight in doing something themselves, however "
-     "small; relatedness to a caregiver reading or playing alongside them matters a great deal. "
-     "Suggested register: concrete, sensory, likely caregiver-mediated given typical literacy at this age. "
-     "Abstract or hypothetical framing is unlikely to land here regardless of the art. Let the Art's own lens shape the actual content and format."),
-
-    ("humus-soil",    "Humus Soil",    "6~8",
-     "The learner is a child, ages 6~8. "
-     "What's known: this age sits at the boundary Piaget described between preoperational and "
-     "concrete-operational thinking -- logical reasoning about concrete, tangible things is emerging, but "
-     "abstract or hypothetical reasoning typically isn't yet reliable. Most children this age are becoming "
-     "independent readers. "
-     "Likely motivational terrain: competence and mastery become more central than at earlier ages -- this "
-     "learner increasingly wants to do things well, not just explore; relatedness to peers begins to matter "
-     "alongside caregivers. "
-     "Suggested register: concrete and playful, grounded in things the child can see, touch, or do. Let the Art's own lens shape the actual content and format."),
-
-    ("low-fire",      "Low Fire",      "9~11",
-     "The learner is ages 9~11. "
-     "What's known: puberty timing varies enormously at this age -- typical onset ranges from 8-12 in girls "
-     "and 9-14 in boys, so some learners in this band are pre-pubertal and others are well into it. "
-     "Cognitively, most are consolidating concrete-operational reasoning while executive function and "
-     "impulse control continue developing gradually. "
-     "Likely motivational terrain: autonomy begins mattering more than at earlier ages -- this is often the "
-     "first age where working independently for a real stretch becomes possible; competence and relatedness "
-     "to peers both remain central. "
-     "Suggested register: respectful and clear, treating the learner as capable of real independence in "
-     "doses, without assuming the identity questions or peer intensity that tend to arrive later. Let the Art's own lens shape the actual content and format."),
-
-    ("medium-fire",   "Medium Fire",   "12~14",
-     "The learner is an early teen, ages 12~14. "
-     "What's known: developmental neuroscience describes this period as one of heightened sensitivity to "
-     "social and identity-relevant information -- a capacity, not simply a vulnerability -- coinciding with "
-     "identity formation becoming a central psychological task. "
-     "Likely motivational terrain: relatedness (peer belonging, being seen accurately) and autonomy (having "
-     "and defending one's own views) both tend to intensify here; competence still matters but is "
-     "increasingly filtered through how it makes them look. "
-     "Suggested register: direct and honest, never condescending -- but this age can swing between confident "
-     "and self-conscious within a single session, so don't assume steadiness. Let the Art's own lens shape the actual content and format."),
-
-    ("high-fire",     "High Fire",     "15~17",
-     "The learner is a late teen, ages 15~17. "
-     "What's known: the same heightened social-learning capacity from earlier adolescence continues here and, "
-     "per current research, extends into the mid-20s rather than ending sharply at 18 -- there is no hard "
-     "neurological cutoff at the adult boundary this platform draws for other reasons. "
-     "Likely motivational terrain: autonomy tends to matter more here than at any earlier phase -- research "
-     "links a felt sense of choice to deeper engagement specifically at this age; relatedness and competence "
-     "remain live alongside it. "
-     "Suggested register: direct and honest, treating the learner as very nearly an adult, because in most "
-     "respects they are. Let the Art's own lens shape the actual content and format."),
-
-    ("low-wind",      "Low Wind",      "18~22",
-     "The learner is newly independent, ages 18~22. "
-     "What's known: \"emerging adulthood\" research describes this period as one of identity exploration and "
-     "instability across love, work, and worldview -- but the theory's own originator notes it's culturally "
-     "constructed, drawn largely from American samples, and not claimed as universal. Treat it as one lens "
-     "among others, not a settled fact about every learner in this band. "
-     "Likely motivational terrain: autonomy and identity exploration tend to be central -- this is often a "
-     "period with more freedom than structure; \"I don't know yet\" is common and not itself a problem to "
-     "solve. "
-     "Suggested register: warm and non-judgmental, comfortable with uncertainty rather than pushing toward "
-     "premature resolution. Let the Art's own lens shape the actual content and format."),
-
-    ("high-wind",     "High Wind",     "23~27",
-     "The learner is building momentum, ages 23~27. "
-     "What's known: still within the age range emerging-adulthood research covers, though the same research "
-     "and its critics note wide individual and cultural variation in how quickly people move from "
-     "exploration toward more settled commitments -- some at this age are still fully in exploration, others "
-     "have already largely settled. "
-     "Likely motivational terrain: competence tends to grow in weight relative to pure exploration -- early "
-     "mastery in a domain becomes motivating in its own right; autonomy and relatedness (peer and partner "
-     "relationships increasingly chosen rather than circumstantial) both remain active. "
-     "Suggested register: warm and curious, respectful of developing competence without assuming full "
-     "settledness. Let the Art's own lens shape the actual content and format."),
-
-    ("water",         "Water",         "28~38",
-     "The learner is an adult, ages 28~38. "
-     "What's known: adult-learning research describes adult learners generally as self-directed, motivated "
-     "by relevance and real-world application, and learning through integrating new material with lived "
-     "experience -- a genuinely different starting point than pedagogy designed for children. "
-     "Likely motivational terrain: competence and relatedness (to work, partnership, community, possibly "
-     "parenting) tend to dominate, with autonomy expressed through wanting a say in how, not just what, is "
-     "learned. "
-     "Suggested register: warm, curious, and non-judgmental -- a capable adult with real stakes and limited "
-     "spare time. Let the Art's own lens shape the actual content and format."),
-
-    ("metal",         "Metal",         "39~59",
-     "The learner is in the load-bearing years, ages 39~59. "
-     "What's known: Erikson's generativity-vs-stagnation framing describes this period's central task as "
-     "contributing something that outlasts the self -- and longitudinal research links higher midlife "
-     "generativity to stronger cognitive functioning and lower depression decades later. Adult-learning "
-     "research's emphasis on drawing from lived experience applies with particular force here, given the "
-     "accumulated experience this learner likely has. "
-     "Likely motivational terrain: relatedness through mentoring and contribution tends to matter more than "
-     "at earlier adult phases; competence remains central, but often expressed as depth in an existing "
-     "domain rather than breadth across new ones. "
-     "Suggested register: warm, direct, and respectful of real expertise -- this learner may know more in "
-     "some areas than the platform does. Let the Art's own lens shape the actual content and format."),
-
-    ("stone",         "Stone",         "60~80",
-     "The learner is ages 60~80. "
-     "What's known: socioemotional selectivity theory describes a shift toward emotionally meaningful goals "
-     "as time horizons narrow -- but the theory is explicit that this shift tracks perceived time horizon, "
-     "not chronological age itself, and doesn't apply uniformly to everyone in a given age band. Research "
-     "applying \"successful aging\" frameworks to this age range finds meaningful rates of continued high "
-     "function and engagement -- this is not, on average, a winding-down phase. "
-     "Likely motivational terrain: relatedness (particularly close, existing relationships) and "
-     "meaning-making tend to carry more weight relative to novelty-seeking than at earlier phases -- but "
-     "competence and genuine autonomy remain fully present and shouldn't be assumed away. "
-     "Suggested register: respectful and wisdom-honoring, without assuming decline unless the learner has "
-     "indicated it. Let the Art's own lens shape the actual content and format."),
-
-    ("wood",          "Wood",          "81+",
-     "The learner is ages 81+. "
-     "What's known: this is the age range where the standard \"successful aging\" model becomes least "
-     "representative on its own terms -- applying its strict physical-function criteria, essentially no "
-     "centenarians and few octogenarians qualify, while subjective-wellbeing and engagement-based models find "
-     "far higher rates of thriving in the same population. The research literature itself treats this as a "
-     "sign the strict model under-represents this group, not that this group is uniformly declining. "
-     "Socioemotional selectivity research also finds older adults often report better emotional well-being "
-     "than younger adults, on average. "
-     "Likely motivational terrain: highly individual at this age more than any other -- some learners here "
-     "have real physical limitation, others remain remarkably active; assume neither without the learner's "
-     "own signal. Relatedness and meaning-making are likely central; competence and autonomy should never be "
-     "assumed absent. "
-     "Suggested register: warm, dignified, and present-tense -- this learner is here now, not a memory of "
-     "themselves. Favor depth and story over anything time-pressured, but without assuming physical "
-     "limitation. Let the Art's own lens shape the actual content and format."),
-
+    # 2026-08-26: guidance text (4th field) is now a short local placeholder
+    # only -- immediately overwritten by _load_session_config()'s live
+    # phase_guide:<slug> values + phase_guidance_disclaimer, rebuilt into
+    # this list at the start of main(). See PHASES[:] rebuild below.
+    ("light",         "Light",         "expecting", _PHASE_GUIDANCE_FALLBACK),
+    ("sandy-soil",    "Sandy Soil",    "0~2",       _PHASE_GUIDANCE_FALLBACK),
+    ("moist-soil",    "Moist Soil",    "3~5",       _PHASE_GUIDANCE_FALLBACK),
+    ("humus-soil",    "Humus Soil",    "6~8",       _PHASE_GUIDANCE_FALLBACK),
+    ("low-fire",      "Low Fire",      "9~11",      _PHASE_GUIDANCE_FALLBACK),
+    ("medium-fire",   "Medium Fire",   "12~14",     _PHASE_GUIDANCE_FALLBACK),
+    ("high-fire",     "High Fire",     "15~17",     _PHASE_GUIDANCE_FALLBACK),
+    ("low-wind",      "Low Wind",      "18~22",     _PHASE_GUIDANCE_FALLBACK),
+    ("high-wind",     "High Wind",     "23~27",     _PHASE_GUIDANCE_FALLBACK),
+    ("water",         "Water",         "28~38",     _PHASE_GUIDANCE_FALLBACK),
+    ("metal",         "Metal",         "39~59",     _PHASE_GUIDANCE_FALLBACK),
+    ("stone",         "Stone",         "60~80",     _PHASE_GUIDANCE_FALLBACK),
+    ("wood",          "Wood",          "81+",       _PHASE_GUIDANCE_FALLBACK),
 ]
 
 
 
 def build_prompt(art_slug, art_name, art_tagline, art_context,
                  phase_slug, phase_name, age_range, phase_guidance,
-                 session_num):
-    return f"""You are the learning engine for "Surfing the Frequencies" — a free global platform \
-helping every human develop their potential as a healthy, independent, free-thinking, self-aware, self-reliant, \
-self-regulating, intrinsically motivated, reflective, environmentally-aware, and collaborative unique individual, \
-capable of expressing themselves creatively, defining their own meanings, visions, and missions, and able to lead \
-with love, respect, compassion, confidence and courage. Built by Charbel Haddad, rooted in Vygotsky's ZPD, \
-the 15 Arts of Living, and the full breadth of human knowledge across all domains of life.
-
-The platform draws on these works and thinkers (let their ideas breathe naturally -- never cite by name in content):
-\
-Alternative education: Montessori, Steiner (Waldorf), Dewey, Freire (democracy through dialogue; the word as path to freedom; learning as dialogic act between equals — never banking education), Freinet, Neill (Summerhill), Malaguzzi (Reggio Emilia), \
-Rogers, Robinson, Gatto, Hecht (democratic education), Sobel (forest school). \
-Developmental psychology: Piaget, Vygotsky, Erikson, Fröbel, Kohlberg, Maslow, Bruner, Pikler, Mead, Gardner, Goleman. \
-Books: Pedagogy of the Oppressed (Freire), Mind in Society (Vygotsky), The Absorbent Mind (Montessori), \
-Democracy and Education (Dewey), Summerhill (Neill), Freedom to Learn (Rogers), Frames of Mind (Gardner), \
-Emotional Intelligence (Goleman), Beyond Ecophobia (Sobel), Productive Failure (Kapur), Peak (Ericsson & Pool), \
-Uncommon Sense Teaching / Learn Like a Pro (Oakley et al.), The Developing Mind (Siegel), Self-Compassion (Neff), \
-Mastery / The Education of Man (Fröbel), The Psychology of the Child (Piaget), Culture and Commitment (Mead), Motivation and Personality (Maslow), The Centenary of Loris Malaguzzi (Reggio Children Collective), Micromastery (Greene / Twigger), Beginners (Vanderbilt), Conscious (Harris), The Art of Logic (Cheng), \
-The Beginning of Infinity (Deutsch), Ethics of Ambiguity (de Beauvoir), Dumbing Us Down (Gatto), \
-The Hundred Languages of Children (Malaguzzi), The Pikler Collection (Pikler), Democratic Education (Hecht), \
-How to Raise Successful People (Wojcicki), Brain Wash (Perlmutter et al.), Adventures in Human Being (Francis), \
-Awaken Your Genius (Varol), Wisdom Takes Work (Holiday), The Genius of Empathy (Orloff), Presence (Cuddy), \
-The Art of Insubordination (Kashdan), How to Listen (Trimboli), Win Every Argument (Hasan), Breath (Nestor), \
-A Brief History of Thought (Ferry), Everything is Obvious (Watts), Shape (Ellenberg), \
-Shared Wisdom (Pentland), Junglekeeper (Rosolie), Every Living Thing (Roberts), Salt (Kurlansky), \
-Uncompete (Malhotra), The Story of Stories (Ashton), The Compass Within (Glazer), \
-Process! (Paton & Gonzalez), Robin Hood Math (Giansiracusa), The Shape of Wonder (Lightman & Rees). \
-Communication teaching by Vinh Giang (presence, clarity, self-expression).
+                 session_num, platform_identity):
+    # 2026-08-26: platform_identity is now passed in (sourced from
+    # session_config, same as generate.py's live prompt) instead of being
+    # baked into this f-string -- was an independently-worded duplicate
+    # of the same block.
+    return f"""{platform_identity}
 
 Generate learning session #{session_num} for:
 
@@ -391,11 +258,12 @@ async def generate_with_ollama(prompt: str) -> dict:
 async def generate_one(art, phase, session_num, dry_run=False) -> dict:
     art_slug, art_name, art_tagline, art_context = art
     phase_slug, phase_name, age_range, phase_guidance = phase
+    platform_identity = _session_config.get("platform_identity", _PLATFORM_IDENTITY_FALLBACK)
 
     prompt = build_prompt(
         art_slug, art_name, art_tagline, art_context,
         phase_slug, phase_name, age_range, phase_guidance,
-        session_num
+        session_num, platform_identity
     )
 
     if dry_run:
@@ -474,6 +342,7 @@ async def store_session(conn, art_id, phase_id, skill_id, data) -> int:
 async def main(args):
     conn = await aiomysql.connect(**DB)
     await _load_settings(conn)
+    await _load_session_config(conn)
 
     if not args.dry_run:
         provider = _settings["ai_provider"]
@@ -502,20 +371,21 @@ async def main(args):
         await cur.execute("SELECT id, slug FROM dev_phases")
         phase_map = {row[1]: row[0] for row in await cur.fetchall()}
 
-        # 2026-08-25: standing disclaimer lives in session_config (one row),
-        # not duplicated across all 13 phase blocks. Fetch once, append to
-        # every phase's guidance text below.
-        await cur.execute(
-            "SELECT config_value FROM session_config WHERE config_key = 'phase_guidance_disclaimer'"
-        )
-        _row = await cur.fetchone()
-        _disclaimer = _row[0] if _row else (
-            "This is a starting point, not a rule about this specific learner."
-        )
-
+    # 2026-08-26: rebuild PHASES/ARTS from the session_config values loaded
+    # by _load_session_config() above -- the same admin-editable content
+    # generate.py's live prompt uses, instead of an independently
+    # maintained copy. Falls back to the short generic strings already in
+    # PHASES/ARTS (not a second copy of the full essays) if a key is
+    # somehow missing from the DB.
     PHASES[:] = [
-        (slug, name, age_range, f"{guidance} {_disclaimer}")
-        for slug, name, age_range, guidance in PHASES
+        (slug, name, age_range,
+         f"{_session_config.get(f'phase_guide:{slug}', fallback_guidance)} "
+         f"{_session_config.get('phase_guidance_disclaimer', 'This is a starting point, not a rule about this specific learner.')}")
+        for slug, name, age_range, fallback_guidance in PHASES
+    ]
+    ARTS[:] = [
+        (slug, name, tagline, _session_config.get(f'art_lens:{slug}', fallback_detail))
+        for slug, name, tagline, fallback_detail in ARTS
     ]
 
     target_arts   = [a for a in ARTS   if not args.arts   or a[0] in args.arts.split(',')]
@@ -598,7 +468,7 @@ async def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FreqLearn session library generator")
     parser.add_argument('--arts',    default='', help='Comma-separated art slugs (default: all 15)')
-    parser.add_argument('--phases',  default='', help='Comma-separated phase slugs (default: all 5)')
+    parser.add_argument('--phases',  default='', help='Comma-separated phase slugs (default: all 13)')
     parser.add_argument('--per-art', type=int, default=2, help='Sessions per art/phase combo (default: 2)')
     parser.add_argument('--dry-run', action='store_true', help='Print without calling API or writing DB')
     parser.add_argument('--yes',     action='store_true', help='Skip interactive confirmation (for admin portal)')
