@@ -235,9 +235,8 @@ function showOA(){document.getElementById('gate').style.display='none';document.
 async function loadLearner(){
   const[str,mm,tm,al]=await Promise.all([LA.get('/learners/me/streak'),LA.get('/matching/'),LA.get('/matching/listings/top'),LA.get('/matching/listings')]);
   S.streak=str||{};S.myMatches=mm||[];S.topMatch=tm;S.allListings=al||[];
-  var _ln=document.getElementById('lnm'),_la=document.getElementById('lav');
+  var _ln=document.getElementById('lnm');
   if(_ln)_ln.textContent=S.learner.display_name||S.learner.username;
-  if(_la){_la.textContent=S.learner.avatar_emoji||'🌱';if(S.learner.avatar_color)_la.style.background=S.learner.avatar_color+'28';}
   const b=document.getElementById('lpb');
   if(S.myMatches.length){b.textContent=S.myMatches.length;b.style.display='inline';}else b.style.display='none';
   drawKoinonia();drawStoa();
@@ -371,7 +370,7 @@ function drawODash(){
   else h+=S.orgMatches.slice(0,5).map(m=>`
     <div class="card" style="padding:13px 18px">
       <div style="display:flex;align-items:center;gap:12px">
-        <div class="mav">${m.avatar_emoji||'🌱'}</div>
+        <div class="mav" style="background:${m.phase_color?m.phase_color+'28':'var(--gd)'}">${m.phase_icon||'🌱'}</div>
         <div style="flex:1"><div style="font-size:14px;font-weight:600">${e(m.display_name||'Learner')}</div><div style="font-size:12px;color:var(--mu)">${e(m._ltitle)}</div></div>
         <span class="badge ${stCls(m.org_status)}">${m.org_status}</span>
       </div>
@@ -466,7 +465,7 @@ function drawOList(){
           h+='<div class="mrow"><div class="mav">❔</div><div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--mu)">'+e(m.display_name)+'</div><div style="font-size:12px;color:var(--mu)">AI match · score '+(m.match_score||0)+' '+artsBadges+'</div></div>'+action+'</div>';
           return;
         }
-        h+='<div class="mrow"><div class="mav">'+(m.avatar_emoji||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span>'+(m.org_status==='connected'?'<button class="btn bgh sm" onclick="openOrgValidation('+m.match_id+')">✅ Validate</button>':'')+'<button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';
+        h+='<div class="mrow"><div class="mav" style="background:'+(m.phase_color?m.phase_color+'28':'var(--gd)')+'">'+(m.phase_icon||'🌱')+'</div><div style="flex:1"><div style="font-size:14px;font-weight:600">'+e(m.display_name||'Learner')+'</div><div style="font-size:12px;color:var(--mu)">'+fmt(m.matched_at)+'</div></div><span class="badge '+stCls(m.org_status)+'" style="cursor:pointer;margin-right:8px" data-mid="'+m.match_id+'" data-lid="'+m._lid+'" data-st="'+m.org_status+'" onclick="cycStEl(this)">'+m.org_status+'</span>'+(m.org_status==='connected'?'<button class="btn bgh sm" onclick="openOrgValidation('+m.match_id+')">✅ Validate</button>':'')+'<button class="btn bgh sm" onclick="openOP('+m.match_id+')">Message</button></div>';
       });
       h+='</div>';
     });
@@ -587,7 +586,7 @@ function drawOMatch(){
     h+=`<div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px;margin-top:8px">${e(g.t)}</div>`;
     h+=`<div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">`;
     g.ms.forEach(m=>{
-      h+=`<div class="mrow"><div class="mav">${m.avatar_emoji||'🌱'}</div>
+      h+=`<div class="mrow"><div class="mav" style="background:${m.phase_color?m.phase_color+'28':'var(--gd)'}">${m.phase_icon||'🌱'}</div>
         <div style="flex:1"><div style="font-size:14px;font-weight:600">${e(m.display_name||'Learner')}</div><div style="font-size:12px;color:var(--mu)">Expressed ${fmt(m.matched_at)}</div></div>
         <span class="badge ${stCls(m.org_status)}" style="cursor:pointer;margin-right:8px" onclick="cycSt(${m.match_id},${m._lid},'${m.org_status}')">${m.org_status}</span>
         <button class="btn bgh sm" onclick="openOP(${m.match_id})">Message</button>

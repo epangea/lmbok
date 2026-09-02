@@ -8,6 +8,7 @@ import re
 import hashlib
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 import bcrypt
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Response
@@ -300,8 +301,33 @@ async def resend_verification(
     return {"ok": True, "message": "Verification email sent."}
 
 
+async def _unsubscribe(lid: int, token: str, db: AsyncSession, kind: str = "newsletter") -> tuple[bool, Optional[Learner]]:
+    """Shared verify-and-opt-out logic for both the human-facing GET
+    route and the machine-facing POST (RFC 8058 one-click) route below.
+    kind picks which LearnerPreferences flag gets flipped -- "newsletter"
+    (default) or "weekly_report" (2026-08-29 split, see mail.unsubscribe_link)."""
+    result = await db.execute(select(Learner).where(Learner.id == lid))
+    learner = result.scalar_one_or_none()
+
+    if not learner or not verify_unsubscribe_token(learner.id, learner.email, token, kind):
+        return False, None
+
+    prefs_result = await db.execute(
+        select(LearnerPreferences).where(LearnerPreferences.learner_id == lid)
+    )
+    prefs = prefs_result.scalar_one_or_none()
+    if prefs:
+        if kind == "weekly_report":
+            prefs.weekly_report_opt_out = True
+        else:
+            prefs.newsletter_opt_out = True
+        await db.commit()
+
+    return True, learner
+
+
 @router.get("/unsubscribe")
-async def unsubscribe_newsletter(lid: int, token: str, db: AsyncSession = Depends(get_db)):
+async def unsubscribe_newsletter(lid: int, token: str, kind: str = "newsletter", db: AsyncSession = Depends(get_db)):
     """
     Public, no-auth endpoint reached straight from a newsletter's
     unsubscribe link (see mail.unsubscribe_link) -- same shape as
@@ -313,8 +339,7 @@ async def unsubscribe_newsletter(lid: int, token: str, db: AsyncSession = Depend
     a mail client's link preview or a stripped-down browser never loads
     the app's JS at all.
     """
-    result = await db.execute(select(Learner).where(Learner.id == lid))
-    learner = result.scalar_one_or_none()
+    ok, _ = await _unsubscribe(lid, token, db, kind)
 
     def _page(message: str) -> str:
         return f"""<!DOCTYPE html><html><body style="margin:0;padding:0;background:#F4F6FB;
@@ -327,18 +352,31 @@ border:1px solid #E4E8F2;text-align:center">
 <p style="font-size:14px;color:#4A5478;line-height:1.6;margin:0">{message}</p>
 </div></body></html>"""
 
-    if not learner or not verify_unsubscribe_token(learner.id, learner.email, token):
+    if not ok:
         return HTMLResponse(_page("This unsubscribe link is invalid or has expired."), status_code=400)
 
-    prefs_result = await db.execute(
-        select(LearnerPreferences).where(LearnerPreferences.learner_id == lid)
-    )
-    prefs = prefs_result.scalar_one_or_none()
-    if prefs:
-        prefs.newsletter_opt_out = True
-        await db.commit()
+    what = "weekly progress reports" if kind == "weekly_report" else "newsletters"
+    return HTMLResponse(_page(f"You've been unsubscribed from LMBoK {what}. You'll still get account emails like password resets."))
 
-    return HTMLResponse(_page("You've been unsubscribed from LMBoK newsletters. You'll still get account emails like password resets."))
+
+@router.post("/unsubscribe")
+async def unsubscribe_newsletter_one_click(lid: int, token: str, kind: str = "newsletter", db: AsyncSession = Depends(get_db)):
+    """
+    RFC 8058 one-click unsubscribe target for the List-Unsubscribe-Post
+    header (see mail.send_mail's list_unsubscribe_url param) -- mailbox
+    providers (Gmail, Yahoo, etc.) POST here directly from their own
+    "Unsubscribe" button with body `List-Unsubscribe=One-Click`, with no
+    browser and nothing rendered, so this returns a bare 200/400 instead
+    of the GET route's HTML page. Same lid/token/kind verification, read as
+    query params since that's how the List-Unsubscribe header URL is
+    built either way.
+    """
+    ok, _ = await _unsubscribe(lid, token, db, kind)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Invalid or expired unsubscribe link")
+    return Response(status_code=200)
+
+
 
 
 @router.post("/login", response_model=AuthResponse)

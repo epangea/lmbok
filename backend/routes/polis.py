@@ -210,9 +210,10 @@ async def get_discussion(
     """Discussion thread — readable by any authenticated learner."""
     rows = await db.execute(text(
         "SELECT d.id, d.learner_id, d.parent_id, d.body, d.upvotes, d.created_at,"
-        "       l.display_name, l.avatar_emoji"
+        "       l.display_name, dp.icon AS phase_icon, dp.color AS phase_color"
         "  FROM polis_discussions d"
         "  JOIN learners l ON l.id = d.learner_id"
+        "  LEFT JOIN dev_phases dp ON dp.id = l.phase_id"
         " WHERE d.referendum_id = :rid"
         " ORDER BY d.created_at ASC"
     ), {"rid": ref_id})
@@ -304,10 +305,11 @@ async def list_proposals(
     rows = await db.execute(text(
         "SELECT p.id, p.title, p.description, p.scope, p.bioregion,"
         "       p.status, p.support_count, p.created_at,"
-        "       l.display_name, l.avatar_emoji,"
+        "       l.display_name, dp.icon AS phase_icon, dp.color AS phase_color,"
         "       MAX(CASE WHEN ps.learner_id = :lid THEN 1 ELSE 0 END) AS i_support"
         "  FROM proposals p"
         "  JOIN learners l ON l.id = p.learner_id"
+        "  LEFT JOIN dev_phases dp ON dp.id = l.phase_id"
         "  LEFT JOIN proposal_supports ps ON ps.proposal_id = p.id"
         f" WHERE {where}"
         "  GROUP BY p.id"

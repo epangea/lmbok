@@ -290,7 +290,6 @@ const S = {
   onboardBirthYear: '',
   onboardExpecting: false,
   onboardArt: '',       // no longer set during onboarding; kept for the loadAISession() fallback chain
-  onboardColor: '#00E5C8',
   // Prosopon onboarding card (step 4) — replaces the old first-art pick +
   // being/becoming/connecting familiarity self-assessment. See PROSOPON.md.
   onboardCuriosity:  '',
@@ -1096,6 +1095,7 @@ const LANG = {  // Only English ships inline; other languages load
     'prefs.language':'Language',
     'prefs.name':'Display name',
     'prefs.newsletter_optin':'Receive administrative emails and educational newsletters (never spam)',
+    'prefs.weekly_report_optin':'Receive your weekly progress digest (sessions, XP, favorite arts)',
     'prefs.phase':'Life phase',
     'prefs.phase_unknown':'Set your birth year below to see your phase',
     'prefs.save':'Save changes',
@@ -1276,7 +1276,8 @@ function Nav() {
   ];
 
   const learner  = S.learner;
-  const navLabel = (learner && learner.avatar_emoji) ? learner.avatar_emoji
+  const navPhase = learner && learner.phase;
+  const navLabel = (navPhase && navPhase.icon) ? navPhase.icon
     : (learner && learner.display_name ? learner.display_name[0].toUpperCase() : '?');
 
   const currentTab   = tabs.find(t => t.id === S.view) || tabs[0];
@@ -1304,8 +1305,8 @@ function Nav() {
     <div class="nav-tabs">${desktopTabs}</div>
     <div class="nav-current-view">${currentLabel}</div>
     <div class="nav-av" onclick="showProfileMenu(event)"
-      style="cursor:pointer;font-size:${(learner && learner.avatar_emoji)?'18px':'14px'}"
-      title="${learner?.display_name||'You'}">${navLabel}</div>
+      style="cursor:pointer;font-size:${(navPhase && navPhase.icon)?'18px':'14px'}${(navPhase && navPhase.icon && navPhase.color)?';background:'+navPhase.color+'28;border-color:'+navPhase.color:''}"
+      title="${(navPhase && navPhase.name) ? navPhase.name : (learner?.display_name||'You')}">${navLabel}</div>
     <button id="nav-burger" class="nav-burger" onclick="toggleMobileNav()" aria-label="Menu">
       <span></span><span></span><span></span>
     </button>
@@ -3927,19 +3928,7 @@ window.showPreferences = function() {
   if (old) { old.remove(); return; }
 
   var l = S.learner || {};
-  var curEmoji = l.avatar_emoji || '🌊';
-  var curColor = l.avatar_color || '#00E5C8';
   var curName  = l.display_name || l.username || '';
-
-  var emojiRow = EMOJIS.map(function(e) {
-    var sel = curEmoji === e;
-    return '<div onclick="prefPickEmoji(\''+e+'\')" style="width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;font-size:20px;border-radius:50%;cursor:pointer;border:2px solid '+(sel?'var(--wave)':'transparent')+';background:'+(sel?'var(--wave-dim)':'none')+'" id="pem-'+e+'">'+e+'</div>';
-  }).join('');
-
-  var colorRow = COLORS.map(function(c) {
-    var sel = curColor === c;
-    return '<div onclick="prefPickColor(\''+c+'\')" style="width:26px;height:26px;border-radius:50%;background:'+c+';cursor:pointer;border:3px solid '+(sel?'#fff':'transparent')+';display:inline-block;margin:2px" id="pcl-'+c.replace('#','')+'"></div>';
-  }).join('');
 
   var curPhase   = l.phase || null;
   var curBirthYear  = l.birth_year || '';
@@ -3965,13 +3954,6 @@ window.showPreferences = function() {
     + '<div style="margin-bottom:18px">'
     + '<label style="font-size:12px;color:var(--text2);display:block;margin-bottom:6px">'+T('common.display_name')+'</label>'
     + '<input id="pref-name" value="'+curName+'" style="width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:9px 12px;color:var(--text);font-size:14px;box-sizing:border-box">'
-    + '</div>'
-
-    + '<div style="margin-bottom:18px">'
-    + '<label style="font-size:12px;color:var(--text2);display:block;margin-bottom:8px">'+T('common.avatar')+'</label>'
-    + '<div id="pref-avatar-preview" style="width:56px;height:56px;border-radius:50%;background:'+curColor+'33;border:3px solid '+curColor+';display:flex;align-items:center;justify-content:center;font-size:26px;margin-bottom:10px">'+curEmoji+'</div>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px">'+emojiRow+'</div>'
-    + '<div style="display:flex;flex-wrap:wrap;gap:2px">'+colorRow+'</div>'
     + '</div>'
 
     + '<div style="margin-bottom:18px">'
@@ -4001,9 +3983,14 @@ window.showPreferences = function() {
     + '</label>'
     + '</div>'
 
-    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:20px;cursor:pointer">'
+    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;cursor:pointer">'
     + '<input type="checkbox" id="pref-newsletter" ' + (l.newsletter_opt_out ? '' : 'checked') + ' style="margin-top:2px;flex-shrink:0">'
     + '<span style="font-size:11px;color:var(--text3);line-height:1.5">' + T('prefs.newsletter_optin') + '</span>'
+    + '</label>'
+
+    + '<label style="display:flex;align-items:flex-start;gap:8px;margin-bottom:20px;cursor:pointer">'
+    + '<input type="checkbox" id="pref-weekly-report" ' + (l.weekly_report_opt_out ? '' : 'checked') + ' style="margin-top:2px;flex-shrink:0">'
+    + '<span style="font-size:11px;color:var(--text3);line-height:1.5">' + T('prefs.weekly_report_optin') + '</span>'
     + '</label>'
 
     + '<button onclick="savePreferences()" class="btn btn-wave btn-full">' + T('prefs.save') + '</button>'
@@ -4014,31 +4001,9 @@ window.showPreferences = function() {
   modal.addEventListener('click', function(e) { if(e.target===modal) modal.remove(); });
 
   // Track current selections in closure via temp state
-  window._prefEmoji = curEmoji;
-  window._prefColor = curColor;
   window._prefBirthYear = curBirthYear;
   window._prefExpecting = curExpecting;
   window._prefLang  = S.language || 'en';
-};
-
-window.prefPickEmoji = function(e) {
-  window._prefEmoji = e;
-  document.querySelectorAll('[id^="pem-"]').forEach(function(el) {
-    el.style.border = '2px solid transparent'; el.style.background = 'none';
-  });
-  var el = document.getElementById('pem-'+e);
-  if (el) { el.style.border='2px solid var(--wave)'; el.style.background='var(--wave-dim)'; }
-  var p = document.getElementById('pref-avatar-preview');
-  if (p) p.textContent = e;
-};
-
-window.prefPickColor = function(c) {
-  window._prefColor = c;
-  document.querySelectorAll('[id^="pcl-"]').forEach(function(el){ el.style.border='3px solid transparent'; });
-  var el = document.getElementById('pcl-'+c.replace('#',''));
-  if (el) el.style.border = '3px solid #fff';
-  var p = document.getElementById('pref-avatar-preview');
-  if (p) { p.style.background=c+'33'; p.style.borderColor=c; }
 };
 
 window.prefPickLang = function(lang) {
@@ -4062,16 +4027,17 @@ window.savePreferences = async function() {
   var name = (document.getElementById('pref-name')||{}).value || '';
   var newsletterEl = document.getElementById('pref-newsletter');
   var newsletterOptOut = newsletterEl ? !newsletterEl.checked : false;
+  var weeklyReportEl = document.getElementById('pref-weekly-report');
+  var weeklyReportOptOut = weeklyReportEl ? !weeklyReportEl.checked : false;
   var byRaw = window._prefExpecting ? null : parseInt(window._prefBirthYear, 10);
   try {
     await API.patch('/learners/me/preferences', {
       display_name:  name.trim() || undefined,
-      avatar_emoji:  window._prefEmoji,
-      avatar_color:  window._prefColor,
       birth_year:    (byRaw && !isNaN(byRaw)) ? byRaw : null,
       is_expecting_parent: !!window._prefExpecting,
       language:      window._prefLang,
       newsletter_opt_out: newsletterOptOut,
+      weekly_report_opt_out: weeklyReportOptOut,
     });
     // Phase is derived server-side -- re-fetch /me rather than guess it
     // locally, so the cached learner always reflects the real computed
@@ -4079,8 +4045,6 @@ window.savePreferences = async function() {
     var fresh = await API.get('/learners/me');
     var l = Object.assign({}, S.learner||{}, fresh||{});
     if (name.trim()) l.display_name = name.trim();
-    l.avatar_emoji = window._prefEmoji;
-    l.avatar_color = window._prefColor;
     localStorage.setItem('fl_learner', JSON.stringify(l));
     set({learner:l, language: window._prefLang || S.language});
     document.getElementById('prefs-modal').remove();
@@ -4454,8 +4418,6 @@ function computeSkillScore(skillName, artScores) {
   return norm > 0 ? Math.min(raw / norm, 1.0) : 0;
 }
 
-var EMOJIS = ['🌊','🔥','🌿','⚡','🎵','🦋','🌙','🌸','🐉','🦁','🌍','✨'];
-var COLORS = ['#00E5C8','#3D7BFF','#FF6B6B','#FFD166','#9B72FF','#6DC86D','#FF9F43','#EE5A24','#0652DD','#C4E538'];
 var LANGUAGES = [
   ['en','🇬🇧','English'],['fr','🇫🇷','Français'],['es','🇪🇸','Español'],
   ['de','🇩🇪','Deutsch'],['ru','🇷🇺','Русский'],
@@ -4594,15 +4556,8 @@ window.obSkipProsopon = function() {
 };
 
 window.obComplete = async function() {
-  // Logo/color are no longer chosen by the learner — randomize instead
-  // (per 2026-08-20 decision: not worth the onboarding friction).
-  var randEmoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
-  var randColor = COLORS[Math.floor(Math.random() * COLORS.length)];
-
   try {
     await API.patch('/learners/me/preferences', {
-      avatar_emoji:  randEmoji,
-      avatar_color:  randColor,
       birth_year:    S.onboardExpecting ? null : parseInt(S.onboardBirthYear, 10),
       is_expecting_parent: !!S.onboardExpecting,
       display_name:  S.onboardName,
@@ -4647,13 +4602,10 @@ window.obComplete = async function() {
   // Update learner display name + onboarding flag in local cache
   var l = S.learner || {};
   l.display_name = S.onboardName || l.display_name;
-  l.avatar_emoji = randEmoji;
-  l.avatar_color = randColor;
   l.onboarding_complete = true;
   localStorage.setItem('fl_learner', JSON.stringify(l));
   set({
     learner: l,
-    onboardColor: randColor,
     view: 'session',
     phase: 0,
     answered: false,

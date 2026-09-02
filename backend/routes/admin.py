@@ -1974,55 +1974,81 @@ async def admin_newsletter_audience(
 async def admin_list_subscribers(
     q: Optional[str] = Query(None),
     status_filter: Optional[str] = Query(None, alias="status", description="subscribed | unsubscribed | inactive | unverified"),
-    limit: int = Query(200, le=500),
+    list_kind: str = Query("newsletter", alias="list", description="newsletter | weekly_report -- which flag 'status' filters against"),
+    limit: int = Query(50, le=500),
     offset: int = Query(0),
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Every learner's newsletter subscription status, independent of
-    any single newsletter -- separate from /audience above, which is
-    scoped to who's eligible for a send right now. This view is meant
-    to answer 'who's on the list' generally, including learners a send
-    wouldn't reach anyway (inactive/unverified), so an admin can see
-    why, not just that they're excluded."""
-    query = (
+    """Every learner's subscription status for BOTH mail lists (newsletter
+    and weekly report) in one view, independent of any single send --
+    separate from /audience above, which is scoped to who's eligible for
+    a send right now. This view is meant to answer 'who's on the list'
+    generally, including learners a send wouldn't reach anyway
+    (inactive/unverified), so an admin can see why, not just that
+    they're excluded.
+
+    status/list together scope the subscribed/unsubscribed filter to one
+    list at a time (inactive/unverified are learner-level and apply
+    regardless of list) -- both flags are always returned per learner
+    either way, so the frontend can show both columns from a single call.
+    """
+    if list_kind not in ("newsletter", "weekly_report"):
+        raise HTTPException(400, "list must be 'newsletter' or 'weekly_report'")
+    opt_out_col = (
+        LearnerPreferences.newsletter_opt_out if list_kind == "newsletter"
+        else LearnerPreferences.weekly_report_opt_out
+    )
+
+    def _apply_filters(qy):
+        if q:
+            like = f"%{q}%"
+            qy = qy.where((Learner.email.like(like)) | (Learner.username.like(like)))
+        if status_filter == "subscribed":
+            qy = qy.where((opt_out_col.is_(None)) | (opt_out_col == False))
+        elif status_filter == "unsubscribed":
+            qy = qy.where(opt_out_col == True)
+        elif status_filter == "inactive":
+            qy = qy.where(Learner.is_active == False)
+        elif status_filter == "unverified":
+            qy = qy.where(Learner.email_verified == False)
+        return qy
+
+    total = (await db.execute(
+        _apply_filters(select(func.count(Learner.id)).select_from(Learner).join(
+            LearnerPreferences, LearnerPreferences.learner_id == Learner.id, isouter=True
+        ))
+    )).scalar_one()
+
+    query = _apply_filters(
         select(
             Learner.id, Learner.email, Learner.username, Learner.display_name,
             Learner.is_active, Learner.email_verified,
             LearnerPreferences.newsletter_opt_out,
+            LearnerPreferences.weekly_report_opt_out,
         )
         .select_from(Learner)
         .join(LearnerPreferences, LearnerPreferences.learner_id == Learner.id, isouter=True)
-    )
-    if q:
-        like = f"%{q}%"
-        query = query.where((Learner.email.like(like)) | (Learner.username.like(like)))
-    if status_filter == "subscribed":
-        query = query.where(
-            (LearnerPreferences.newsletter_opt_out.is_(None)) | (LearnerPreferences.newsletter_opt_out == False)
-        )
-    elif status_filter == "unsubscribed":
-        query = query.where(LearnerPreferences.newsletter_opt_out == True)
-    elif status_filter == "inactive":
-        query = query.where(Learner.is_active == False)
-    elif status_filter == "unverified":
-        query = query.where(Learner.email_verified == False)
-    query = query.order_by(Learner.email).limit(limit).offset(offset)
+    ).order_by(Learner.email).limit(limit).offset(offset)
 
     result = await db.execute(query)
     rows = result.all()
-    return [
-        {
-            "id": r.id,
-            "email": r.email,
-            "username": r.username,
-            "display_name": r.display_name,
-            "is_active": bool(r.is_active),
-            "email_verified": bool(r.email_verified),
-            "opted_out": bool(r.newsletter_opt_out) if r.newsletter_opt_out is not None else False,
-        }
-        for r in rows
-    ]
+    return {
+        "total": total,
+        "items": [
+            {
+                "id": r.id,
+                "email": r.email,
+                "username": r.username,
+                "display_name": r.display_name,
+                "is_active": bool(r.is_active),
+                "email_verified": bool(r.email_verified),
+                "newsletter_opt_out": bool(r.newsletter_opt_out) if r.newsletter_opt_out is not None else False,
+                "weekly_report_opt_out": bool(r.weekly_report_opt_out) if r.weekly_report_opt_out is not None else False,
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.patch("/newsletters/subscribers/{learner_id}")
@@ -2033,11 +2059,15 @@ async def admin_set_subscriber_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Admin override of a single learner's standing (all-future)
-    newsletter subscription -- the same flag a learner's own
+    subscription to one list -- the same flag a learner's own
     unsubscribe-link click sets, just settable from this side too.
-    Body: {"opt_out": true|false}."""
+    Body: {"opt_out": true|false, "list": "newsletter"|"weekly_report"}
+    ("list" defaults to "newsletter" for backward compatibility)."""
     if "opt_out" not in data:
         raise HTTPException(400, "opt_out (bool) is required")
+    list_kind = data.get("list", "newsletter")
+    if list_kind not in ("newsletter", "weekly_report"):
+        raise HTTPException(400, "list must be 'newsletter' or 'weekly_report'")
 
     result = await db.execute(select(Learner).where(Learner.id == learner_id))
     learner = result.scalar_one_or_none()
@@ -2052,9 +2082,61 @@ async def admin_set_subscriber_status(
         prefs = LearnerPreferences(learner_id=learner_id)
         db.add(prefs)
 
-    prefs.newsletter_opt_out = bool(data["opt_out"])
+    if list_kind == "weekly_report":
+        prefs.weekly_report_opt_out = bool(data["opt_out"])
+    else:
+        prefs.newsletter_opt_out = bool(data["opt_out"])
     await db.commit()
-    return {"ok": True, "id": learner_id, "opted_out": prefs.newsletter_opt_out}
+    return {
+        "ok": True, "id": learner_id, "list": list_kind,
+        "opted_out": prefs.weekly_report_opt_out if list_kind == "weekly_report" else prefs.newsletter_opt_out,
+    }
+
+
+@router.post("/newsletters/subscribers/bulk")
+async def admin_bulk_set_subscriber_status(
+    data: dict,
+    _: None = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Bulk version of the single-learner PATCH above, for the admin
+    subscribers list's row-selection + bulk-action bar. Body:
+    {"learner_ids": [1,2,3], "list": "newsletter"|"weekly_report", "opt_out": true|false}.
+    Looped rather than a single bulk UPDATE, same reasoning as the
+    single-learner route: a learner can be missing their (normally
+    register()-created) LearnerPreferences row, and that still needs a
+    fetch-or-create, not just an UPDATE that would silently skip them.
+    Bounded by the page's own selection size (frontend caps at the
+    current page, itself capped at 500 by the list endpoint above), so
+    a per-row loop isn't a real performance concern here."""
+    learner_ids = data.get("learner_ids")
+    list_kind = data.get("list", "newsletter")
+    opt_out = data.get("opt_out")
+    if not isinstance(learner_ids, list) or not learner_ids:
+        raise HTTPException(400, "learner_ids (non-empty list) is required")
+    if list_kind not in ("newsletter", "weekly_report"):
+        raise HTTPException(400, "list must be 'newsletter' or 'weekly_report'")
+    if not isinstance(opt_out, bool):
+        raise HTTPException(400, "opt_out (bool) is required")
+
+    updated = 0
+    for learner_id in learner_ids:
+        prefs_result = await db.execute(select(LearnerPreferences).where(LearnerPreferences.learner_id == learner_id))
+        prefs = prefs_result.scalar_one_or_none()
+        if not prefs:
+            learner_result = await db.execute(select(Learner.id).where(Learner.id == learner_id))
+            if not learner_result.scalar_one_or_none():
+                continue  # skip ids that aren't real learners rather than erroring the whole batch
+            prefs = LearnerPreferences(learner_id=learner_id)
+            db.add(prefs)
+        if list_kind == "weekly_report":
+            prefs.weekly_report_opt_out = opt_out
+        else:
+            prefs.newsletter_opt_out = opt_out
+        updated += 1
+
+    await db.commit()
+    return {"ok": True, "list": list_kind, "opted_out": opt_out, "updated": updated}
 
 
 @router.get("/newsletters/languages")
@@ -2264,7 +2346,7 @@ async def _send_newsletter_job(
             unsub_url = unsubscribe_link(learner_id, email)
             html = newsletter_html(subject, body, unsub_url)
             text_body = append_unsubscribe_footer(body, unsub_url)
-            await asyncio.to_thread(send_mail, to=email, subject=subject, body=text_body, html=html)
+            await asyncio.to_thread(send_mail, to=email, subject=subject, body=text_body, html=html, list_unsubscribe_url=unsub_url)
             sent += 1
         except Exception as e:
             failed += 1

@@ -102,8 +102,6 @@ class Learner(Base):
     birth_year:    Mapped[Optional[int]] = mapped_column(SmallInteger)
     is_expecting_parent: Mapped[bool]    = mapped_column(Boolean, default=False)
     phase_id:      Mapped[Optional[int]] = mapped_column(ForeignKey("dev_phases.id"))
-    avatar_emoji:  Mapped[Optional[str]] = mapped_column(String(8))
-    avatar_color:  Mapped[str]           = mapped_column(String(7), default="#1D9E75")
     timezone:      Mapped[str]           = mapped_column(String(50), default="UTC")
     language:      Mapped[str]           = mapped_column(String(10), default="en")
     is_active:     Mapped[bool]          = mapped_column(Boolean, default=True)
@@ -133,6 +131,7 @@ class LearnerPreferences(Base):
     profile_visible:        Mapped[bool]          = mapped_column(Boolean, default=False)
     tier:                   Mapped[int]           = mapped_column(Integer, default=1)
     newsletter_opt_out:     Mapped[bool]          = mapped_column(Boolean, default=False)
+    weekly_report_opt_out:  Mapped[bool]          = mapped_column(Boolean, default=False)
     updated_at:             Mapped[datetime]      = mapped_column(DateTime, default=func.now(), onupdate=func.now())
     learner: Mapped["Learner"] = relationship(back_populates="preferences")
 

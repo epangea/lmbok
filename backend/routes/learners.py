@@ -37,8 +37,6 @@ async def get_me(
         "display_name": learner.display_name,
         "birth_year":   learner.birth_year,
         "is_expecting_parent": learner.is_expecting_parent,
-        "avatar_emoji": learner.avatar_emoji,
-        "avatar_color": learner.avatar_color,
         "phase": {
             "id":    current_phase.id,
             "slug":  current_phase.slug,
@@ -54,6 +52,7 @@ async def get_me(
         # (shouldn't happen post-registration) defaults to subscribed,
         # same as the opt-out column's own DB default.
         "newsletter_opt_out": bool(prefs.newsletter_opt_out) if prefs else False,
+        "weekly_report_opt_out": bool(prefs.weekly_report_opt_out) if prefs else False,
     }
 
 @router.get("/me/streak")
@@ -75,8 +74,6 @@ from typing import Optional
 from sqlalchemy import update
 
 class PreferencesUpdate(BaseModel):
-    avatar_emoji:  Optional[str] = None
-    avatar_color:  Optional[str] = None
     birth_year:    Optional[int] = None
     is_expecting_parent: Optional[bool] = None
     display_name:  Optional[str] = None
@@ -87,6 +84,7 @@ class PreferencesUpdate(BaseModel):
     # one field needs its own fetch-or-create below rather than a plain
     # `learner.x = req.x` assignment.
     newsletter_opt_out: Optional[bool] = None
+    weekly_report_opt_out: Optional[bool] = None
 
 @router.patch("/me/preferences")
 async def update_preferences(
@@ -98,8 +96,6 @@ async def update_preferences(
     from utils import compute_current_phase
 
     # Update learner fields
-    if req.avatar_emoji:  learner.avatar_emoji = req.avatar_emoji
-    if req.avatar_color:  learner.avatar_color  = req.avatar_color
     if req.display_name:  learner.display_name  = req.display_name
     if req.language:      learner.language       = req.language
 
@@ -120,7 +116,7 @@ async def update_preferences(
         current_phase = await compute_current_phase(learner, db)
         learner.phase_id = current_phase.id if current_phase else None
 
-    if req.newsletter_opt_out is not None:
+    if req.newsletter_opt_out is not None or req.weekly_report_opt_out is not None:
         prefs_q = await db.execute(sel(LearnerPreferences).where(LearnerPreferences.learner_id == learner.id))
         prefs = prefs_q.scalar_one_or_none()
         if not prefs:
@@ -128,7 +124,10 @@ async def update_preferences(
             # don't 500 on a genuinely pre-existing legacy account.
             prefs = LearnerPreferences(learner_id=learner.id)
             db.add(prefs)
-        prefs.newsletter_opt_out = req.newsletter_opt_out
+        if req.newsletter_opt_out is not None:
+            prefs.newsletter_opt_out = req.newsletter_opt_out
+        if req.weekly_report_opt_out is not None:
+            prefs.weekly_report_opt_out = req.weekly_report_opt_out
 
     await db.commit()
     return {"ok": True}

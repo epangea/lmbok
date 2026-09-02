@@ -28,7 +28,7 @@ sys.path.insert(0, str(BACKEND_DIR))
 
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy import text
-from mail import send_mail
+from mail import send_mail, unsubscribe_link, append_unsubscribe_footer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("weekly_report")
@@ -100,7 +100,9 @@ async def main() -> None:
             SELECT l.id, l.username, l.display_name, l.email
             FROM learners l
             JOIN learner_streaks ls ON ls.learner_id = l.id
+            LEFT JOIN learner_preferences lp ON lp.learner_id = l.id
             WHERE ls.last_activity_date >= NOW() - INTERVAL :days DAY
+              AND (lp.weekly_report_opt_out IS NULL OR lp.weekly_report_opt_out = 0)
         """), {"days": WINDOW_DAYS})).mappings().all()
 
         log.info("Found %d active learners in last %d days", len(learners), WINDOW_DAYS)
@@ -151,12 +153,22 @@ async def main() -> None:
                 "Building Ourselves, in Our House!\n"
             )
 
+            # Own permanent opt-out (LearnerPreferences.weekly_report_opt_out),
+            # split from the admin newsletter's newsletter_opt_out (2026-08-29)
+            # so a learner can drop one without losing the other.
+            # kind="weekly_report" is what makes the unsubscribe link/token
+            # flip the right flag (see mail._unsubscribe_token) -- without
+            # it this would silently flip newsletter_opt_out instead.
+            unsub_url = unsubscribe_link(lid, email, kind="weekly_report")
+            body = append_unsubscribe_footer(body, unsub_url)
+
             try:
                 send_mail(
                     to=email,
                     subject=subject,
                     body=body,
                     reply_to=REPLY_TO,
+                    list_unsubscribe_url=unsub_url,
                 )
                 log.info("Sent report to %s (%s)", name, email)
             except Exception as exc:

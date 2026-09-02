@@ -436,6 +436,8 @@ async def get_listing_matches(
     if not listing_q.scalar_one_or_none():
         raise HTTPException(404, "Listing not found")
 
+    from utils import compute_current_phase
+
     matches_q = await db.execute(
         select(OpportunityMatch)
         .where(OpportunityMatch.listing_id == listing_id)
@@ -459,8 +461,8 @@ async def get_listing_matches(
                 "match_id":      m.id,
                 "learner_id":    None,
                 "display_name":  f"Candidate {anon_i}",
-                "avatar_emoji":  "❔",
-                "avatar_color":  "#8892a0",
+                "phase_icon":    "❔",
+                "phase_color":   "#8892a0",
                 "anonymized":    True,
                 "origin":        m.origin,
                 "learner_status": m.learner_status,
@@ -475,12 +477,13 @@ async def get_listing_matches(
             select(Learner).where(Learner.id == m.learner_id)
         )
         learner = learner_q.scalar_one_or_none()
+        phase = await compute_current_phase(learner, db) if learner else None
         out.append({
             "match_id":      m.id,
             "learner_id":    m.learner_id,
             "display_name":  learner.display_name if learner else "—",
-            "avatar_emoji":  learner.avatar_emoji if learner else "🌱",
-            "avatar_color":  learner.avatar_color if learner else "#1D9E75",
+            "phase_icon":    phase.icon if phase else "🌱",
+            "phase_color":   phase.color if phase else "#1D9E75",
             "anonymized":    False,
             "origin":        m.origin,
             "learner_status": m.learner_status,

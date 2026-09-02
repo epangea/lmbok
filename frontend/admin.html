@@ -200,6 +200,7 @@ var newsletterState = {
   filters: { language: '', phase_id: '', bioregion: '' },
   languages: null, phases: null, bioregions: null,     // filter dropdown option lists
   subs: null, subsLoading: false, subsError: null, subsQ: '', subsStatus: '',
+  subsTotal: 0, subsOffset: 0, subsLimit: 50, subsSelected: {},
   picker: { newsletterId: null, results: null, q: '', excluded: [] }  // per-send recipient picker
 };
 
@@ -1830,16 +1831,30 @@ function newsletterPickerPanel() {
 }
 
 // ── Subscribers tab ──────────────────────────────────
+// Shows both mail lists (newsletter + weekly report) per learner in one
+// view -- a learner's two opt-out flags are independent, but an admin
+// managing them is almost always looking at "this person," not "this
+// list," so one row with two badges/toggles beats two near-identical
+// tabs that'd lose page/search/selection state when switching between
+// them. subsStatus combines list+state into one value ("newsletter:
+// unsubscribed", "weekly_report:subscribed", "inactive", "unverified",
+// or "" for all) so the existing single-dropdown shape still works.
 function AdminNewsletterSubscribers() {
   var s = newsletterState;
-  var body = '<p style="margin-bottom:14px;font-size:13px;color:var(--text3)">Every learner\'s standing (all-future) newsletter subscription. Toggling here does the same thing as a learner clicking "unsubscribe" in an email — it\'s permanent until toggled back, and applies to every future newsletter, not just one send.</p>';
+  var body = '<p style="margin-bottom:14px;font-size:13px;color:var(--text3)">Every learner\'s standing (all-future) subscription to the newsletter and the weekly progress digest. Toggling here does the same thing as a learner clicking "unsubscribe" in an email — permanent until toggled back, and applies to every future send of that type, not just one.</p>';
 
   body += '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">'
     + '<input class="form-input" placeholder="Search by email or username…" value="' + escH(s.subsQ) + '" oninput="newsletterSubsSetQuery(this.value)" style="flex:1;min-width:200px;font-size:13px" />'
     + '<select class="form-input" style="font-size:13px" onchange="newsletterSubsSetStatus(this.value)">'
     + '<option value="">All learners</option>'
-    + '<option value="subscribed"' + (s.subsStatus === 'subscribed' ? ' selected' : '') + '>Subscribed</option>'
-    + '<option value="unsubscribed"' + (s.subsStatus === 'unsubscribed' ? ' selected' : '') + '>Unsubscribed</option>'
+    + '<optgroup label="Newsletter">'
+    + '<option value="newsletter:subscribed"' + (s.subsStatus === 'newsletter:subscribed' ? ' selected' : '') + '>Subscribed</option>'
+    + '<option value="newsletter:unsubscribed"' + (s.subsStatus === 'newsletter:unsubscribed' ? ' selected' : '') + '>Unsubscribed</option>'
+    + '</optgroup>'
+    + '<optgroup label="Weekly report">'
+    + '<option value="weekly_report:subscribed"' + (s.subsStatus === 'weekly_report:subscribed' ? ' selected' : '') + '>Subscribed</option>'
+    + '<option value="weekly_report:unsubscribed"' + (s.subsStatus === 'weekly_report:unsubscribed' ? ' selected' : '') + '>Unsubscribed</option>'
+    + '</optgroup>'
     + '<option value="unverified"' + (s.subsStatus === 'unverified' ? ' selected' : '') + '>Email unverified</option>'
     + '<option value="inactive"' + (s.subsStatus === 'inactive' ? ' selected' : '') + '>Inactive</option>'
     + '</select>'
@@ -1857,26 +1872,61 @@ function AdminNewsletterSubscribers() {
     return body;
   }
 
+  var selectedIds = Object.keys(s.subsSelected).filter(function(id) { return s.subsSelected[id]; });
+  var allOnPageSelected = s.subs.length > 0 && s.subs.every(function(l) { return s.subsSelected[l.id]; });
+
+  if (selectedIds.length) {
+    body += '<div class="card" style="padding:10px 14px;margin-bottom:10px;display:flex;flex-wrap:wrap;align-items:center;gap:10px;background:var(--wave-dim)">'
+      + '<span style="font-size:12px;font-weight:600">' + selectedIds.length + ' selected</span>'
+      + '<span style="font-size:11px;color:var(--text3)">Newsletter:</span>'
+      + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsBulk(\'newsletter\', true)">Unsubscribe</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsBulk(\'newsletter\', false)">Re-subscribe</button>'
+      + '<span style="font-size:11px;color:var(--text3);margin-left:6px">Weekly report:</span>'
+      + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsBulk(\'weekly_report\', true)">Unsubscribe</button>'
+      + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsBulk(\'weekly_report\', false)">Re-subscribe</button>'
+      + '<button class="btn btn-ghost btn-sm" style="margin-left:auto" onclick="newsletterSubsClearSelection()">Clear selection</button>'
+      + '</div>';
+  }
+
   body += '<div class="card" style="padding:0;overflow:hidden">'
+    + '<div style="display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg3)">'
+    + '<input type="checkbox" ' + (allOnPageSelected ? 'checked' : '') + ' onchange="newsletterSubsSelectAll(this.checked)" title="Select all on this page" />'
+    + '<span style="font-size:11px;color:var(--text3);flex:1">Learner</span>'
+    + '<span style="font-size:11px;color:var(--text3);width:110px;text-align:center">Newsletter</span>'
+    + '<span style="font-size:11px;color:var(--text3);width:110px;text-align:center">Weekly report</span>'
+    + '</div>'
     + s.subs.map(function(l) {
-        var reachable = l.is_active && l.email_verified && !l.opted_out;
-        var statusBadge = l.opted_out
-          ? '<span class="badge badge-red">Unsubscribed</span>'
-          : !l.email_verified
-            ? '<span class="badge badge-amber">Unverified</span>'
-            : !l.is_active
-              ? '<span class="badge badge-amber">Inactive</span>'
-              : '<span class="badge badge-green">Subscribed</span>';
-        return '<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border)">'
-          + '<div><div style="font-size:13px;font-weight:600">' + escH(l.display_name || l.username) + '</div>'
+        function badge(optedOut) {
+          return optedOut
+            ? '<span class="badge badge-red">Unsubscribed</span>'
+            : !l.email_verified
+              ? '<span class="badge badge-amber">Unverified</span>'
+              : !l.is_active
+                ? '<span class="badge badge-amber">Inactive</span>'
+                : '<span class="badge badge-green">Subscribed</span>';
+        }
+        return '<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border)">'
+          + '<input type="checkbox" ' + (s.subsSelected[l.id] ? 'checked' : '') + ' onchange="newsletterSubsToggleSelect(' + l.id + ')" />'
+          + '<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600">' + escH(l.display_name || l.username) + '</div>'
           + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + escH(l.email) + '</div></div>'
-          + '<div style="display:flex;align-items:center;gap:10px">' + statusBadge
-          + '<button class="btn btn-ghost btn-sm" onclick="newsletterSubsToggle(' + l.id + ', ' + (!l.opted_out) + ')">'
-          + (l.opted_out ? 'Re-subscribe' : 'Unsubscribe')
-          + '</button></div>'
+          + '<div style="width:110px;display:flex;flex-direction:column;align-items:center;gap:4px">' + badge(l.newsletter_opt_out)
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="newsletterSubsToggle(' + l.id + ', \'newsletter\', ' + (!l.newsletter_opt_out) + ')">'
+          + (l.newsletter_opt_out ? 'Re-subscribe' : 'Unsubscribe') + '</button></div>'
+          + '<div style="width:110px;display:flex;flex-direction:column;align-items:center;gap:4px">' + badge(l.weekly_report_opt_out)
+          + '<button class="btn btn-ghost btn-sm" style="font-size:10px;padding:2px 8px" onclick="newsletterSubsToggle(' + l.id + ', \'weekly_report\', ' + (!l.weekly_report_opt_out) + ')">'
+          + (l.weekly_report_opt_out ? 'Re-subscribe' : 'Unsubscribe') + '</button></div>'
           + '</div>';
       }).join('')
     + '</div>';
+
+  var pageStart = s.subsOffset + 1;
+  var pageEnd = Math.min(s.subsOffset + s.subs.length, s.subsTotal);
+  body += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px">'
+    + '<span style="font-size:11px;color:var(--text3)">' + (s.subsTotal ? (pageStart + '–' + pageEnd + ' of ' + s.subsTotal) : '') + '</span>'
+    + '<div style="display:flex;gap:6px">'
+    + '<button class="btn btn-ghost btn-sm" ' + (s.subsOffset <= 0 ? 'disabled' : '') + ' onclick="newsletterSubsPage(-1)">&larr; Prev</button>'
+    + '<button class="btn btn-ghost btn-sm" ' + (s.subsOffset + s.subsLimit >= s.subsTotal ? 'disabled' : '') + ' onclick="newsletterSubsPage(1)">Next &rarr;</button>'
+    + '</div></div>';
 
   return body;
 }
@@ -1887,9 +1937,15 @@ function newsletterSubsLoad() {
   s.subsError = null;
   var params = new URLSearchParams();
   if (s.subsQ) params.set('q', s.subsQ);
-  if (s.subsStatus) params.set('status', s.subsStatus);
+  var parts = s.subsStatus.indexOf(':') !== -1 ? s.subsStatus.split(':') : [null, s.subsStatus];
+  var listKind = parts[0], statusVal = parts[1];
+  if (listKind) params.set('list', listKind);
+  if (statusVal) params.set('status', statusVal);
+  params.set('limit', s.subsLimit);
+  params.set('offset', s.subsOffset);
   adminFetch('/admin/newsletters/subscribers?' + params.toString()).then(function(data) {
-    s.subs = data || [];
+    s.subs = (data && data.items) || [];
+    s.subsTotal = (data && data.total) || 0;
     s.subsLoading = false;
     renderAdmin();
   }).catch(function(e) {
@@ -1902,19 +1958,59 @@ function newsletterSubsLoad() {
 
 function newsletterSubsSetQuery(q) {
   newsletterState.subsQ = q;
+  newsletterState.subsOffset = 0;
   newsletterSubsLoad();
 }
 
 function newsletterSubsSetStatus(v) {
   newsletterState.subsStatus = v;
+  newsletterState.subsOffset = 0;
   newsletterSubsLoad();
 }
 
-function newsletterSubsToggle(learnerId, optOut) {
-  adminFetch('/admin/newsletters/subscribers/' + learnerId, 'PATCH', { opt_out: optOut }).then(function() {
+function newsletterSubsPage(delta) {
+  var s = newsletterState;
+  s.subsOffset = Math.max(0, s.subsOffset + delta * s.subsLimit);
+  newsletterSubsLoad();
+}
+
+function newsletterSubsToggleSelect(learnerId) {
+  var s = newsletterState;
+  s.subsSelected[learnerId] = !s.subsSelected[learnerId];
+  renderAdmin();
+}
+
+function newsletterSubsSelectAll(checked) {
+  var s = newsletterState;
+  (s.subs || []).forEach(function(l) { s.subsSelected[l.id] = checked; });
+  renderAdmin();
+}
+
+function newsletterSubsClearSelection() {
+  newsletterState.subsSelected = {};
+  renderAdmin();
+}
+
+function newsletterSubsToggle(learnerId, listKind, optOut) {
+  adminFetch('/admin/newsletters/subscribers/' + learnerId, 'PATCH', { list: listKind, opt_out: optOut }).then(function() {
     newsletterSubsLoad();
   }).catch(function(e) {
     alert('Update failed: ' + (e.message || 'unknown'));
+  });
+}
+
+function newsletterSubsBulk(listKind, optOut) {
+  var s = newsletterState;
+  var learnerIds = Object.keys(s.subsSelected).filter(function(id) { return s.subsSelected[id]; }).map(Number);
+  if (!learnerIds.length) return;
+  var verb = optOut ? 'unsubscribe' : 're-subscribe';
+  var listLabel = listKind === 'weekly_report' ? 'weekly report' : 'newsletter';
+  if (!confirm('Are you sure you want to ' + verb + ' ' + learnerIds.length + ' learner(s) ' + (optOut ? 'from' : 'to') + ' the ' + listLabel + '?')) return;
+  adminFetch('/admin/newsletters/subscribers/bulk', 'POST', { learner_ids: learnerIds, list: listKind, opt_out: optOut }).then(function() {
+    s.subsSelected = {};
+    newsletterSubsLoad();
+  }).catch(function(e) {
+    alert('Bulk update failed: ' + (e.message || 'unknown'));
   });
 }
 

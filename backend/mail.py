@@ -34,10 +34,22 @@ def send_mail(
     *,
     reply_to: Optional[str] = None,
     html: Optional[str] = None,
+    list_unsubscribe_url: Optional[str] = None,
 ) -> None:
     """
     Send a plain-text (and optional HTML) email via the local MTA.
     Raises RuntimeError if sendmail is missing or returns non-zero.
+
+    list_unsubscribe_url: pass this only for bulk/subscription mail (the
+    newsletter) -- it's what unsubscribe_link() below already builds.
+    Adds RFC 8058 List-Unsubscribe + List-Unsubscribe-Post headers, which
+    is what lets Gmail/Yahoo/etc. show their own one-click "Unsubscribe"
+    button next to the sender name instead of relying on the reader to
+    find the footer link -- meaningfully better for spam/deliverability
+    scoring than the footer link alone. Leave unset for transactional
+    mail (verification, org match notices, admin one-off messages) --
+    there's no subscription relationship there for a mail client to
+    offer to cancel.
     """
     if not os.path.isfile(_SENDMAIL):
         raise RuntimeError(f"sendmail binary not found at {_SENDMAIL}")
@@ -47,6 +59,12 @@ def send_mail(
     msg["To"]      = to
     msg["Subject"] = subject
     msg["Reply-To"] = reply_to or _REPLY_TO
+    if list_unsubscribe_url:
+        msg["List-Unsubscribe"] = f"<{list_unsubscribe_url}>"
+        # One-Click (RFC 8058) tells the mail client it can POST the
+        # unsubscribe itself with no confirmation page -- the POST route
+        # in auth.py (unsubscribe_newsletter_one_click) is what answers it.
+        msg["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
     msg.set_content(body)
     if html:
         msg.add_alternative(html, subtype="html")
@@ -80,22 +98,33 @@ def send_mail(
 # one anyway.
 # ============================================================
 
-def _unsubscribe_token(learner_id: int, email: str) -> str:
-    raw = f"{learner_id}:{email}:{_UNSUB_SECRET}"
+def _unsubscribe_token(learner_id: int, email: str, kind: str = "newsletter") -> str:
+    # kind differentiates which opt-out flag a link controls (2026-08-29,
+    # weekly-report split) -- "newsletter" is the default and keeps the
+    # exact same hash input as before the split, so every newsletter
+    # unsubscribe link already sent still verifies correctly. Only a
+    # non-default kind (e.g. "weekly_report") gets a distinct hash space.
+    suffix = "" if kind == "newsletter" else f":{kind}"
+    raw = f"{learner_id}:{email}{suffix}:{_UNSUB_SECRET}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-def verify_unsubscribe_token(learner_id: int, email: str, token: str) -> bool:
-    return _unsubscribe_token(learner_id, email) == token
+def verify_unsubscribe_token(learner_id: int, email: str, token: str, kind: str = "newsletter") -> bool:
+    return _unsubscribe_token(learner_id, email, kind) == token
 
 
-def unsubscribe_link(learner_id: int, email: str) -> str:
-    """Full URL for a newsletter's unsubscribe footer. Points at a public,
-    no-auth GET endpoint in auth.py (see verify-email for the precedent of
-    a public token-based mutation reached straight from an email link)."""
+def unsubscribe_link(learner_id: int, email: str, kind: str = "newsletter") -> str:
+    """Full URL for an unsubscribe footer/header. Points at a public,
+    no-auth GET (or, for RFC 8058 one-click, POST) endpoint in auth.py
+    (see verify-email for the precedent of a public token-based mutation
+    reached straight from an email link). kind="weekly_report" for the
+    weekly digest, default "newsletter" for the admin newsletter --
+    determines which LearnerPreferences opt-out flag the link flips."""
+    token = _unsubscribe_token(learner_id, email, kind)
+    kind_param = "" if kind == "newsletter" else f"&kind={kind}"
     return (
         f"{_APP_BASE_URL}/api/auth/unsubscribe"
-        f"?lid={learner_id}&token={_unsubscribe_token(learner_id, email)}"
+        f"?lid={learner_id}&token={token}{kind_param}"
     )
 
 

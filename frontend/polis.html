@@ -323,7 +323,7 @@ function renderDisc(refId, comments, canComment) {
       ? '<button class="reply-btn" onclick="setReply('+refId+','+c.id+',\''+esc(c.display_name||'Learner')+'\')">↩ Reply</button>'
       : '';
     var html = '<div class="comment'+(isReply?' comment-reply':'')+'" id="cm-'+c.id+'">'
-      + '<div class="comment-meta">'+(c.avatar_emoji||'🌊')+' <strong style="color:var(--text2)">'+esc(c.display_name||'Learner')+'</strong> · '+timeAgo(c.created_at)+'</div>'
+      + '<div class="comment-meta">'+(c.phase_icon||'🌊')+' <strong style="color:var(--text2)">'+esc(c.display_name||'Learner')+'</strong> · '+timeAgo(c.created_at)+'</div>'
       + '<div class="comment-body">'+esc(c.body)+'</div>'
       + '<div class="comment-actions">'+upvoteHtml+replyHtml+'</div>'
       + '</div>';
@@ -444,7 +444,7 @@ async function loadProposals() {
         + '<div class="scope '+scopeClass+'" style="margin-bottom:6px">'+((p.scope||'').toUpperCase())+'</div>'
         + '<h4>'+esc(p.title)+'</h4>'
         + (p.description?'<p>'+esc(p.description.slice(0,140))+(p.description.length>140?'…':'')+'</p>':'')
-        + '<div style="font-size:11px;color:var(--text3);margin-top:7px">'+(p.avatar_emoji||'🌊')+' '+esc(p.display_name||'Learner')+'</div>'
+        + '<div style="font-size:11px;color:var(--text3);margin-top:7px">'+(p.phase_icon||'🌊')+' '+esc(p.display_name||'Learner')+'</div>'
         + '</div>'
         + '<div style="text-align:center;flex-shrink:0">'
         + (_scopeAllowed(p.scope)
