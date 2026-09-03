@@ -119,6 +119,7 @@ class Learner(Base):
     sessions:       Mapped[list["Session"]]                    = relationship(back_populates="learner")
     streak:         Mapped[Optional["LearnerStreak"]]          = relationship(back_populates="learner", uselist=False)
     snapshots:      Mapped[list["RadarSnapshot"]]              = relationship(back_populates="learner")
+    weekly_stories: Mapped[list["WeeklyStory"]]                = relationship(back_populates="learner")
 
 
 class LearnerPreferences(Base):
@@ -248,6 +249,22 @@ class RadarSnapshot(Base):
     triggered_by:     Mapped[str]   = mapped_column(String(30), default="session_complete")
     created_at:       Mapped[datetime] = mapped_column(DateTime, default=func.now())
     learner: Mapped["Learner"] = relationship(back_populates="snapshots")
+
+
+class WeeklyStory(Base):
+    # One row per learner per weekly_report.py run — a persisted history of
+    # the "this week's growth" paragraph, kept separate from
+    # learners.learner_profile (My Story's merged/compressed current
+    # snapshot, which has no history of its own). Written for every active
+    # learner regardless of learner_preferences.weekly_report_opt_out —
+    # that flag only gates the email send, not whether progress is tracked.
+    __tablename__ = "weekly_stories"
+    id:         Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
+    learner_id: Mapped[int]      = mapped_column(ForeignKey("learners.id"), nullable=False)
+    week_start: Mapped[date]     = mapped_column(Date, nullable=False)
+    paragraph:  Mapped[str]      = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
+    learner: Mapped["Learner"] = relationship(back_populates="weekly_stories")
 
 
 class Reflection(Base):

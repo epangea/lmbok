@@ -256,6 +256,34 @@ async def get_my_verified_skills(
     ]
 
 
+# ── Weekly Story history, learner's own view ─────────────────────────
+# Added 2026-09-02. Portfolio's "Weekly Story" tab — a reverse-chronological
+# read-only history of the "this week's growth" paragraphs weekly_report.py
+# generates, separate from learner_profile (My Story's Life-CV, which is a
+# merged/compressed current snapshot with no history of its own). Written
+# for every active learner regardless of weekly_report_opt_out, so this
+# list exists even for learners who don't get the email.
+@router.get("/me/weekly-stories")
+async def get_my_weekly_stories(
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    from models import WeeklyStory
+    rows = (await db.execute(
+        select(WeeklyStory)
+        .where(WeeklyStory.learner_id == learner.id)
+        .order_by(WeeklyStory.week_start.desc())
+    )).scalars().all()
+    return [
+        {
+            "week_start": ws.week_start.isoformat(),
+            "paragraph":  ws.paragraph,
+            "created_at": ws.created_at.isoformat() if ws.created_at else None,
+        }
+        for ws in rows
+    ]
+
+
 # ── Prosopon: seed initial skill signal from the 3-question onboarding card ──
 # Added 2026-08-20. Functional replacement for the retired being/becoming/
 # connecting familiarity self-assessment (which used to drive /me/seed-progress

@@ -543,20 +543,22 @@ async function loadProgress() {
   if (!API.isLoggedIn()) return;
   set({progressLoading: true});
   try {
-    const [history, activity, verifiedSkills] = await Promise.all([
+    const [history, activity, verifiedSkills, weeklyStories] = await Promise.all([
       API.get('/sessions/history?limit=30').catch(() => null),
       API.get('/sessions/activity?days=30').catch(() => null),
       API.get('/learners/me/verified-skills').catch(() => null),
+      API.get('/learners/me/weekly-stories').catch(() => null),
     ]);
     set({
       progressHistory:  history  || [],
       progressActivity: activity || [],
       verifiedSkills:   verifiedSkills || [],
+      weeklyStories:    weeklyStories || [],
       progressLoading:  false,
     });
   } catch(e) {
     console.log('Progress load:', e.message);
-    set({progressLoading: false, progressHistory: [], progressActivity: [], verifiedSkills: []});
+    set({progressLoading: false, progressHistory: [], progressActivity: [], verifiedSkills: [], weeklyStories: []});
   }
 }
 
@@ -2639,6 +2641,24 @@ function launchSessionFromSandbox() {
   loadAISession(null);
 }
 
+// Shared by every profile-update call site: reload learner_profile into
+// state, then regenerate Guiding Star from it. Silent, no UI feedback.
+function _reloadProfileAndGuidingStar() {
+  API.get('/learners/me').then(function(me){
+    if (me && me.learner_profile) {
+      S.learnerProfile = me.learner_profile;
+      API.post('/generate/guiding-star', {
+        learner_profile: me.learner_profile,
+      }).then(function(gs){
+        if (gs && gs.guiding_star) {
+          S.guidingStar = gs.guiding_star;
+          try { localStorage.setItem('fl_guiding_star', gs.guiding_star); } catch(e) {}
+        }
+      }).catch(function(){});
+    }
+  }).catch(function(){});
+}
+
 function triggerProfileUpdate() {
   if (!S.sandboxMessages || S.sandboxMessages.length < 2) return;
   var msgs = S.sandboxMessages.slice(); // snapshot
@@ -2647,23 +2667,39 @@ function triggerProfileUpdate() {
     messages:         msgs,
     existing_profile: S.learnerProfile || null,
   }).then(function(res){
-    if (res && res.status === 'ok') {
-      // Reload profile into state silently
-      API.get('/learners/me').then(function(me){
-        if (me && me.learner_profile) {
-          S.learnerProfile = me.learner_profile;
-          // Regenerate Guiding Star from the updated profile
-          API.post('/generate/guiding-star', {
-            learner_profile: me.learner_profile,
-          }).then(function(gs){
-            if (gs && gs.guiding_star) {
-              S.guidingStar = gs.guiding_star;
-              try { localStorage.setItem('fl_guiding_star', gs.guiding_star); } catch(e) {}
-            }
-          }).catch(function(){});
-        }
-      }).catch(function(){});
-    }
+    if (res && res.status === 'ok') _reloadProfileAndGuidingStar();
+  }).catch(function(){});
+}
+
+// Distils a completed session's challenge/reflect answers (and, when the
+// wrong-answer companion reached a conclusion, its verdict summary) into
+// My Story — same distillation pipeline as the sandbox companion, just fed
+// from regular session content instead of a sandbox chat. Without this,
+// My Story only ever grew for learners who opened the sandbox companion,
+// even though session challenge/reflect responses were being collected
+// and saved (to `sessions.challenge_response`/`reflect_response`) the
+// whole time. Fire-and-forget, called synchronously in finishSession()
+// before session state is cleared.
+function triggerSessionStoryUpdate(session, challengeText, reflectText, companionResolved, companionSummary) {
+  var msgs = [];
+  if (session && session.challenge_prompt && challengeText && challengeText.trim()) {
+    msgs.push({role:'assistant', content: session.challenge_prompt});
+    msgs.push({role:'user', content: challengeText.trim()});
+  }
+  if (session && session.reflect_prompt && reflectText && reflectText.trim()) {
+    msgs.push({role:'assistant', content: session.reflect_prompt});
+    msgs.push({role:'user', content: reflectText.trim()});
+  }
+  if (companionResolved && companionSummary) {
+    msgs.push({role:'assistant', content: 'Companion discussion on a session assess question (' + (session && session.title || 'a session') + ')'});
+    msgs.push({role:'user', content: companionSummary});
+  }
+  if (msgs.length < 2) return; // nothing substantive to distil
+  API.post('/generate/profile-update', {
+    messages:         msgs,
+    existing_profile: S.learnerProfile || null,
+  }).then(function(res){
+    if (res && res.status === 'ok') _reloadProfileAndGuidingStar();
   }).catch(function(){});
 }
 
@@ -3514,7 +3550,7 @@ function Portfolio() {
       <!-- Section header -->
       <div style="margin-bottom:20px">
         <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${T('peripatos.my_story')}</h2>
-        <p style="font-size:13px;color:var(--text3);line-height:1.6">What the platform has learned about you through your learning conversations. This grows quietly in the background every time you talk with the companion.</p>
+        <p style="font-size:13px;color:var(--text3);line-height:1.6">What the platform has learned about you through your sessions and companion conversations. This grows quietly in the background every time you complete a session or talk with the companion.</p>
       </div>
 
       <!-- Guiding Star -->
@@ -3550,6 +3586,26 @@ function Portfolio() {
             + '<div><div style="font-size:13px;font-weight:600">' + v.skill_name + '</div>'
             + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + v.org_name + ' · ' + v.listing_title + '</div></div>'
             + '<span style="font-size:11px;font-weight:700;text-transform:capitalize;color:' + lvlColor + '">' + v.level + '</span>'
+            + '</div>';
+        }).join('')}
+      </div>` : ''}
+
+      <!-- Weekly Story — reverse-chronological history of weekly_report.py's
+           "this week's growth" paragraphs (2026-09-02). Bank-statement style:
+           each entry is a persisted snapshot, unlike the Life-CV card above
+           which merges/compresses into one current profile with no history
+           of its own. Only rendered when non-empty; hardcoded English label
+           to match this section's existing Org-Verified Skills convention
+           (not routed through T()). -->
+      ${(S.weeklyStories && S.weeklyStories.length) ? `
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">📜 Weekly Story</div>
+        ${S.weeklyStories.map(function(w) {
+          var d = new Date(w.week_start + 'T00:00:00');
+          var label = isNaN(d) ? w.week_start : d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+          return '<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
+            + '<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Week of ' + label + '</div>'
+            + '<div style="font-size:13px;color:var(--text2);line-height:1.7">' + w.paragraph + '</div>'
             + '</div>';
         }).join('')}
       </div>` : ''}
@@ -4210,6 +4266,10 @@ window.finishSession = function() {
   }
   // Fire-and-forget: distil sandbox conversation into learner profile
   if (S.sandboxMessages && S.sandboxMessages.length >= 2) triggerProfileUpdate();
+  // Fire-and-forget: distil this session's challenge/reflect answers (and
+  // any resolved companion verdict) into My Story too — see
+  // triggerSessionStoryUpdate() for why this was missing before.
+  triggerSessionStoryUpdate(currentSession, S.challengeText, S.reflectText, S.assessCompanionResolved, S.assessCompanionSummary);
   currentSession = null;
   S.sandboxMessages = [];
   S.sandboxOpen = false;

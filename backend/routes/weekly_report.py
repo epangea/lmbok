@@ -26,9 +26,10 @@ from pathlib import Path
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(BACKEND_DIR))
 
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy import text
 from mail import send_mail, unsubscribe_link, append_unsubscribe_footer
+import ai_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("weekly_report")
@@ -92,17 +93,78 @@ def _load_db_url() -> str:
     raise RuntimeError("DATABASE_URL not set — weekly report cannot run")
 
 
+async def _weekly_story_paragraph(session_local, name: str, story_rows) -> str | None:
+    """Freshly distil this week's session challenge/reflect answers (and any
+    resolved companion verdicts) into a short "this week's growth" paragraph
+    for the email. Deliberately NOT persisted to learners.learner_profile —
+    that's My Story's own accumulated distillation (see
+    generate.py::update_learner_profile); this is a one-off summary of just
+    this week, generated fresh each send. Returns None (fail-soft) if there's
+    nothing to say or the AI call fails, so the stats-only email still sends.
+    """
+    if not story_rows:
+        return None
+
+    lines = []
+    for r in story_rows:
+        if r["title"]:
+            lines.append(f"SESSION: {r['title']}")
+        if r["challenge_prompt"] and r["challenge_response"]:
+            lines.append(f"CHALLENGE Q: {r['challenge_prompt']}\nCHALLENGE A: {r['challenge_response']}")
+        if r["reflect_prompt"] and r["reflect_response"]:
+            lines.append(f"REFLECT Q: {r['reflect_prompt']}\nREFLECT A: {r['reflect_response']}")
+        verdict = r["assess_companion_verdict"]
+        if verdict and isinstance(verdict, dict) and verdict.get("summary"):
+            lines.append(f"COMPANION DISCUSSION: {verdict['summary']}")
+    transcript = "\n\n".join(lines).strip()
+    if not transcript:
+        return None
+
+    prompt = f"""You write a short, warm "this week's growth" paragraph for {name}'s weekly learning-progress email, based on what they actually explored, wrote, and discussed this week on the Surfing the Frequencies platform.
+
+THIS WEEK'S SESSION CONTENT:
+{transcript}
+
+Write 2–4 sentences, second person ("you"), grounded in the specific substance above — not generic encouragement, and not a restatement of session titles or stats (those are shown elsewhere in the email). No preamble, no heading, just the paragraph itself."""
+
+    try:
+        async with session_local() as db:
+            ai_resp = await ai_client.ai_complete(
+                "weekly_story",
+                db=db,
+                prompt=prompt,
+                tier="large",
+                response_format="text",
+                max_tokens=220,
+                temperature=0.6,
+            )
+        return ai_resp.content.strip() or None
+    except Exception as exc:
+        log.warning("Weekly story paragraph failed for %s: %s", name, exc)
+        return None
+
+
 async def main() -> None:
     db_url = _load_db_url()
     engine = create_async_engine(db_url, pool_size=5)
+    SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    # Shared by every row written in this run, so a re-run of the same
+    # week upserts instead of duplicating (see UNIQUE(learner_id, week_start)
+    # on weekly_stories).
+    week_start = (datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)).date()
+
     async with engine.begin() as conn:
+        # Deliberately NOT filtered by weekly_report_opt_out — that flag
+        # only gates the email send below; every active learner still gets
+        # their weekly_stories row so opting out of the email doesn't mean
+        # opting out of having your own progress recorded.
         learners = (await conn.execute(text("""
-            SELECT l.id, l.username, l.display_name, l.email
+            SELECT l.id, l.username, l.display_name, l.email,
+                   COALESCE(lp.weekly_report_opt_out, 0) AS opted_out
             FROM learners l
             JOIN learner_streaks ls ON ls.learner_id = l.id
             LEFT JOIN learner_preferences lp ON lp.learner_id = l.id
             WHERE ls.last_activity_date >= NOW() - INTERVAL :days DAY
-              AND (lp.weekly_report_opt_out IS NULL OR lp.weekly_report_opt_out = 0)
         """), {"days": WINDOW_DAYS})).mappings().all()
 
         log.info("Found %d active learners in last %d days", len(learners), WINDOW_DAYS)
@@ -110,8 +172,6 @@ async def main() -> None:
         for row in learners:
             lid = row["id"]
             email = row["email"]
-            if not email:
-                continue
 
             stats = (await conn.execute(text("""
                 SELECT
@@ -140,6 +200,35 @@ async def main() -> None:
             top_arts = ", ".join(r["slug"] for r in art_rows) or "—"
             name = row["display_name"] or row["username"]
 
+            story_rows = (await conn.execute(text("""
+                SELECT s.title, s.challenge_prompt, s.challenge_response,
+                       s.reflect_prompt, s.reflect_response, s.assess_companion_verdict
+                FROM sessions s
+                WHERE s.learner_id = :lid
+                  AND s.status = 'completed'
+                  AND s.created_at >= NOW() - INTERVAL :days DAY
+                  AND (
+                        (s.challenge_response IS NOT NULL AND s.challenge_response != '')
+                     OR (s.reflect_response   IS NOT NULL AND s.reflect_response   != '')
+                     OR s.assess_companion_verdict IS NOT NULL
+                  )
+                ORDER BY s.created_at ASC
+            """), {"lid": lid, "days": WINDOW_DAYS})).mappings().all()
+
+            story_paragraph = await _weekly_story_paragraph(SessionLocal, name, story_rows)
+
+            if story_paragraph:
+                await conn.execute(text("""
+                    INSERT INTO weekly_stories (learner_id, week_start, paragraph)
+                    VALUES (:lid, :week_start, :paragraph)
+                    ON DUPLICATE KEY UPDATE paragraph = VALUES(paragraph)
+                """), {"lid": lid, "week_start": week_start, "paragraph": story_paragraph})
+
+            # Email send is gated on opt-out + a valid address; the
+            # weekly_stories row above was already written regardless.
+            if row["opted_out"] or not email:
+                continue
+
             subject = f"Your Weekly Waves, {name}"
             body = (
                 f"Hi {name},\n\n"
@@ -149,7 +238,8 @@ async def main() -> None:
                 f"  XP earned        : {int(stats['total_xp'] or 0)}\n"
                 f"  Minutes learned  : {int(stats['total_minutes'] or 0)}\n"
                 f"  Favorite arts    : {top_arts}\n\n"
-                "Keep surfing the frequencies!\n\n"
+                + (f"This week's growth:\n{story_paragraph}\n\n" if story_paragraph else "")
+                + "Keep surfing the frequencies!\n\n"
                 "Building Ourselves, in Our House!\n"
             )
 
