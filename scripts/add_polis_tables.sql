@@ -18,6 +18,12 @@ CREATE TABLE IF NOT EXISTS referenda (
   created_at   DATETIME DEFAULT NOW()
 );
 
+-- blueprint_pillar was added directly on the droplet at some point and
+-- was never captured in this file until 2026-09-05 -- confirmed via
+-- SHOW CREATE TABLE against the live DB. Kept here so this file is an
+-- accurate as-built record; IF NOT EXISTS makes it safe to re-run.
+ALTER TABLE referenda ADD COLUMN IF NOT EXISTS blueprint_pillar VARCHAR(100) DEFAULT NULL AFTER status;
+
 -- Votes on referenda (one per learner per referendum)
 CREATE TABLE IF NOT EXISTS referendum_votes (
   id             INT PRIMARY KEY AUTO_INCREMENT,

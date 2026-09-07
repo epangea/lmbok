@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, text
 
-from models import Learner, LearnerStreak, DevPhase, SessionConfig
+from models import Learner, DevPhase, SessionConfig
 
 
 # ── Session config ───────────────────────────────────────────
@@ -58,77 +58,80 @@ async def compute_current_phase(learner: Learner, db: AsyncSession) -> DevPhase 
 
 
 # ── Avatar stage ─────────────────────────────────────────────
+# 2026-09-05: replaced the old (xp, arts_touched, domain-breadth) gate
+# with a pure Art-level bottleneck gate, per Charbel's direction — the
+# 15 Arts are the operative pedagogical unit (PHILOSOPHY.md); Being/
+# Becoming/Connecting are an organizing scheme over them, not a
+# separate breadth requirement. XP and "touched" counts are gone;
+# a stage now requires EVERY one of the 15 Arts to be at or above that
+# stage's score threshold. The learner's weakest art is the bottleneck.
 # Mirrors computeAvatarStage() in app.js exactly.
 # Any change here must be reflected there too (and vice versa).
 
 AVATAR_STAGES = [
-    # (min_xp, min_arts, min_domains, key, icon, label)
-    (500, 12, 3, 'ecosystem', '🌍', 'Ecosystem'),
-    (200,  9, 3, 'forest',    '🌲', 'Forest'),
-    (100,  6, 2, 'grove',     '🌳', 'Grove'),
-    ( 50,  4, 0, 'sapling',   '🌿', 'Sapling'),
-    ( 18,  2, 0, 'sprout',    '🌱', 'Sprout'),
-    (  0,  0, 0, 'seed',      '🫘', 'Seed'),
+    # (min_art_score, key, icon, label) — threshold every one of the
+    # 15 Arts must reach. Front-loaded: cheap early, expensive at mastery.
+    (1.00, 'ecosystem', '🌍', 'Ecosystem'),
+    (0.65, 'forest',    '🌲', 'Forest'),
+    (0.40, 'grove',     '🌳', 'Grove'),
+    (0.20, 'sapling',   '🌿', 'Sapling'),
+    (0.10, 'sprout',    '🌱', 'Sprout'),
+    (0.00, 'seed',      '🫘', 'Seed'),
 ]
 
-BEING_ARTS      = {'move', 'feel', 'eat', 'listen', 'notice', 'receive', 'live'}
-BECOMING_ARTS   = {'understand', 'grow', 'build', 'express'}
-CONNECTING_ARTS = {'give', 'collaborate', 'consume', 'respect'}
+BEING_ARTS      = {'move', 'eat', 'feel', 'notice', 'express'}
+BECOMING_ARTS   = {'live', 'listen', 'give', 'receive', 'collaborate'}
+CONNECTING_ARTS = {'understand', 'respect', 'build', 'grow', 'consume'}
+ALL_ARTS        = BEING_ARTS | BECOMING_ARTS | CONNECTING_ARTS  # 15 arts
 
 
-def compute_avatar_stage(xp: int, arts_touched: list[str]) -> dict:
+def compute_avatar_stage(art_scores: dict[str, float]) -> dict:
     """
-    Compute Avatar stage from XP and list of art slugs with score > 0.05.
-    Returns a dict with key, icon, label, level (1–6), xp, arts_count,
-    domains, and can_access_polis.
+    Compute Avatar stage from per-art scores (0.0-1.0, keyed by art slug).
+    A stage requires EVERY one of the 15 Arts to be at or above that
+    stage's threshold -- an art missing from art_scores counts as 0.0.
+    Returns a dict with key, icon, label, level (1-6), min_art_score,
+    next_stage (None once at Ecosystem), and can_access_polis.
     """
-    art_set = set(arts_touched)
-    domains = sum([
-        1 if art_set & BEING_ARTS      else 0,
-        1 if art_set & BECOMING_ARTS   else 0,
-        1 if art_set & CONNECTING_ARTS else 0,
-    ])
-    arts_count = len(art_set)
+    min_score = min((art_scores.get(art, 0.0) for art in ALL_ARTS), default=0.0)
 
-    for level_idx, (min_xp, min_arts, min_domains, key, icon, label) in enumerate(AVATAR_STAGES):
-        if xp >= min_xp and arts_count >= min_arts and domains >= min_domains:
+    for level_idx, (min_level, key, icon, label) in enumerate(AVATAR_STAGES):
+        if min_score >= min_level:
             level = 6 - level_idx  # Ecosystem=6, Seed=1
+            next_row = AVATAR_STAGES[level_idx - 1] if level_idx > 0 else None
             return {
                 'key':              key,
                 'icon':             icon,
                 'label':            label,
                 'level':            level,
-                'xp':               xp,
-                'arts_count':       arts_count,
-                'domains':          domains,
+                'min_art_score':    round(min_score, 3),
+                'next_stage':       {
+                    'label':         next_row[3],
+                    'icon':          next_row[2],
+                    'min_art_score': next_row[0],
+                } if next_row else None,
                 'can_access_polis': key in ('grove', 'forest', 'ecosystem'),
             }
 
-    # Fallback — Seed
+    # Unreachable (min_level=0.00 always matches) -- kept for safety.
     return {
         'key': 'seed', 'icon': '🫘', 'label': 'Seed', 'level': 1,
-        'xp': xp, 'arts_count': arts_count, 'domains': domains,
+        'min_art_score': round(min_score, 3), 'next_stage': None,
         'can_access_polis': False,
     }
 
 
 async def get_learner_stage(learner: Learner, db: AsyncSession) -> dict:
     """
-    Fetch XP + arts progress from DB and return computed avatar stage.
+    Fetch per-art scores from DB and return computed avatar stage.
     Shared by polis.py and matching.py.
     """
-    streak_q = await db.execute(
-        select(LearnerStreak).where(LearnerStreak.learner_id == learner.id)
-    )
-    streak = streak_q.scalar_one_or_none()
-    xp = streak.total_xp if streak else 0
-
     arts_q = await db.execute(text("""
-        SELECT a.slug
+        SELECT a.slug, lap.score
         FROM learner_art_progress lap
         JOIN arts a ON a.id = lap.art_id
-        WHERE lap.learner_id = :lid AND lap.score > 0.05
+        WHERE lap.learner_id = :lid
     """), {"lid": learner.id})
-    arts_touched = [row[0] for row in arts_q.fetchall()]
+    art_scores = {row[0]: float(row[1]) for row in arts_q.fetchall()}
 
-    return compute_avatar_stage(xp, arts_touched)
+    return compute_avatar_stage(art_scores)

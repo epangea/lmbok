@@ -171,14 +171,16 @@ async function checkGate() {
 function showParticipationNudge(access) {
   var icon       = access.icon       || '🫘';
   var stage      = access.label      || 'Seed';
-  var xpNeeded   = Math.max(0, 100 - (access.xp || 0));
-  var artsNeeded = Math.max(0, 6   - (access.arts_count || 0));
-  var domNeeded  = (access.domains || 0) < 2;
-  var gaps = [];
-  if (xpNeeded  > 0) gaps.push(xpNeeded + ' XP');
-  if (artsNeeded > 0) gaps.push(artsNeeded + ' more arts');
-  if (domNeeded)      gaps.push('2 domains');
-  var gapText = gaps.length ? ' (' + gaps.join(', ') + ' still needed)' : '';
+  // Gate is now per-Art, not XP/breadth: every one of the 15 Arts must
+  // reach a score threshold, so the gap is how far the weakest Art is
+  // from the next stage's threshold.
+  var gapText = '';
+  if (access.next_stage) {
+    var weakestPct = Math.round((access.min_art_score || 0) * 100);
+    var neededPct  = Math.round(access.next_stage.min_art_score * 100);
+    gapText = ' (your weakest Art is at ' + weakestPct + '% — every Art needs '
+      + neededPct + '% to reach ' + access.next_stage.icon + ' ' + access.next_stage.label + ')';
+  }
 
   var nudge = document.createElement('div');
   nudge.id  = 'participation-nudge';
@@ -477,13 +479,17 @@ function renderProposeTab() {
     var a = _accessData || {};
     var icon       = a.icon || '🫘';
     var stage      = a.label || 'Seed';
-    var xpNeeded   = Math.max(0, 100 - (a.xp || 0));
-    var artsNeeded = Math.max(0, 6 - (a.arts_count || 0));
-    var domNeeded  = (a.domains || 0) < 2;
+    // Gate is per-Art: every one of the 15 Arts must reach 0.40 to reach
+    // Grove. 0.40 mirrors the 'grove' threshold in AVATAR_STAGES
+    // (utils.py) / computeAvatarStage (app.js) — keep in sync.
+    var GROVE_THRESHOLD = 0.40;
+    var weakestPct = Math.round((a.min_art_score || 0) * 100);
     var gaps = [];
-    if (xpNeeded  > 0) gaps.push('<strong style="color:var(--wave)">' + xpNeeded + ' XP</strong>');
-    if (artsNeeded > 0) gaps.push('<strong style="color:var(--wave)">' + artsNeeded + ' more arts</strong>');
-    if (domNeeded)      gaps.push('<strong style="color:var(--wave)">2 domains</strong> (Being · Becoming · Connecting)');
+    if ((a.min_art_score || 0) < GROVE_THRESHOLD) {
+      gaps.push('<strong style="color:var(--wave)">Your weakest Art is at ' + weakestPct
+        + '%</strong> — every one of the 15 Arts needs to reach '
+        + Math.round(GROVE_THRESHOLD * 100) + '%');
+    }
 
     body.innerHTML =
       '<div class="card" style="text-align:center;padding:32px 24px">'

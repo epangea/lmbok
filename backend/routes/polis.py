@@ -45,7 +45,7 @@ from pydantic import BaseModel
 from db import get_db
 from models import Learner
 from routes.auth import get_current_learner
-from utils import compute_avatar_stage, get_learner_stage
+from utils import AVATAR_STAGES, get_learner_stage
 
 router = APIRouter()
 
@@ -82,10 +82,12 @@ async def require_polis_access(
     """Gate: Grove+ only. Returns PolisAccess so callers get stage for free."""
     stage = await get_learner_stage(learner, db)
     if not stage["can_access_polis"]:
+        grove_threshold = next(min_lvl for min_lvl, key, _, _ in AVATAR_STAGES if key == "grove")
         raise HTTPException(
             403,
             f"The Polis opens at Grove stage ({stage['icon']} {stage['label']} -> \U0001f333 Grove). "
-            f"Keep surfing — you need 100 XP across 6 arts in 2 domains."
+            f"Keep surfing — every one of the 15 Arts needs to reach a score of "
+            f"{grove_threshold:.2f} (your weakest art is currently at {stage['min_art_score']:.2f})."
         )
     return PolisAccess(learner=learner, stage=stage)
 

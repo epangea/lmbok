@@ -28,7 +28,7 @@
 // "different" on its next periodic check, which is what actually
 // triggers the update flow (see frontend/app.js's registerServiceWorker
 // section for the "update available" prompt this pairs with).
-const CACHE_NAME = 'lmbok-shell-2423369590';
+const CACHE_NAME = 'lmbok-shell-1347895026';
 
 // Precached at install. Kept intentionally small (the learner-facing
 // shell only) rather than every page on the site -- org.html/admin.html/
@@ -39,7 +39,7 @@ const PRECACHE_URLS = [
   '/',
   '/app.html',
   '/app.css?v=902190621',
-  '/app.js?v=4114616670',
+  '/app.js?v=2579383878',
   '/manifest.json',
   '/favicon.ico',
   '/icons/icon-192.png',

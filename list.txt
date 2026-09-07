@@ -1,0 +1,15 @@
+scripts/seed_skills.py
+scripts/seed_arts_skills.py
+scripts/seed_leckos.py
+scripts/migrate_domains_p25.sql
+scripts/migrate_domains_p25final.sql
+scripts/migrate_bio_versions.sql
+scripts/migrate_bio_versionsV2.sql
+scripts/migrate_disc_upvotes.sql
+scripts/fix_zh_false_positives.sql
+scripts/fix_zh_false_positives_v5.sql
+scripts/fix_en_mistagged_as_vi.sql
+scripts/diag_hex_session_languages.sql
+scripts/redetect_session_languages.sql
+scripts/redetect_session_languages_v3.sql
+scripts/polis_migrate.sql

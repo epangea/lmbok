@@ -1355,35 +1355,38 @@ window.showProfileMenu = function(e) {
 // Evolutionary path: Seed→Sprout→Sapling→Grove→Forest→Ecosystem
 // Based on XP + breadth across Being/Becoming/Connecting
 // ══════════════════════════════════════════════════
-function computeAvatarStage(xp, artScores) {
-  // Breadth: how many arts have score > 0.05
+// 2026-09-05: replaced the old (xp, touched-count, domain-breadth) gate
+// with a pure Art-level bottleneck gate — every one of the 15 Arts must
+// reach the threshold; the learner's weakest art is what determines the
+// stage. XP and "how many arts touched" no longer matter.
+// Mirrors compute_avatar_stage() in utils.py exactly.
+function computeAvatarStage(artScores) {
   var arts = artScores || {};
-  var touched = Object.values(arts).filter(function(v){ return v > 0.05; }).length;
-  // Domain breadth: at least one art touched in each of the three domains
   var beingArts    = ['move','eat','feel','notice','express'];
   var becomingArts = ['live','listen','give','receive','collaborate'];
   var connectArts  = ['understand','respect','build','grow','consume'];
-  var hasBeing    = beingArts.some(function(a){ return (arts[a]||0) > 0.05; });
-  var hasBecoming = becomingArts.some(function(a){ return (arts[a]||0) > 0.05; });
-  var hasConnect  = connectArts.some(function(a){ return (arts[a]||0) > 0.05; });
-  var domainsBreadth = (hasBeing?1:0) + (hasBecoming?1:0) + (hasConnect?1:0);
+  var allArts = beingArts.concat(becomingArts, connectArts);
+  var minScore = allArts.reduce(function(min, a){
+    var v = arts[a] || 0;
+    return v < min ? v : min;
+  }, 1.0);
 
-  if (xp >= 500 && touched >= 12 && domainsBreadth === 3) return { stage:'Ecosystem', icon:'🌍', level:6,
+  if (minScore >= 1.00) return { stage:'Ecosystem', icon:'🌍', level:6,
     desc:'A living system in full expression — Being, Becoming and Connecting flow as one.',
     polis:'Global Polis — planetary proposals and cross-bioregion dialogue' };
-  if (xp >= 200 && touched >= 9  && domainsBreadth === 3) return { stage:'Forest',    icon:'🌲', level:5,
+  if (minScore >= 0.65) return { stage:'Forest',    icon:'🌲', level:5,
     desc:'Deep roots, wide canopy — your growth shelters others and reaches across regions.',
     polis:'Regional Polis — watershed and climate-zone level discussion' };
-  if (xp >= 100 && touched >= 6  && domainsBreadth >= 2) return { stage:'Grove',      icon:'🌳', level:4,
+  if (minScore >= 0.40) return { stage:'Grove',      icon:'🌳', level:4,
     desc:'Interconnected and thriving — you support and are supported by your learning community.',
     polis:'Community Polis — local bioregion discussion and proposals' };
-  if (xp >= 50  && touched >= 4)                         return { stage:'Sapling',    icon:'🌿', level:3,
+  if (minScore >= 0.20) return { stage:'Sapling',    icon:'🌿', level:3,
     desc:'Growing steadily toward the light — your roots are finding their depth.',
     polis:'Polis: view only — keep growing to unlock discussion' };
-  if (xp >= 18  && touched >= 2)                         return { stage:'Sprout',     icon:'🌱', level:2,
+  if (minScore >= 0.10) return { stage:'Sprout',     icon:'🌱', level:2,
     desc:'Breaking through — the first signs of a pattern are emerging.',
     polis:'Polis: view only — keep growing to unlock discussion' };
-  return                                                 { stage:'Seed',        icon:'🫘', level:1,
+  return                { stage:'Seed',        icon:'🫘', level:1,
     desc:'Everything begins here — potential in its purest form.',
     polis:'Polis: view only — keep growing to unlock discussion' };
 }
@@ -1740,8 +1743,8 @@ function Dashboard() {
     .sort(function(a,b){ return (S.artScores[b]||0)-(S.artScores[a]||0); })
     .slice(0,5);
 
-  // Avatar stage — computed from XP + art breadth
-  const _avatarStage = computeAvatarStage(S.xp || 0, S.artScores || {});
+  // Avatar stage — computed from the weakest of the 15 Arts
+  const _avatarStage = computeAvatarStage(S.artScores || {});
 
   return `
   <div class="page">
@@ -2502,7 +2505,7 @@ function Session() {
 // ══════════════════════════════════════════════════
 
 function buildSandboxContext(phaseLabel) {
-  var _av = computeAvatarStage(S.xp || 0, S.artScores || {});
+  var _av = computeAvatarStage(S.artScores || {});
   var _bs = _bioregionState;
   var ctx = {
     phase_label:     phaseLabel,
@@ -2894,7 +2897,7 @@ window.sendPortfolioMessage = async function sendPortfolioMessage() {
         phase_label:     'Portfolio',
         learner_name:    S.learner ? S.learner.display_name : null,
         learner_profile: S.learnerProfile || null,
-        avatar_stage:    (function(){ var av = computeAvatarStage(S.xp||0, S.artScores||{}); return av ? av.stage : null; })(),
+        avatar_stage:    (function(){ var av = computeAvatarStage(S.artScores||{}); return av ? av.stage : null; })(),
         bioregion_name:  (_bioregionState && _bioregionState.status === 'done' && _bioregionState.profile) ? _bioregionState.profile.name : null,
       },
     });
@@ -3679,26 +3682,15 @@ window.doRegister = async function() {
   }
 };
 
-// ── Civic readiness check for Polis access ───────────────────
-// Learner must show minimum engagement across civic arts:
-// Listen, Understand, Respect, Collaborate — at least level 1 each
-// OR have completed at least 5 sessions total (grace period for new learners)
-window.canAccessPolis = function() {
-  if (!API.isLoggedIn()) return false;
-  if ((S.streak || 0) >= 5) return true;  // 5+ day streak = good faith
-  if ((S.xp || 0) >= 50)   return true;  // 50+ XP = meaningful engagement
-  return false;  // default: not yet
-};
-
-window.goToPolis = function() {
-  if (window.canAccessPolis()) {
-    window.location.href = '/polis';
-  } else {
-    // Show a friendly explanation rather than a hard block
-    set({showPolisGate: true});
-    setTimeout(function() { set({showPolisGate: false}); }, 4000);
-  }
-};
+// 2026-09-05: removed a defunct streak/XP "civic readiness" heuristic
+// that predated Grove+ and had drifted completely out of sync with it
+// (this was also the source of a stale PROJECT.md description of the
+// Polis gate). It was additionally shadowed at runtime by a second
+// window.goToPolis definition further below, so it was already dead
+// code. Reading the Polis is open to any logged-in learner (see
+// polis.html's checkGate()); the destination page itself shows a
+// participation nudge for learners below Grove rather than gating
+// navigation client-side. See the surviving window.goToPolis below.
 
 window.goHome = function() { set({view:'dashboard'}); };
 window.initBioregion = initBioregion;
@@ -4109,18 +4101,12 @@ window.savePreferences = async function() {
   }
 };
 // ── LMBoK info popup ─────────────────────────────────────────
-window.goToPolis = async function() {
-  try {
-    var streak = await API.get('/learners/me/streak');
-    var xp   = streak && streak.total_xp      ? streak.total_xp      : 0;
-    var days = streak && streak.current_streak ? streak.current_streak : 0;
-    if (xp >= 50 || days >= 5) {
-      window.location.href = '/polis';
-    } else {
-      set({showPolisGate: true});
-      setTimeout(function(){ set({showPolisGate:false}); }, 5000);
-    }
-  } catch(e) { window.location.href = '/polis'; }
+// Reading the Polis is open to any logged-in learner — no client-side
+// gate needed here. The destination page (polis.html's checkGate())
+// is the single source of truth for participation status (Grove+),
+// via the real backend check at /polis/my-access.
+window.goToPolis = function() {
+  window.location.href = '/polis';
 };
 window.showLMBoKInfo = function() {
   var old = document.getElementById('lmbok-modal');

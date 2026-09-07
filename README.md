@@ -9,7 +9,7 @@ Live at [build.onehouse.top](https://build.onehouse.top).
 ## Two projects, one vision
 
 **Learning & Growth — LMBoK (ePangea)**
-Built around **15 human arts**, **48 skills across 8 practical domains**, and **6 developmental phases**, shaped by the learner's own bioregion. Two features carry this beyond individual study:
+Built around **15 human arts**, **48 skills across 8 practical domains**, and **13 developmental phases**, shaped by the learner's own bioregion. Two features carry this beyond individual study:
 1. A **community matching tool** connecting real local challenges with learner progress — putting theory into practice, with real impact and meaning.
 2. **Polis** — an Avaaz-like referenda, discussion, and voting section that can shape One 'Ouse's Blueprint.
 
@@ -28,14 +28,14 @@ FreqLearn is built on **["The Arts to Be Human"](https://docs.google.com/documen
 
 - **15 universal arts**, grouped under three domains: *Being*, *Becoming*, and *Connecting*
 - **48 skills, grouped into 8 Mouseion domains (6 skills each)**
-- **6 developmental phases**: prenascent → nascent → child → adolescent → adult → elder
+- **13 developmental phases** (elemental restructure, 2026-08-24): Light → Sandy/Moist/Humus Soil → Low/Medium/High Fire → Low/High Wind → Water → Metal → Stone → Wood, spanning unborn through 81+
 
 Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-reliance, and civic agency. The goal isn't credentials — it's a self-directed, AI-assisted path through your own development, at your own pace, in your own language.
 
 ## How it works
 
 - Learners move through a **Socratic AI companion** (Warmup → Explore → Challenge → Reflect → Assess) across each art
-- Progress is tracked through **avatar stages** (Seed → Sprout → Sapling → Grove → Forest → Ecosystem) based on XP and breadth of arts explored — no leaderboards, no streaks (this is intentional)
+- Progress is tracked through **avatar stages** (Seed → Sprout → Sapling → Grove → Forest → Ecosystem) based on the learner's **weakest** of the 15 Arts — every Art must clear a stage's score threshold, so breadth/roundedness is the bottleneck, not volume in a favorite Art. No XP thresholds, no leaderboards, no streaks (this is intentional)
 - Reaching **Grove** stage or higher unlocks **Polis**, the civic participation layer described above (referenda, proposals, threaded discussion), scoped by community, regional, or global reach
 - **Orgs / Ekklesia** — organization accounts post real local challenges; learner progress is matched against them
 - A **bioregion** feature roots each learner's experience in the actual ecological place they live, not a nation-state abstraction

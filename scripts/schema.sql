@@ -407,5 +407,13 @@ INSERT INTO arts (group_id, name, slug, tagline, sort_order) VALUES
 (3, 'Consume',     'consume',     'Water, resource and energy stewardship',                      15);
 
 -- ════════════════════════════════════════════════════════════
--- Done. Run seed_skills.py next to populate skills → arts mapping.
+-- Done seeding base tables. NOTE (2026-09-05): this schema does NOT
+-- include the Polis tables (referenda/proposals/polis_discussions/etc)
+-- or the current 48-skill Mouseion set on its own -- those came later
+-- via scripts/add_polis_tables.sql (confirmed live -- polis_migrate.sql
+-- was a competing draft that never ran and has been deleted) and the
+-- dated migrations in this folder. There is currently no single
+-- reproducible fresh-install path from just this file; treat scripts/
+-- as a historical ledger to replay in date order, not a one-command
+-- bootstrap.
 -- ════════════════════════════════════════════════════════════
