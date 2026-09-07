@@ -335,7 +335,6 @@ const S = {
   stoaSaving:   false,
   stoaSaved:    false,
   stoaError:    null,
-  showPolisGate: false,
   sessionError: null,
   authError: '',
   authLoading: false,
@@ -769,16 +768,6 @@ function AuthPage() {
     <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--text3)">
       By continuing you agree to our <a href="/privacy.html" target="_blank" style="color:var(--text2)">${T('common.privacy_note')}</a>.
     </div>
-    ${S.showPolisGate ? `
-    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-      background:var(--bg3);border:1px solid var(--polis,#7B5EA7);border-radius:var(--r);
-      padding:16px 24px;max-width:400px;text-align:center;z-index:200;
-      box-shadow:0 8px 32px rgba(0,0,0,0.4)">
-      <div style="font-family:var(--font-display);font-weight:700;margin-bottom:6px">${T('polis.opens_practice')}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        ${T('polis.unlock_desc')}
-      </div>
-    </div>` : ''}
   </div>`;
 }
 
@@ -1089,8 +1078,6 @@ const LANG = {  // Only English ships inline; other languages load
     'peripatos.tap_save_hint':'and tap <strong style="color:var(--text2)">{save}</strong> to journal it here.',
     'peripatos.the_companion':'The Companion',
     'peripatos.title_full':'The Peripatos',
-    'polis.opens_practice':'The Polis opens with practice',
-    'polis.unlock_desc':'Complete 5 learning days or earn 50 XP to unlock civic participation. The Polis works best when its members have practiced listening, understanding and respect.',
     'prefs.avatar':'Avatar',
     'prefs.birth_year':'Birth year',
     'prefs.expecting_label':'Expecting parent (Little human in the making)',
@@ -1941,16 +1928,6 @@ function Dashboard() {
       </div>
 
     </div>
-    ${S.showPolisGate ? `
-    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-      background:var(--bg3);border:1px solid var(--polis,#7B5EA7);border-radius:var(--r);
-      padding:16px 24px;max-width:400px;text-align:center;z-index:200;
-      box-shadow:0 8px 32px rgba(0,0,0,0.4)">
-      <div style="font-family:var(--font-display);font-weight:700;margin-bottom:6px">${T('polis.opens_practice')}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        ${T('polis.unlock_desc')}
-      </div>
-    </div>` : ''}
   </div>`;
 }
 
@@ -2485,16 +2462,6 @@ function Session() {
       <button class="btn btn-wave" ${p===4?'style="visibility:hidden"':''}
         onclick="stopSpeaking();set({phase:${Math.min(4,p+1)},answered:false})">Next →</button>
     </div>
-    ${S.showPolisGate ? `
-    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-      background:var(--bg3);border:1px solid var(--polis,#7B5EA7);border-radius:var(--r);
-      padding:16px 24px;max-width:400px;text-align:center;z-index:200;
-      box-shadow:0 8px 32px rgba(0,0,0,0.4)">
-      <div style="font-family:var(--font-display);font-weight:700;margin-bottom:6px">${T('polis.opens_practice')}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        ${T('polis.unlock_desc')}
-      </div>
-    </div>` : ''}
   </div>`;
 }
 
@@ -3088,16 +3055,6 @@ function Mouseion() {
           +'</div>';
       }).join('')}
     </div>
-    ${S.showPolisGate ? `
-    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-      background:var(--bg3);border:1px solid var(--polis,#7B5EA7);border-radius:var(--r);
-      padding:16px 24px;max-width:400px;text-align:center;z-index:200;
-      box-shadow:0 8px 32px rgba(0,0,0,0.4)">
-      <div style="font-family:var(--font-display);font-weight:700;margin-bottom:6px">${T('polis.opens_practice')}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        ${T('polis.unlock_desc')}
-      </div>
-    </div>` : ''}
   </div>`;
 }
 
@@ -3258,17 +3215,6 @@ function Stoa() {
       </div>
     </div>`}
     `}
-
-    ${S.showPolisGate ? `
-    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);
-      background:var(--bg3);border:1px solid var(--polis,#7B5EA7);border-radius:var(--r);
-      padding:16px 24px;max-width:400px;text-align:center;z-index:200;
-      box-shadow:0 8px 32px rgba(0,0,0,0.4)">
-      <div style="font-family:var(--font-display);font-weight:700;margin-bottom:6px">${T('polis.opens_practice')}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.6">
-        Complete 5 learning days or earn 50 XP to unlock civic participation.
-      </div>
-    </div>` : ''}
   </div>`;
 }
 

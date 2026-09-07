@@ -75,6 +75,12 @@ BACKEND_DIR="${APP_ROOT}/backend"
 ENV_FILE="${BACKEND_DIR}/.env"
 API_BASE="${API_BASE:-https://build.onehouse.top}"
 
+# /api/generate/session can fall through ai_client.py's full Groq (30s)
+# -> Ollama (120s) -> library chain in one request. 150s + a buffer,
+# not a guess -- see the `call()` comment below for why the default
+# 10s tripped this under normal latency (2026-09-07).
+AI_GEN_MAX_TIME=160
+
 if [ ! -f "$ENV_FILE" ]; then
   echo "ERROR: $ENV_FILE not found"
   exit 1
@@ -146,10 +152,17 @@ note() { echo "NOTE  $1"; }
 warn() { echo "WARN  $1"; }
 
 # curl wrapper: sets HTTP_CODE + HTTP_BODY globals.
-# call METHOD URL [JAR] [CSRF] [JSON_DATA]
+# call METHOD URL [JAR] [CSRF] [JSON_DATA] [MAX_TIME]
+# MAX_TIME defaults to 10s -- fine for ordinary CRUD, where a tight
+# timeout is a useful hang-detector. AI-generation calls need it raised
+# explicitly (see PART_E_AI_MAX_TIME below) -- ai_client.py's own
+# per-provider httpx timeouts are 30s (Groq/Gemini) and 120s (Ollama),
+# and /api/generate/session can fall through Groq -> Ollama -> library
+# in one request, so 10s was tripping under completely normal latency,
+# not just real outages (2026-09-07).
 call() {
-  local method="$1" url="$2" jar="${3:-}" csrf="${4:-}" data="${5:-}"
-  local args=(-s -X "$method" "$url" -w '\n%{http_code}' --max-time 10 -H "Content-Type: application/json")
+  local method="$1" url="$2" jar="${3:-}" csrf="${4:-}" data="${5:-}" max_time="${6:-10}"
+  local args=(-s -X "$method" "$url" -w '\n%{http_code}' --max-time "$max_time" -H "Content-Type: application/json")
   [ -n "$jar" ] && args+=(-b "$jar" -c "$jar")
   [ -n "$csrf" ] && args+=(-H "X-CSRF-Token: $csrf")
   [ -n "$data" ] && args+=(-d "$data")
@@ -697,7 +710,7 @@ BREAKER_BEFORE=$(echo "$HTTP_BODY" | json_get "library_mode")
 note "session breaker library_mode=${BREAKER_BEFORE} before the call"
 
 call POST "${API_BASE}/api/generate/session" "$LJAR" "$LCSRF" \
-  '{"art_slug":"move","phase_slug":"adult","language":"en"}'
+  '{"art_slug":"move","phase_slug":"adult","language":"en"}' "$AI_GEN_MAX_TIME"
 pass "POST /api/generate/session" "$HTTP_CODE" "200"
 
 if [ "$HTTP_CODE" = "200" ]; then
@@ -809,7 +822,7 @@ if [ -z "$P6_SKILL_ID" ]; then
   warn "could not resolve a real skill_id for art 'move' (DB CLI missing or no arts_skills row) -- skipping P6 skill-tier check"
 else
   call POST "${API_BASE}/api/generate/session" "$LJAR" "$LCSRF" \
-    "{\"art_slug\":\"move\",\"phase_slug\":\"adult\",\"language\":\"en\",\"skill_id\":${P6_SKILL_ID}}"
+    "{\"art_slug\":\"move\",\"phase_slug\":\"adult\",\"language\":\"en\",\"skill_id\":${P6_SKILL_ID}}" "$AI_GEN_MAX_TIME"
   pass "POST /api/generate/session with skill_id=${P6_SKILL_ID}" "$HTTP_CODE" "200"
 
   if [ "$HTTP_CODE" = "200" ]; then
