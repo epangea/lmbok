@@ -2703,8 +2703,11 @@ function promptMapToggle(i) {
               'receive','collaborate','understand','respect','build','grow','consume'];
   var artLabels = ['Move','Eat','Feel','Notice','Express','Live','Listen','Give',
                    'Receive','Collaborate','Understand','Respect','Build','Grow','Consume'];
-  var phases    = ['prenascent','nascent','child','adolescent','adult','elder'];
-  var phaseLabels = ['Prenascent','Nascent','Child','Adolescent','Adult','Elder'];
+  // 2026-10-14: was the retired 6-phase list ('prenascent'...'elder'), which
+  // matched none of the slugs /admin/coverage returns -> every cell read 0.
+  // Mirrors dev_phases (sort_order); keep in sync if phases ever change.
+  var phases    = ['light','sandy-soil','moist-soil','humus-soil','low-fire','medium-fire','high-fire','low-wind','high-wind','water','metal','stone','wood'];
+  var phaseLabels = ['Light','Sandy Soil','Moist Soil','Humus Soil','Low Fire','Medium Fire','High Fire','Low Wind','High Wind','Water','Metal','Stone','Wood'];
 
   window.renderCoverageMatrix = function(coverage) {
     if (!coverage) {

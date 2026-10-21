@@ -47,6 +47,8 @@ DB = dict(
 GROQ_KEY   = os.getenv("GROQ_API_KEY", "")
 GROQ_URL   = "https://api.groq.com/openai/v1/chat/completions"
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://127.0.0.1:11434")
+GEMINI_KEY = os.getenv("GEMINI_API_KEY", "")
+GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
 
 # Emergency fallback only -- real values always come from platform_settings
 # (ai_provider, ai_model_groq_large, ai_model_ollama_large), read once at
@@ -55,8 +57,34 @@ _SETTINGS_DEFAULTS = {
     "ai_provider":         "groq",
     "ai_model_groq_large":   "openai/gpt-oss-120b",
     "ai_model_ollama_large": "llama3.1:8b",
+    "ai_model_gemini_large": "gemini-3.6-flash",
 }
 _settings = dict(_SETTINGS_DEFAULTS)
+
+# 2026-10-14: languages the seeder can generate in (mirrors generate.py's
+# lang_names; English is the default and needs no instruction). One row per
+# (art, phase, language) so the library failover can serve any UI language.
+LANG_NAMES = {
+    'fr': 'French (français)',
+    'es': 'Spanish (español)',
+    'ar': 'Arabic (العربية)',
+    'vi': 'Vietnamese (tiếng Việt)',
+    'zh': 'Mandarin Chinese (中文)',
+    'de': 'German (Deutsch)',
+    'ru': 'Russian (Русский)',
+}
+
+
+def _lang_instruction(language: str) -> str:
+    if not language or language == 'en':
+        return ""
+    name = LANG_NAMES.get(language, language)
+    return (
+        f"\n\nCRITICAL LANGUAGE REQUIREMENT: Generate ALL session content in {name}. "
+        f"This means the title, warmup, explore, challenge, reflect, assess_question, "
+        f"and every single assess_option must be written in {name}. "
+        f"Do not mix languages. Do not include any English except proper nouns."
+    )
 
 
 async def _load_settings(conn) -> None:
@@ -65,7 +93,7 @@ async def _load_settings(conn) -> None:
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT key_name, value FROM platform_settings WHERE key_name IN "
-            "('ai_provider', 'ai_model_groq_large', 'ai_model_ollama_large')"
+            "('ai_provider', 'ai_model_groq_large', 'ai_model_ollama_large', 'ai_model_gemini_large')"
         )
         rows = await cur.fetchall()
     out = dict(_SETTINGS_DEFAULTS)
@@ -208,7 +236,7 @@ The assess question must be about THIS art and THIS session's concept — never 
 Return ONLY the JSON object. No preamble, no explanation, no markdown fences."""
 
 
-async def generate_with_groq(prompt: str, retries: int = 3) -> dict:
+async def generate_with_groq(prompt: str) -> dict:
     import httpx
     headers = {
         "Authorization": f"Bearer {GROQ_KEY}",
@@ -224,17 +252,22 @@ async def generate_with_groq(prompt: str, retries: int = 3) -> dict:
         "max_tokens":     1200,
         "response_format": {"type": "json_object"},
     }
-    for attempt in range(retries):
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(GROQ_URL, headers=headers, json=payload)
-            if r.status_code == 429:
-                wait = 60 * (attempt + 1)
-                print(f"\n  Rate limited — waiting {wait}s...", end=' ', flush=True)
-                time.sleep(wait)
-                continue
-            r.raise_for_status()
-        return json.loads(r.json()["choices"][0]["message"]["content"].strip())
-    raise RuntimeError(f"Groq rate limit persisted after {retries} retries")
+    # 2026-10-21: gpt-oss models default to medium reasoning, which spends the
+    # 1200-token budget before the JSON is finished (Groq 400
+    # json_validate_failed) -- same fix as ai_client._call_groq.
+    if "gpt-oss" in payload["model"]:
+        payload["reasoning_effort"] = "low"
+    # 2026-10-14: single attempt. The old inner 60/120/180s retry loop kept a
+    # seed run alive for hours against a rate-limited Groq key (and never
+    # reached the next provider). A 429 now fails straight through to the
+    # next provider in generate_one()'s chain; the main loop applies ONE
+    # shared backoff and gives up after --max-consecutive-failures.
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.post(GROQ_URL, headers=headers, json=payload)
+        if r.status_code == 429:
+            raise RuntimeError("Groq rate limit reached (429)")
+        r.raise_for_status()
+    return json.loads(r.json()["choices"][0]["message"]["content"].strip())
 
 
 async def generate_with_ollama(prompt: str) -> dict:
@@ -255,7 +288,49 @@ async def generate_with_ollama(prompt: str) -> dict:
     return json.loads(r.json()["message"]["content"].strip())
 
 
-async def generate_one(art, phase, session_num, dry_run=False) -> dict:
+_GEMINI_EFFORT_OK: dict = {}
+
+
+async def generate_with_gemini(prompt: str) -> dict:
+    """Same request shape as ai_client._call_gemini (OpenAI-compatible
+    endpoint, strict-JSON mode, reasoning_effort none). No temperature:
+    Google deprecated sampling params for 3.6+ models."""
+    import httpx
+    model = _settings["ai_model_gemini_large"]
+    base = {
+        "model":    model,
+        "messages": [
+            {"role": "system", "content": "You are a learning session designer. Respond with valid JSON only."},
+            {"role": "user",   "content": prompt}
+        ],
+        "max_tokens":      1200,
+        "response_format": {"type": "json_object"},
+    }
+    headers = {"Authorization": f"Bearer {GEMINI_KEY}", "Content-Type": "application/json"}
+    # Models differ in which reasoning_effort they accept (3.5 Flash-Lite
+    # rejects "none"). Same ladder as ai_client._call_gemini: "none" ->
+    # "minimal" -> omitted (with a bigger token budget), advancing only on 400.
+    efforts = [_GEMINI_EFFORT_OK[model]] if model in _GEMINI_EFFORT_OK else ["none", "minimal", None]
+    r = None
+    for i, effort in enumerate(efforts):
+        payload = dict(base)
+        if effort is not None:
+            payload["reasoning_effort"] = effort
+        else:
+            payload["max_tokens"] = 3600
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            r = await client.post(GEMINI_URL, headers=headers, json=payload)
+        if r.status_code == 429:
+            raise RuntimeError("Gemini rate limit reached (429)")
+        if r.status_code == 400 and i < len(efforts) - 1:
+            continue
+        r.raise_for_status()
+        _GEMINI_EFFORT_OK[model] = effort
+        break
+    return json.loads(r.json()["choices"][0]["message"]["content"].strip())
+
+
+async def generate_one(art, phase, session_num, dry_run=False, language="en") -> dict:
     art_slug, art_name, art_tagline, art_context = art
     phase_slug, phase_name, age_range, phase_guidance = phase
     platform_identity = _session_config.get("platform_identity", _PLATFORM_IDENTITY_FALLBACK)
@@ -264,10 +339,10 @@ async def generate_one(art, phase, session_num, dry_run=False) -> dict:
         art_slug, art_name, art_tagline, art_context,
         phase_slug, phase_name, age_range, phase_guidance,
         session_num, platform_identity
-    )
+    ) + _lang_instruction(language)
 
     if dry_run:
-        print(f"\n[DRY RUN] {art_name} × {phase_name} #{session_num} — prompt: {len(prompt)} chars")
+        print(f"\n[DRY RUN] {art_name} × {phase_name} [{language}] #{session_num} — prompt: {len(prompt)} chars")
         return {
             "title":            f"[DRY] {art_name} × {phase_name} #{session_num}",
             "warmup":           "Dry run warmup",
@@ -288,7 +363,7 @@ async def generate_one(art, phase, session_num, dry_run=False) -> dict:
             "AI provider is set to Library-only in Admin > Settings — "
             "seeding needs live AI. Switch it to Groq or Ollama to run this."
         )
-    order = [provider] + [p for p in ("groq", "ollama") if p != provider]
+    order = [provider] + [p for p in ("groq", "ollama", "gemini") if p != provider]
     errors = []
     for prov in order:
         try:
@@ -296,6 +371,10 @@ async def generate_one(art, phase, session_num, dry_run=False) -> dict:
                 if not GROQ_KEY:
                     raise RuntimeError("GROQ_API_KEY not configured")
                 return await generate_with_groq(prompt)
+            elif prov == "gemini":
+                if not GEMINI_KEY:
+                    raise RuntimeError("GEMINI_API_KEY not configured")
+                return await generate_with_gemini(prompt)
             else:
                 return await generate_with_ollama(prompt)
         except Exception as e:
@@ -305,7 +384,7 @@ async def generate_one(art, phase, session_num, dry_run=False) -> dict:
 
 
 
-async def store_session(conn, art_id, phase_id, skill_id, data) -> int:
+async def store_session(conn, art_id, phase_id, skill_id, data, language="en") -> int:
     # Shuffle options to avoid option-B bias from LLMs
     options       = list(data["assess_options"])
     correct_text  = options[int(data["assess_correct"])]
@@ -322,16 +401,16 @@ async def store_session(conn, art_id, phase_id, skill_id, data) -> int:
         await cur.execute("""
             INSERT INTO sessions
               (learner_id, art_id, dev_phase_id, lecko_id, primary_skill_id, title,
-               recommended_by, status,
+               recommended_by, status, language,
                warmup_prompt, explore_content, challenge_prompt,
                reflect_prompt, assess_question, created_at)
             VALUES
               (1, %s, %s, NULL, %s, %s,
-               'engine', 'scheduled',
+               'engine', 'scheduled', %s,
                %s, %s, %s,
                %s, %s, NOW())
         """, (
-            art_id, phase_id, skill_id, data["title"],
+            art_id, phase_id, skill_id, data["title"], language,
             data["warmup"], data["explore"], data["challenge"],
             data["reflect"], assess_q,
         ))
@@ -390,19 +469,65 @@ async def main(args):
 
     target_arts   = [a for a in ARTS   if not args.arts   or a[0] in args.arts.split(',')]
     target_phases = [p for p in PHASES if not args.phases or p[0] in args.phases.split(',')]
-    total         = len(target_arts) * len(target_phases) * args.per_art
+
+    if args.languages.strip().lower() == 'all':
+        target_langs = ['en'] + sorted(LANG_NAMES)
+    else:
+        target_langs = [l.strip() for l in args.languages.split(',') if l.strip()]
+        bad = [l for l in target_langs if l != 'en' and l not in LANG_NAMES]
+        if bad:
+            print(f"Unknown language code(s): {', '.join(bad)} (valid: en, {', '.join(sorted(LANG_NAMES))})")
+            conn.close()
+            return 1
+
+    # Seed-origin rows already stored (learner 1, no model) per
+    # (art, phase, language); a NULL language counts as English.
+    async with conn.cursor() as cur:
+        await cur.execute("""
+            SELECT art_id, dev_phase_id, COALESCE(language, 'en'), COUNT(*)
+            FROM sessions
+            WHERE dev_phase_id IS NOT NULL AND warmup_prompt IS NOT NULL
+              AND learner_id = 1 AND model IS NULL
+            GROUP BY art_id, dev_phase_id, COALESCE(language, 'en')
+        """)
+        existing = {(r[0], r[1], r[2]): r[3] for r in await cur.fetchall()}
+
+    # Flat work list of only what is still missing, so a re-run after an
+    # aborted or partial run resumes where it stopped.
+    work = []
+    for art in target_arts:
+        art_id, skill_id = art_map.get(art[0], (None, 1))
+        if not art_id:
+            print(f"  ⚠ Art not in DB: {art[0]}")
+            continue
+        for phase in target_phases:
+            phase_id = phase_map.get(phase[0])
+            if not phase_id:
+                print(f"  ⚠ Phase not in DB: {phase[0]}")
+                continue
+            for lang in target_langs:
+                have = existing.get((art_id, phase_id, lang), 0)
+                for n in range(have + 1, args.per_art + 1):
+                    work.append((art, art_id, skill_id, phase, phase_id, lang, n))
+    total = len(work)
 
     print(f"\n{'='*60}")
     print(f"Surfing the Frequencies — Session Library Generator v3")
     print(f"{'='*60}")
     print(f"Arts:        {len(target_arts)}")
     print(f"Phases:      {len(target_phases)}")
-    print(f"Per combo:   {args.per_art}")
+    print(f"Languages:   {','.join(target_langs)}")
+    print(f"Per combo:   {args.per_art} per art/phase/language (already-stored combos are skipped)")
     print(f"Total:       {total} sessions")
     print(f"Provider:    {_settings['ai_provider']} "
-          f"({_settings['ai_model_groq_large'] if _settings['ai_provider'] == 'groq' else _settings['ai_model_ollama_large']})")
+          f"({_settings.get('ai_model_' + _settings['ai_provider'] + '_large', '?')})")
     print(f"Dry run:     {args.dry_run}")
     print(f"{'='*60}\n")
+
+    if total == 0:
+        print("Nothing to do -- every requested art/phase/language combo already has its sessions.")
+        conn.close()
+        return 0
 
     if not args.dry_run and not args.yes:
         confirm = input(f"Generate {total} sessions? (y/N): ")
@@ -414,48 +539,50 @@ async def main(args):
         print(f"--yes flag set — skipping confirmation, generating {total} sessions.")
 
     generated = errors = 0
+    consecutive_failures = 0
+    aborted = False
 
-    for art in target_arts:
-        art_id, skill_id = art_map.get(art[0], (None, 1))
-        if not art_id:
-            print(f"  ⚠ Art not in DB: {art[0]}")
-            continue
+    for art, art_id, skill_id, phase, phase_id, lang, n in work:
+        if aborted:
+            break
+        label = f"{art[1]} × {phase[1]} [{lang}] #{n}"
+        print(f"  {label}...", end=' ', flush=True)
 
-        for phase in target_phases:
-            phase_id = phase_map.get(phase[0])
-            if not phase_id:
-                print(f"  ⚠ Phase not in DB: {phase[0]}")
-                continue
+        try:
+            data = await generate_one(art, phase, n, args.dry_run, lang)
+            if not args.dry_run:
+                sid = await store_session(conn, art_id, phase_id, skill_id, data, lang)
+                print(f"✓ id={sid} — {data['title']}")
+            else:
+                print("✓")
+            generated += 1
+            consecutive_failures = 0
 
-            for n in range(1, args.per_art + 1):
-                label = f"{art[1]} × {phase[1]} #{n}"
-                print(f"  {label}...", end=' ', flush=True)
+            # Configurable delay — use --delay 8 or higher on free-tier Groq
+            if not args.dry_run:
+                time.sleep(args.delay)
 
-                try:
-                    data = await generate_one(art, phase, n, args.dry_run)
-                    if not args.dry_run:
-                        sid = await store_session(conn, art_id, phase_id, skill_id, data)
-                        print(f"✓ id={sid} — {data['title']}")
-                    else:
-                        print("✓")
-                    generated += 1
-
-                    # Configurable delay — use --delay 8 or higher on free-tier Groq
-                    if not args.dry_run:
-                        time.sleep(args.delay)
-
-                except json.JSONDecodeError as e:
-                    print(f"✗ JSON error: {e}")
-                    errors += 1
-                except Exception as e:
-                    err = str(e)
-                    print(f"✗ {err[:80]}")
-                    errors += 1
-                    if "429" in err or "rate" in err.lower():
-                        print("    Rate limited — waiting 60s...")
-                        time.sleep(60)
-                    else:
-                        time.sleep(args.delay)
+        except json.JSONDecodeError as e:
+            print(f"✗ JSON error: {e}")
+            errors += 1
+        except Exception as e:
+            err = str(e)
+            print(f"✗ {err[:300]}")
+            errors += 1
+            consecutive_failures += 1
+            # 2026-10-14: one shared backoff + a hard stop. Previously an
+            # all-providers-down run just kept going (and exited 0, so the
+            # admin UI reported "done" with nothing generated).
+            if consecutive_failures >= args.max_consecutive_failures:
+                print(f"\nSTOPPING: {consecutive_failures} consecutive provider failures -- "
+                      f"providers look unavailable. Re-run later; stored sessions are kept "
+                      f"and already-filled combos are skipped.")
+                aborted = True
+            else:
+                wait = min(30 * 2 ** (consecutive_failures - 1), 300)
+                print(f"    backing off {wait}s "
+                      f"({consecutive_failures}/{args.max_consecutive_failures} consecutive failures)")
+                time.sleep(wait)
 
     conn.close()
     print(f"\n{'='*60}")
@@ -463,15 +590,22 @@ async def main(args):
     if not args.dry_run:
         print(f"The session library now serves {generated} new phase-aware sessions.")
     print(f"{'='*60}")
+    # Non-zero exit when the run was cut short or produced nothing, so
+    # admin.py's _run_seed reports a real error instead of a clean "done".
+    if aborted or (not args.dry_run and total > 0 and generated == 0):
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="FreqLearn session library generator")
     parser.add_argument('--arts',    default='', help='Comma-separated art slugs (default: all 15)')
     parser.add_argument('--phases',  default='', help='Comma-separated phase slugs (default: all 13)')
-    parser.add_argument('--per-art', type=int, default=2, help='Sessions per art/phase combo (default: 2)')
+    parser.add_argument('--per-art', type=int, default=2, help='Target sessions per art/phase/language combo (default: 2); combos already holding that many are skipped, so re-runs resume instead of duplicating')
+    parser.add_argument('--languages', default='en', help="Comma-separated language codes, or 'all' (default: en). Valid: en, fr, es, ar, vi, zh, de, ru")
     parser.add_argument('--dry-run', action='store_true', help='Print without calling API or writing DB')
+    parser.add_argument('--max-consecutive-failures', type=int, default=5, help='Stop the run after this many provider failures in a row (default: 5).')
     parser.add_argument('--yes',     action='store_true', help='Skip interactive confirmation (for admin portal)')
     parser.add_argument('--delay',   type=float, default=3.0, help='Seconds between API calls (default: 3). Increase to 8-12 on free-tier Groq to avoid rate limits.')
     args = parser.parse_args()
-    asyncio.run(main(args))
+    sys.exit(asyncio.run(main(args)) or 0)

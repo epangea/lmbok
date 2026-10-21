@@ -233,34 +233,61 @@ async def _call_groq(model: str, messages: list[dict], max_tokens: int,
         # a single JSON *object*. Never set this for json_array responses;
         # Groq rejects/misbehaves on array-shaped output in this mode.
         payload["response_format"] = {"type": "json_object"}
+    # 2026-10-21: openai/gpt-oss-* are reasoning models and Groq's default
+    # reasoning_effort is "medium". Reasoning tokens are spent from the same
+    # max_tokens budget as the visible answer, so with JSON mode and
+    # max_tokens=1200 the model intermittently ran out before finishing the
+    # document -> HTTP 400 json_validate_failed ("max completion tokens
+    # reached before generating a valid document"), logged 2026-09-21,
+    # 2026-10-14 and 2026-10-21, each time taking the whole chain down
+    # because Gemini was also unavailable. "low" keeps the thinking short so
+    # the budget goes to the JSON. Sent only to gpt-oss models: other Groq
+    # models (llama etc.) don't take the parameter.
+    if "gpt-oss" in model:
+        payload["reasoning_effort"] = "low"
 
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     t0 = time.monotonic()
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(GROQ_URL, headers=headers, json=payload)
-            resp.raise_for_status()
-    except httpx.ConnectError:
-        raise RuntimeError("Cannot reach Groq API")
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
-            raise RuntimeError("Invalid GROQ_API_KEY")
-        if e.response.status_code == 429:
-            raise RuntimeError("Groq rate limit reached")
-        if e.response.status_code == 400 and "decommission" in e.response.text.lower():
-            raise RuntimeError(
-                f"Groq model '{model}' has been decommissioned -- "
-                f"update it in Admin > Settings > AI generation"
+    for attempt in range(2):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(GROQ_URL, headers=headers, json=payload)
+                resp.raise_for_status()
+            break
+        except httpx.ConnectError:
+            raise RuntimeError("Cannot reach Groq API")
+        except httpx.HTTPStatusError as e:
+            body = e.response.text
+            # Safety net for the reasoning_effort addition above: if Groq ever
+            # rejects the parameter itself (the error names it), retry once
+            # without it rather than taking the primary engine down. Matches
+            # the literal parameter name -- NOT the word "reasoning", which can
+            # appear inside a json_validate_failed 'failed_generation' excerpt.
+            if (attempt == 0 and e.response.status_code == 400
+                    and "reasoning_effort" in payload and "reasoning_effort" in body):
+                logger.warning(
+                    "Groq model '%s' rejected reasoning_effort (400); retrying without it", model,
+                )
+                payload.pop("reasoning_effort")
+                continue
+            if e.response.status_code == 401:
+                raise RuntimeError("Invalid GROQ_API_KEY")
+            if e.response.status_code == 429:
+                raise RuntimeError("Groq rate limit reached")
+            if e.response.status_code == 400 and "decommission" in body.lower():
+                raise RuntimeError(
+                    f"Groq model '{model}' has been decommissioned -- "
+                    f"update it in Admin > Settings > AI generation"
+                )
+            # Any other status (a 400 that ISN'T the decommission case -- e.g. a
+            # JSON-mode schema-validation failure, a bad param, a plan/model
+            # mismatch -- previously vanished into a bare status code with no
+            # way to tell those apart after the fact. Log the real body.
+            logger.error(
+                "Groq API error for model '%s': %s -- %s",
+                model, e.response.status_code, body[:1000],
             )
-        # Any other status (a 400 that ISN'T the decommission case -- e.g. a
-        # JSON-mode schema-validation failure, a bad param, a plan/model
-        # mismatch -- previously vanished into a bare status code with no
-        # way to tell those apart after the fact. Log the real body.
-        logger.error(
-            "Groq API error for model '%s': %s -- %s",
-            model, e.response.status_code, e.response.text[:1000],
-        )
-        raise RuntimeError(f"Groq API error: {e.response.status_code}")
+            raise RuntimeError(f"Groq API error: {e.response.status_code}")
     latency_ms = int((time.monotonic() - t0) * 1000)
 
     content = resp.json()["choices"][0]["message"]["content"].strip()
@@ -302,81 +329,116 @@ async def _call_ollama(model: str, messages: list[dict], max_tokens: int,
     return content, latency_ms
 
 
+# 2026-10-14: Gemini models differ in which reasoning_effort they accept.
+# Tried in order, advancing only on a 400 INVALID_ARGUMENT:
+#   "none"    -- disables thinking (accepted by gemini-3.1-flash-lite and
+#                the earlier Flash tiers this codebase used)
+#   "minimal" -- accepted by gemini-3.5-flash-lite, which rejects "none"
+#   None      -- parameter omitted (the model's own default thinking level;
+#                max_tokens is raised to leave room for it -- see below)
+# Verified live 2026-10-14: gemini-3.5-flash-lite -> 400 on "none", 200 on
+# "minimal" and omitted; gemini-3.1-flash-lite -> 200 on all three. The rung
+# that worked is remembered per model for the life of the process, so a
+# model needing a fallback pays the extra (sub-second) 400 only once.
+_GEMINI_EFFORT_LADDER: tuple = ("none", "minimal", None)
+_gemini_effort_ok: dict[str, Any] = {}
+
+
 async def _call_gemini(model: str, messages: list[dict], max_tokens: int,
                         temperature: float, response_format: str) -> tuple[str, int]:
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY not configured")
 
-    payload: dict[str, Any] = {
+    base: dict[str, Any] = {
         "model":       model,
         "messages":    messages,
         "max_tokens":  max_tokens,
-        "temperature": temperature,
+        # 2026-10-14: no "temperature" here. Google deprecated temperature/
+        # top_p/top_k from Gemini 3.6 Flash / 3.5 Flash-Lite onward (ignored
+        # today; HTTP 400 in future model generations). The `temperature`
+        # argument is still accepted by this function for signature
+        # compatibility with the Groq/Ollama callers.
+        #
         # 2026-08-07 (live outage fix): Gemini 2.5/3.x models ship with
         # "thinking" (internal reasoning) enabled by default, and -- unlike
         # OpenAI's models -- Google counts those invisible reasoning tokens
         # against the SAME max_tokens budget as the visible response. With
-        # no reasoning_effort set, the model was burning most/all of
-        # max_tokens=1200 on reasoning before writing any real output,
-        # producing a truncated, invalid-JSON response that looked like a
-        # parse failure but was actually a budget-exhaustion failure --
-        # confirmed live: "AI returned invalid JSON: {\"title\": ...,
-        # \"warmup\": \"Char, consider how" (cut off mid-sentence,
-        # finish_reason=length upstream). "none" frees the entire budget
-        # for visible output on Flash/Flash-lite tiers (what this codebase
-        # uses). NOTE: if a Pro-tier Gemini model is ever configured here,
-        # "none" is reportedly rejected ("Thinking can't be disabled") --
-        # "low" is the documented fallback for Pro if that ever applies.
-        "reasoning_effort": "none",
+        # thinking left on and max_tokens=1200, the model was burning most/
+        # all of the budget on reasoning before writing any real output,
+        # producing a truncated, invalid-JSON response (finish_reason=length
+        # upstream). reasoning_effort (see _GEMINI_EFFORT_LADDER above) keeps
+        # thinking off/minimal so the budget goes to visible output.
+        # A model that rejects both "none" and "minimal" (reportedly the case
+        # for Pro tiers: "Thinking can't be disabled") lands on the omit rung.
     }
     if response_format == "json_object":
         # Google's compatibility layer advertises support for this, mirroring
-        # OpenAI/Groq's strict-JSON mode. Exercised against a live key for
-        # the first time 2026-08-04 (e2e_org_polis.sh Part E) -- the call
-        # failed, but with a 404 "model no longer available" from Google
-        # (ai_model_gemini_large was still the P41-era default, 'gemini-
-        # 2.5-flash', which Google appears to be retiring ahead of its own
-        # documented Oct 2026 shutdown date -- see the new migration this
-        # session), not a response_format/json-mode problem. Whether
-        # json_object mode itself is honoured by Gemini's compatibility
-        # layer is still unconfirmed either way.
-        payload["response_format"] = {"type": "json_object"}
+        # OpenAI/Groq's strict-JSON mode. Whether json_object mode itself is
+        # honoured by Gemini's compatibility layer is still unconfirmed
+        # either way.
+        base["response_format"] = {"type": "json_object"}
+
+    efforts = list(_GEMINI_EFFORT_LADDER)
+    if model in _gemini_effort_ok:
+        known = _gemini_effort_ok[model]
+        efforts = [known] + [e for e in efforts if e != known]
 
     headers = {"Authorization": f"Bearer {GEMINI_API_KEY}", "Content-Type": "application/json"}
     t0 = time.monotonic()
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(GEMINI_URL, headers=headers, json=payload)
-            resp.raise_for_status()
-    except httpx.ConnectError:
-        raise RuntimeError("Cannot reach Gemini API")
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 401:
-            raise RuntimeError("Invalid GEMINI_API_KEY")
-        if e.response.status_code == 429:
-            raise RuntimeError("Gemini rate limit reached")
-        if e.response.status_code == 400 and "not found" in e.response.text.lower():
-            raise RuntimeError(
-                f"Gemini model '{model}' not found -- "
-                f"update it in Admin > Settings > AI generation"
+    resp = None
+    for i, effort in enumerate(efforts):
+        payload = dict(base)
+        if effort is not None:
+            payload["reasoning_effort"] = effort
+        else:
+            # Thinking left at the model default: leave headroom so reasoning
+            # tokens can't starve the visible JSON (same failure as 2026-08-07).
+            payload["max_tokens"] = min(max_tokens * 3, 8000)
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(GEMINI_URL, headers=headers, json=payload)
+                resp.raise_for_status()
+        except httpx.ConnectError:
+            raise RuntimeError("Cannot reach Gemini API")
+        except httpx.HTTPStatusError as e:
+            status = e.response.status_code
+            body   = e.response.text
+            if (status == 400 and i < len(efforts) - 1
+                    and "not found" not in body.lower() and "invalid" in body.lower()
+                    # Google reports a bad key as 400 "API key not valid" -- not
+                    # a reasoning_effort problem, so don't walk the ladder.
+                    and "api key" not in body.lower()):
+                logger.warning(
+                    "Gemini model '%s' rejected reasoning_effort=%r (400 invalid argument); "
+                    "trying the next setting", model, effort,
+                )
+                continue
+            if status == 401:
+                raise RuntimeError("Invalid GEMINI_API_KEY")
+            if status == 429:
+                raise RuntimeError("Gemini rate limit reached")
+            if status == 400 and "not found" in body.lower():
+                raise RuntimeError(
+                    f"Gemini model '{model}' not found -- "
+                    f"update it in Admin > Settings > AI generation"
+                )
+            # 2026-08-04: Google has been observed returning a plain 404 (not
+            # Groq's 400-with-"not found"-text shape) for a retired/renamed
+            # model -- surfaced ahead of its own documented shutdown date.
+            if status == 404:
+                raise RuntimeError(
+                    f"Gemini model '{model}' not found (404) -- likely retired/"
+                    f"renamed ahead of its documented shutdown date; "
+                    f"update it in Admin > Settings > AI generation"
+                )
+            logger.error(
+                "Gemini API error for model '%s': %s -- %s",
+                model, status, body[:1000],
             )
-        # 2026-08-04: Google has been observed returning a plain 404 (not
-        # Groq's 400-with-"not found"-text shape) for a retired/renamed
-        # model -- e.g. "This model models/gemini-2.5-flash is no longer
-        # available", surfaced ahead of its own documented shutdown date.
-        # Handled the same way as the 400 case above: a clear, actionable
-        # message instead of a bare status code.
-        if e.response.status_code == 404:
-            raise RuntimeError(
-                f"Gemini model '{model}' not found (404) -- likely retired/"
-                f"renamed ahead of its documented shutdown date; "
-                f"update it in Admin > Settings > AI generation"
-            )
-        logger.error(
-            "Gemini API error for model '%s': %s -- %s",
-            model, e.response.status_code, e.response.text[:1000],
-        )
-        raise RuntimeError(f"Gemini API error: {e.response.status_code}")
+            raise RuntimeError(f"Gemini API error: {status}")
+        else:
+            _gemini_effort_ok[model] = effort
+            break
     latency_ms = int((time.monotonic() - t0) * 1000)
 
     content = resp.json()["choices"][0]["message"]["content"].strip()
@@ -483,6 +545,13 @@ async def ai_complete(
         msgs.append({"role": "user", "content": prompt})
     if not msgs:
         raise ValueError("ai_complete requires prompt or messages")
+    # 2026-10-14: a system-only request (e.g. orgs.parse_listing_needs, which
+    # puts the whole task in system_msg) is accepted by Groq/Ollama but
+    # rejected by Gemini with 400 "contents is not specified" -- so Gemini
+    # could never act as the fallback for those callers. Give every request
+    # at least one non-system turn.
+    if not any(m.get("role") != "system" for m in msgs):
+        msgs.append({"role": "user", "content": "Respond now, following the instructions above."})
 
     order = [provider] + [p for p in ALL_PROVIDERS if p != provider]
     errors: list[str] = []

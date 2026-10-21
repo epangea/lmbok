@@ -498,15 +498,34 @@ Return only the JSON. No preamble, no explanation, no markdown code blocks.{lang
     # setting and its own per-purpose circuit breaker ("session"). If both
     # providers fail here, ai_complete() raises the 503 itself and also
     # records the failure on the same breaker instance checked above.
-    ai_resp = await ai_client.ai_complete(
-        "session",
-        db=db,
-        prompt=prompt,
-        tier="large",
-        response_format="json_object",
-        max_tokens=1200,
-        temperature=0.8,
-    )
+    # 2026-10-14: order of preference is AI engines first; only if NONE of
+    # them respond (503 from ai_complete) do we fail over to the stored
+    # library, for THIS request -- not only once the breaker has tripped
+    # after N failures. Library candidates are still hard-filtered by phase
+    # and language (see _select_reusable_pool); if nothing matches, the
+    # original 503 is re-raised unchanged.
+    try:
+        ai_resp = await ai_client.ai_complete(
+            "session",
+            db=db,
+            prompt=prompt,
+            tier="large",
+            response_format="json_object",
+            max_tokens=1200,
+            temperature=0.8,
+        )
+    except HTTPException as ai_err:
+        if ai_err.status_code != 503:
+            raise
+        library_served = await _serve_from_library(
+            db=db, learner=learner, art=art,
+            phase=phase, phase_id=phase.id if phase else None,
+            phase_slug=phase_slug, phase_name=phase_name,
+            req=req,
+        )
+        if library_served is not None:
+            return library_served
+        raise
     data          = ai_resp.content
     ai_model      = ai_resp.model
     ai_latency_ms = ai_resp.latency_ms
@@ -549,6 +568,16 @@ Return only the JSON. No preamble, no explanation, no markdown code blocks.{lang
         model=ai_model,
         latency_ms=ai_latency_ms,
         status="scheduled",
+        # 2026-10-14: record the language this session was generated in.
+        # Previously omitted, so every live session was stored with the
+        # model default "en" regardless of req.language. Deliberately NOT
+        # setting dev_phase_id here: live prompts embed this learner's
+        # interests and recent-session context, so they must not become
+        # shared library content (the library is generic, seeded content).
+        # [:10] -- sessions.language is VARCHAR(10) and GenerateRequest.language
+        # is an unconstrained str; in strict mode an over-long value would 500
+        # the whole request (MySQL 1406) instead of just being stored oddly.
+        language=req_language[:10],
         warmup_prompt=data["warmup"],
         explore_content=data["explore"],
         challenge_prompt=data["challenge"],
@@ -714,7 +743,12 @@ async def _serve_from_library(
         art_id=art.id,
         primary_skill_id=reuse_skill_id,
         title=stored.title or f"The Art of {art.name}",
-        recommended_by="library",
+        # 2026-10-14: was "library", which the live sessions.recommended_by
+        # ENUM('engine','learner','admin') rejects (MySQL 1265 "Data truncated"
+        # -> unhandled 500 every time library mode found a match). Library
+        # provenance is already carried by model="library" below, same as the
+        # inline-reuse path, which has always written "engine" here.
+        recommended_by="engine",
         # AI-call metadata (2026-07-07): library-served sessions get model="library"
         # and latency_ms=0 since no AI call was made. This lets the admin
         # session library distinguish AI-served from library-served rows at a glance.
