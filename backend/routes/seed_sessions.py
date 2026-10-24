@@ -193,7 +193,21 @@ PHASES = [
 
 def build_prompt(art_slug, art_name, art_tagline, art_context,
                  phase_slug, phase_name, age_range, phase_guidance,
-                 session_num, platform_identity):
+                 session_num, platform_identity, avoid_titles=None):
+    # 2026-10-22: avoid_titles = {"titles": [...], "openers": [...]} from
+    # fetch_titles_to_avoid(); each combo is generated alone, so without this
+    # the model repeats itself across an art ("Echoes of ..." x7).
+    avoid_block = ""
+    if avoid_titles:
+        bits = []
+        if avoid_titles.get("titles"):
+            bits.append("Titles already used for this art in the library -- do not reuse any of them, "
+                        "and do not open the title with the same word(s) as any of them: "
+                        + "; ".join(avoid_titles["titles"]))
+        if avoid_titles.get("openers"):
+            bits.append("Opening words already overused across the library -- do not start the "
+                        "title with: " + ", ".join(avoid_titles["openers"]))
+        avoid_block = "".join("\n- TITLE VARIETY: " + b for b in bits)
     # 2026-08-26: platform_identity is now passed in (sourced from
     # session_config, same as generate.py's live prompt) instead of being
     # baked into this f-string -- was an independently-worded duplicate
@@ -214,7 +228,7 @@ Session design principles:
 - Ground abstract concepts in concrete, sensory, real-world practice
 - The challenge must produce something real: a written piece, a design, an action, a practice
 - Reflection questions must open rather than close — no yes/no answers
-- This is session #{session_num} for this art/phase — vary the angle and entry point
+- This is session #{session_num} for this art/phase — vary the angle and entry point{avoid_block}
 - Follow the universal learning cycle: observe → connect → act → reflect (applies across all human arts and domains)
 - CONTEXTUAL FRAME: Ground all examples, metaphors, and challenges in the specific world of {art_name} as described in CONTEXT above. Do not default to gardening, soil, seeds, or permaculture unless the art is Eating, Growing, or Consuming. A Moving session should feel like movement; a Listening session should feel like deep listening; a Building session could be about constructing anything — a shelter, an instrument, a rocket, a piece of furniture.
 - CRITICAL: The assess question and all 4 options must be about {art_name} and this session's core concept. They must NOT reference permaculture, gardening, or ecological land practice unless the art is Growing, Eating, or Consuming. Violating this means the session has failed.
@@ -330,7 +344,29 @@ async def generate_with_gemini(prompt: str) -> dict:
     return json.loads(r.json()["choices"][0]["message"]["content"].strip())
 
 
-async def generate_one(art, phase, session_num, dry_run=False, language="en") -> dict:
+async def fetch_titles_to_avoid(conn, art_id, language="en", art_limit=40) -> dict:
+    """2026-10-22: titles already in the seed library for this art (most recent
+    first), plus first words used 4+ times library-wide. Read fresh before each
+    generation so titles created earlier in the same run are included."""
+    async with conn.cursor() as cur:
+        await cur.execute("""
+            SELECT title FROM sessions
+            WHERE art_id = %s AND learner_id = 1 AND model IS NULL AND title IS NOT NULL
+              AND COALESCE(language,'en') = %s
+            ORDER BY id DESC LIMIT %s
+        """, (art_id, language, art_limit))
+        titles = [r[0] for r in await cur.fetchall()]
+        await cur.execute("""
+            SELECT SUBSTRING_INDEX(title, ' ', 1) AS w, COUNT(*) AS c FROM sessions
+            WHERE learner_id = 1 AND model IS NULL AND title IS NOT NULL
+              AND COALESCE(language,'en') = %s
+            GROUP BY w HAVING c >= 4 ORDER BY c DESC LIMIT 8
+        """, (language,))
+        openers = [r[0] for r in await cur.fetchall() if len(r[0]) > 3]
+    return {"titles": titles, "openers": openers}
+
+
+async def generate_one(art, phase, session_num, dry_run=False, language="en", avoid_titles=None) -> dict:
     art_slug, art_name, art_tagline, art_context = art
     phase_slug, phase_name, age_range, phase_guidance = phase
     platform_identity = _session_config.get("platform_identity", _PLATFORM_IDENTITY_FALLBACK)
@@ -338,7 +374,7 @@ async def generate_one(art, phase, session_num, dry_run=False, language="en") ->
     prompt = build_prompt(
         art_slug, art_name, art_tagline, art_context,
         phase_slug, phase_name, age_range, phase_guidance,
-        session_num, platform_identity
+        session_num, platform_identity, avoid_titles
     ) + _lang_instruction(language)
 
     if dry_run:
@@ -549,7 +585,8 @@ async def main(args):
         print(f"  {label}...", end=' ', flush=True)
 
         try:
-            data = await generate_one(art, phase, n, args.dry_run, lang)
+            avoid = None if args.dry_run else await fetch_titles_to_avoid(conn, art_id, lang)
+            data = await generate_one(art, phase, n, args.dry_run, lang, avoid)
             if not args.dry_run:
                 sid = await store_session(conn, art_id, phase_id, skill_id, data, lang)
                 print(f"✓ id={sid} — {data['title']}")
