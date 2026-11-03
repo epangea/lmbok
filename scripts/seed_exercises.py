@@ -83,20 +83,35 @@ class BadExercise(ValueError):
     pass
 
 
+BODY_KEYS = ("warmup", "explore", "challenge", "reflect")
+LISTS_JOINED = 0   # fields that arrived as a list of strings and were joined (reported at the end)
+
+
 def validate(data) -> dict:
     """Reject anything the player UI or the library couldn't use."""
+    global LISTS_JOINED
     if not isinstance(data, dict):
         raise BadExercise("AI reply was not a JSON object")
-    for k in TEXT_KEYS:
+    # The prompt asks for "1-2 open questions", and the model sometimes sends them as a list
+    # instead of one string (seen 2026-10-30, mostly in `reflect`). Join rather than reject.
+    for k in BODY_KEYS:
         v = data.get(k)
+        if isinstance(v, list) and v and all(isinstance(x, str) and x.strip() for x in v):
+            data[k] = " ".join(x.strip() for x in v)
+            LISTS_JOINED += 1
+    for k in TEXT_KEYS:
+        if k not in data:   # say which: omitted, renamed (see the keys it did send) or blank
+            raise BadExercise(f"'{k}' missing (reply had: {', '.join(map(str, data))})")
+        v = data[k]
         if not isinstance(v, str) or not v.strip():
-            raise BadExercise(f"missing or empty '{k}'")
+            raise BadExercise(f"'{k}' present but blank or not text ({type(v).__name__})")
     if len(data["title"]) > 160:
         raise BadExercise("title longer than the 160-char column")
     opts = data.get("assess_options")
     if (not isinstance(opts, list) or len(opts) != 4
             or any(not isinstance(o, str) or not o.strip() for o in opts)):
-        raise BadExercise("assess_options must be exactly 4 non-empty strings")
+        n_opts = len(opts) if isinstance(opts, list) else type(opts).__name__
+        raise BadExercise(f"assess_options must be exactly 4 non-empty strings (got {n_opts})")
     if len({o.strip().lower() for o in opts}) != 4:
         raise BadExercise("assess_options contain duplicates")
     try:
@@ -285,13 +300,18 @@ async def main(args) -> int:
             last_err = None
             for attempt in range(args.retries + 1):
                 try:
-                    data = validate(await ss.generate_one(art_t, phase, n, False, LANG, avoid))
-                    if data["title"].strip().lower() in used:
+                    cand = validate(await ss.generate_one(art_t, phase, n, False, LANG, avoid))
+                    if cand["title"].strip().lower() in used:
                         raise BadExercise("title already used for this art")
+                    data = cand   # only a reply that passed BOTH checks may be stored
                     break
                 except (json.JSONDecodeError, BadExercise) as e:
                     last_err = e
-                    print(f"[bad reply: {e}; retry {attempt + 1}/{args.retries}] ", end="", flush=True)
+                    nxt = f"retry {attempt + 1}/{args.retries}" if attempt < args.retries else "giving up"
+                    print(f"[bad reply: {e}; {nxt}] ", end="", flush=True)
+                    if attempt < args.retries and args.retry_pause > 0:
+                        # an immediate retry lands inside the provider's rate-limit window
+                        await asyncio.sleep(args.retry_pause)
             if data is None:
                 raise BadExercise(f"no valid exercise after {args.retries + 1} attempts ({last_err})")
 
@@ -330,6 +350,8 @@ async def main(args) -> int:
     conn.close()
     print("\n" + "=" * 64)
     print(f"Done: {done} generated, {errors} errors")
+    if LISTS_JOINED:
+        print(f"Fields that arrived as a list of strings and were joined into text: {LISTS_JOINED}")
     if done:
         print(f"Review text: {out_file}")
     print("=" * 64)
@@ -349,6 +371,9 @@ if __name__ == "__main__":
     ap.add_argument("--dry-run", action="store_true", help="Show the plan and the first prompt; no AI call, no DB writes")
     ap.add_argument("--yes", action="store_true", help="Skip the confirmation prompt")
     ap.add_argument("--delay", type=float, default=20.0, help="Seconds between AI calls (default 20; free-tier Groq is rate-limited)")
+    ap.add_argument("--retry-pause", type=float, default=15.0,
+                    help="Seconds to wait before re-asking after a malformed reply (default 15; "
+                         "an immediate retry tends to hit the provider's rate limit)")
     ap.add_argument("--retries", type=int, default=2, help="Re-asks per combo when the reply is malformed (default 2)")
     ap.add_argument("--max-consecutive-failures", type=int, default=5)
     ap.add_argument("--out-dir", default="seed_exercises_out", help="Where the review text file is written (default ./seed_exercises_out)")
