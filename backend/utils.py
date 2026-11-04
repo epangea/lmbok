@@ -5,9 +5,10 @@
 
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from models import Learner, DevPhase, SessionConfig
+from engine import RecommendationEngine
 
 
 # ── Session config ───────────────────────────────────────────
@@ -121,17 +122,20 @@ def compute_avatar_stage(art_scores: dict[str, float]) -> dict:
     }
 
 
+_radar_engine = RecommendationEngine()
+
+
 async def get_learner_stage(learner: Learner, db: AsyncSession) -> dict:
     """
-    Fetch per-art scores from DB and return computed avatar stage.
-    Shared by polis.py and matching.py.
-    """
-    arts_q = await db.execute(text("""
-        SELECT a.slug, lap.score
-        FROM learner_art_progress lap
-        JOIN arts a ON a.id = lap.art_id
-        WHERE lap.learner_id = :lid
-    """), {"lid": learner.id})
-    art_scores = {row[0]: float(row[1]) for row in arts_q.fetchall()}
+    Return the learner's avatar stage. Shared by polis.py and matching.py.
 
-    return compute_avatar_stage(art_scores)
+    2026-11-01: reads the SAME per-art scores the avatar badge shows —
+    engine.compute_radar()["art_scores"] (skill level + evidence, plus the
+    capped 20% direct-practice bonus) — so the Polis gate and the avatar
+    are one thing. Since 2026-09-05 this read learner_art_progress.score
+    alone, which only skill-click sessions credit (<= 0.05 per session in
+    total), so the gate could refuse a stage the badge displayed and
+    art-first sessions never moved it. See PROJECT.md PART 43 / 2026.180.
+    """
+    radar = await _radar_engine.compute_radar(learner.id, db)
+    return compute_avatar_stage(radar["art_scores"])

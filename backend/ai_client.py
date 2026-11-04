@@ -105,6 +105,7 @@ _AI_DEFAULTS: dict[str, str] = {
     "ai_model_gemini_small":        "gemini-2.5-flash-lite",
     "ai_circuit_breaker_enabled":   "true",
     "ai_include_prior_context":     "true",
+    "ai_include_learner_portfolio": "true",
     "ai_library_recall_limit":      "200",
     "ai_inline_reuse_enabled":      "false",
     "ai_library_failure_threshold": "3",

@@ -58,7 +58,7 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
       mail.py                  Email sending (verification, notifications)
       main.py                  FastAPI app entrypoint
       models.py                SQLAlchemy models
-      prior_session_context.py Builds learner continuity context for AI prompts
+      prior_session_context.py Builds the learner portfolio + continuity blocks for AI prompts
       utils.py                 Shared helpers (avatar stage computation, etc.)
       requirements.txt
       routes/

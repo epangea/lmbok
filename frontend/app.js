@@ -1125,6 +1125,7 @@ const LANG = {  // Only English ships inline; other languages load
     'session.paddle':'Paddle in',
     'session.placeholder_no_single_answer':'Write freely — there is no single right answer...',
     'session.placeholder_no_wrong_answer':'Write freely — there is no wrong answer here...',
+    'session.growth_hint':'A few words here, or in the challenge, are enough — sharing something is what records this session in your growth.',
     'session.preparing':'Preparing your session...',
     'session.reading_frequency':'Reading your frequency',
     'session.recommended_next':'Recommended next',
@@ -2205,6 +2206,7 @@ function phaseBody(p) {
       <textarea id="rtxt" rows="4"
         placeholder="${T('session.placeholder_no_wrong_answer')}" oninput="S.reflectText=this.value"></textarea>
       ${micButton('rtxt','reflectText')}
+      <p style="font-size:12px;color:var(--text2);margin-top:8px">${T('session.growth_hint')}</p>
     </div>
     <div class="card" style="margin-top:12px;border-left:3px solid var(--deep)">
       <div style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none"

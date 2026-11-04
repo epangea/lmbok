@@ -181,6 +181,11 @@ class Session(Base):
     learner_id:          Mapped[int]           = mapped_column(ForeignKey("learners.id"), nullable=False)
     art_id:              Mapped[int]           = mapped_column(ForeignKey("arts.id"),     nullable=False)
     dev_phase_id:        Mapped[Optional[int]] = mapped_column(ForeignKey("dev_phases.id"), nullable=True)
+    # 2026-11-03: the life phase this row was generated FOR. Informational only (admin
+    # display). Never used to pick library/reusable sessions: that is dev_phase_id,
+    # which live AI sessions deliberately leave NULL so they can't become shared
+    # library content. Plain Integer: the DB column has no FK.
+    generated_for_phase_id: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     language:            Mapped[Optional[str]] = mapped_column(String(10), nullable=True, default="en")  # UI language at generation time
     lecko_id:            Mapped[Optional[int]] = mapped_column(ForeignKey("leckos.id"))
     primary_skill_id:    Mapped[int]           = mapped_column(ForeignKey("skills.id"),  nullable=False)

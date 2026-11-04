@@ -214,6 +214,7 @@ CREATE TABLE sessions (
     learner_id          INT UNSIGNED      NOT NULL,
     art_id              TINYINT UNSIGNED  NOT NULL,
     dev_phase_id        INT NULL DEFAULT NULL,
+    generated_for_phase_id INT NULL DEFAULT NULL,   -- 2026-11-03: informational (admin display); live AI sessions leave dev_phase_id NULL on purpose
     legacy_phase_slug   VARCHAR(20) NULL,
     lecko_id            INT UNSIGNED,
     primary_skill_id    SMALLINT UNSIGNED NOT NULL,

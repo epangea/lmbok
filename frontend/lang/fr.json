@@ -263,6 +263,7 @@
   "session.paddle": "Ramer",
   "session.placeholder_no_single_answer": "Écrivez librement — il n’y a pas de réponse unique...",
   "session.placeholder_no_wrong_answer": "Écrivez librement — il n’y a pas de mauvaise réponse ici...",
+  "session.growth_hint": "Quelques mots ici, ou dans le défi, suffisent — partager quelque chose est ce qui inscrit cette session dans votre croissance.",
   "session.preparing": "Préparation de votre session...",
   "session.reading_frequency": "Lecture de votre fréquence",
   "session.recommended_next": "Recommandé ensuite",

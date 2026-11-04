@@ -53,6 +53,17 @@ async def get_me(
         # same as the opt-out column's own DB default.
         "newsletter_opt_out": bool(prefs.newsletter_opt_out) if prefs else False,
         "weekly_report_opt_out": bool(prefs.weekly_report_opt_out) if prefs else False,
+        # 2026-11-03: My Story's life-CV. app.js reads `me.learner_profile` from
+        # this endpoint in five places (initial load, _reloadProfileAndGuidingStar,
+        # onboarding, bioregion save) to fill S.learnerProfile — the Portfolio
+        # "My Story" card, the Guiding Star, and the `learner_profile` /
+        # `existing_profile` the client sends back to the companions and to
+        # /generate/profile-update (which merges into the CLIENT-supplied
+        # existing profile, never the stored one). This field was never returned
+        # (git history, 2026-08-22 onward), so all of that was permanently empty
+        # and each distillation started from "(no profile yet)".
+        # Own-account endpoint, so returning the learner's own profile is fine.
+        "learner_profile": learner.learner_profile,
     }
 
 @router.get("/me/streak")

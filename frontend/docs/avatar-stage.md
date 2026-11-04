@@ -13,4 +13,6 @@ Your avatar grows through six stages as your practice deepens — based on your 
 
 This is deliberately about roundedness, not volume in any one favorite Art — your weakest Art is always the bottleneck.
 
+Your avatar and your Polis access read the same thing: your growth across the 15 Arts. A session adds to that growth when you share something in it — a few words in the challenge or the reflection are enough. A session you finish without writing anything is still saved, but it doesn't move your avatar.
+
 Your avatar stage also determines how much of [Polis](polis) is open to you.

@@ -28,7 +28,7 @@ from db import get_db
 from models import Session, Arts, DevPhase, Skill, Learner, Lecko, ArtsSkills
 from utils import get_session_config
 from routes.auth import get_current_learner
-from prior_session_context import get_prior_session_context
+from prior_session_context import get_prior_session_context, build_portfolio_block
 import ai_client
 
 router = APIRouter()
@@ -225,8 +225,13 @@ async def generate_session(
     # 2026-07-07: the continuity block (built by prior_session_context.py)
     # is appended just before the generation request when the feature flag
     # `ai_include_prior_context` is true. The block lists the learner's
-    # last 3 sessions for this (art, phase) so each generation builds on
-    # prior work rather than repeating themes.
+    # last 3 completed sessions for this (art, phase) so each generation
+    # builds on prior work rather than repeating themes.
+    # 2026-11-01: when `ai_include_learner_portfolio` is true, the prompt also
+    # carries (a) a LEARNER PORTFOLIO block built from learners.learner_profile
+    # (the Prosopon / My Story life-CV) and (b) journey additions to the
+    # continuity block: excerpts of the learner's own challenge/reflect
+    # responses and their last few completed sessions on other arts.
     ai_settings = await ai_client.get_ai_settings(db)
     include_prior = ai_client.bool_setting(ai_settings, "ai_include_prior_context")
     breaker_enabled = ai_client.bool_setting(ai_settings, "ai_circuit_breaker_enabled")
@@ -234,6 +239,10 @@ async def generate_session(
     session_breaker.configure(
         failure_threshold=ai_client.int_setting(ai_settings, "ai_library_failure_threshold"),
         library_mode_ttl=ai_client.int_setting(ai_settings, "ai_library_mode_ttl"),
+    )
+    include_portfolio = ai_client.bool_setting(ai_settings, "ai_include_learner_portfolio")
+    portfolio_block = (
+        build_portfolio_block(learner.learner_profile) if include_portfolio else ""
     )
     continuity_block = ""
     if include_prior:
@@ -243,6 +252,7 @@ async def generate_session(
             art_id=art.id,
             dev_phase_id=phase.id if phase else None,
             n=3,
+            include_journey=include_portfolio,
         )
 
     # ── Circuit-breaker pre-check ────────────────────────────
@@ -360,6 +370,31 @@ async def generate_session(
     if skill_name:
         skill_line = f"\nThe primary skill being developed is: {skill_name}."
 
+    # ── Bioregion line (2026-07-23, restored 2026-11-01): grounds the session in the learner's ──
+    # actual place, when known. Sourced directly from learner.bioregion —
+    # already on the fetched Learner row (models.py), so no extra query.
+    # For the land/ecology arts (build, grow, consume, live, eat — the same
+    # five ART_LENS already ties to permaculture), bioregion is essential,
+    # specific shaping context, not just flavor. For every other art it's
+    # soft-worded ("only where it naturally deepens... never force it") so
+    # this doesn't push a generic ecological frame onto arts like feel,
+    # collaborate, or understand — that boundary is still ART_LENS/lens_line's job.
+    # NOTE: this block was unintentionally dropped from the prompt by the P40
+    # rewrite (commit d7b1a09) while its Prompt Anatomy card stayed in place;
+    # restored verbatim from 72e9243.
+    bioregion_line = ""
+    if learner.bioregion:
+        bioregion_line = (
+            f"\nThe learner is rooted in the {learner.bioregion} bioregion — their local "
+            f"ecological and cultural place in the world. For arts grounded in land and "
+            f"ecology (build, grow, consume, live, eat), this bioregion is essential context: "
+            f"let it shape real specifics — climate, native species, growing seasons, local "
+            f"water and energy realities — so the lesson is genuinely local and relevant, not "
+            f"generic. For every other art, weave it in only where it naturally deepens the "
+            f"session (a local example, a nearby reference point); never force it, and never "
+            f"let it override the art's own frame."
+        )
+
     # ── Domain line: situates the session in the skill's academic/practical domain ──
     # learning_domain is a rich string (e.g. "Physiology", "Visual Art & Expression")
     # skill_type is a Bloom-style flag: cognitive | affective | psychomotor (may be combined)
@@ -457,13 +492,13 @@ async def generate_session(
         ),
     )
     prompt = f"""{_platform_identity}
-{continuity_block}
+{portfolio_block}{continuity_block}
 Generate a complete 5-phase learning session for the following context:
 
 ART: The art of {art.name} — {art.tagline}
 ART DESCRIPTION: {art.description or art.tagline}
 DEVELOPMENT PHASE: {phase_name} (ages {age_range})
-{skill_line}{domain_line}{interests_line}{lens_line}
+{skill_line}{domain_line}{interests_line}{bioregion_line}{lens_line}
 
 PHASE-SPECIFIC GUIDANCE — this is critical, apply it to every part of the session:
 {phase_guidance}
@@ -578,6 +613,8 @@ Return only the JSON. No preamble, no explanation, no markdown code blocks.{lang
         # is an unconstrained str; in strict mode an over-long value would 500
         # the whole request (MySQL 1406) instead of just being stored oddly.
         language=req_language[:10],
+        # 2026-11-03: informational only (admin shows it); NOT dev_phase_id, see above.
+        generated_for_phase_id=phase.id if phase else None,
         warmup_prompt=data["warmup"],
         explore_content=data["explore"],
         challenge_prompt=data["challenge"],
@@ -756,6 +793,9 @@ async def _serve_from_library(
         latency_ms=0,
         status="scheduled",
         language=stored.language or req_language,
+        # 2026-11-03: informational only (admin shows it); NOT dev_phase_id, which
+        # would make this per-learner copy eligible for the shared library again.
+        generated_for_phase_id=phase.id if phase else None,
         warmup_prompt=stored.warmup_prompt,
         explore_content=stored.explore_content,
         challenge_prompt=stored.challenge_prompt,

@@ -8,20 +8,32 @@
 #   Proposal scope additionally stage-gated (P27):
 #     local    — Grove+    (any Polis-access holder)
 #     regional — Forest+   (9 arts, 3 domains)
-#     global   — Ecosystem (500 XP, 12 arts, all 3 domains)
+#     global   — Ecosystem (all 15 Arts at 100%)
 #
 # DB CALL STRATEGY:
 #   require_polis_access fetches stage once and returns PolisAccess(learner, stage).
 #   Write endpoints receive it via Depends — stage is already in hand, no re-fetch.
 #   submit_proposal uses ctx.stage for scope check: zero extra DB calls.
 #
-# Avatar stage mirrors computeAvatarStage() in app.js:
+# Avatar stage (utils.compute_avatar_stage; mirrors computeAvatarStage() in
+# app.js). Corrected 2026-11-01: this header still described the pre-2026-09-05
+# XP/arts-touched thresholds. XP no longer gates anything here. A stage needs
+# EVERY one of the 15 Arts at or above its threshold (weakest Art = bottleneck):
 #   Seed      — start
-#   Sprout    — 18 XP + 2 arts
-#   Sapling   — 50 XP + 4 arts
-#   Grove     — 100 XP + 6 arts + 2 domains  <- Polis write unlocks here
-#   Forest    — 200 XP + 9 arts + 3 domains
-#   Ecosystem — 500 XP + 12 arts + all 3 domains
+#   Sprout    — all 15 Arts >= 0.10
+#   Sapling   — all 15 Arts >= 0.20
+#   Grove     — all 15 Arts >= 0.40   <- Polis write unlocks here
+#   Forest    — all 15 Arts >= 0.65
+#   Ecosystem — all 15 Arts >= 1.00
+#
+# One score for gate and badge (2026-11-01, backlog 2026.180): utils.
+# get_learner_stage now reads engine.compute_radar() art_scores — the same
+# per-art scores the frontend badge shows. From 2026-09-05 until then it read
+# learner_art_progress.score alone (credited only by skill-click sessions, at
+# most 0.05 per session in total), so the gate could refuse a stage the badge
+# displayed and art-first sessions never moved it.
+# A session feeds those scores only when the learner wrote something real in
+# its challenge or reflection (sessions.MIN_RESPONSE_CHARS).
 #
 # GET  /api/polis/my-access                               — stage + access status
 # GET  /api/polis/referenda                               — open referenda (filter: scope, bioregion)

@@ -29,6 +29,39 @@ class StartSessionRequest(BaseModel):
     title:            str | None = None
     language:         str | None = "en"  # UI language at generation time
 
+# 2026-11-01: a session counts toward the learner's growth score (skill
+# evidence, level-ups, direct art credit — i.e. everything the avatar stage
+# and the Polis gate are computed from) only when the learner wrote something
+# real in the challenge or the reflection. Self-rating alone no longer moves
+# the avatar. The session itself is still saved, and XP/streak/activity are
+# still recorded. MIN_RESPONSE_CHARS ~= a few words in an alphabetic script;
+# each CJK character (one character carries roughly a word) counts as
+# CJK_CHAR_WEIGHT, so one short Chinese/Japanese/Korean sentence qualifies.
+# Set MIN_RESPONSE_CHARS to 0 to disable the rule.
+MIN_RESPONSE_CHARS = 15
+CJK_CHAR_WEIGHT    = 3
+
+
+def _is_cjk(ch: str) -> bool:
+    o = ord(ch)
+    return (0x4E00 <= o <= 0x9FFF or 0x3400 <= o <= 0x4DBF      # Han
+            or 0x3040 <= o <= 0x30FF                              # Hiragana / Katakana
+            or 0xAC00 <= o <= 0xD7AF)                             # Hangul syllables
+
+
+def _effective_length(text: str | None) -> int:
+    collapsed = " ".join((text or "").split())
+    return sum(CJK_CHAR_WEIGHT if _is_cjk(ch) else 1 for ch in collapsed)
+
+
+def has_real_response(*texts: str | None) -> bool:
+    """True when any of the given learner-written texts is long enough to
+    count as something real (see MIN_RESPONSE_CHARS / CJK_CHAR_WEIGHT)."""
+    if MIN_RESPONSE_CHARS <= 0:
+        return True
+    return any(_effective_length(t) >= MIN_RESPONSE_CHARS for t in texts)
+
+
 class CompleteSessionRequest(BaseModel):
     duration_seconds:   int
     xp_earned:          int
@@ -204,9 +237,13 @@ async def complete_session(
         )
         db.add(progress)
 
+    # 2026-11-01: growth credit requires a real challenge/reflect response.
+    counted = has_real_response(req.challenge_response, req.reflect_response)
+
     # FIX: DB columns may be NULL for brand-new rows — guard with `or 0`
-    progress.recall_count     = (progress.recall_count   or 0) + 1
-    progress.evidence_count   = (progress.evidence_count or 0) + 1
+    if counted:
+        progress.recall_count   = (progress.recall_count   or 0) + 1
+        progress.evidence_count = (progress.evidence_count or 0) + 1
     progress.current_level    = (progress.current_level  or 0)
     progress.last_practiced_at = datetime.now(timezone.utc)
 
@@ -220,7 +257,8 @@ async def complete_session(
     progress.next_review_at = datetime.now(timezone.utc) + timedelta(days=review_days)
 
     # Level up: needs evidence_count >= 3 per level and assess_score >= 70
-    if (progress.evidence_count >= (progress.current_level + 1) * 3
+    if (counted
+            and (progress.evidence_count or 0) >= (progress.current_level + 1) * 3
             and (req.assess_score or 0) >= 70
             and progress.current_level < 3):
         progress.current_level += 1
@@ -285,7 +323,7 @@ async def complete_session(
     # When the learner clicked a Learning Domain skill (e.g. "Data Analysis"),
     # find it by name and give it evidence credit so compute_radar flows
     # correctly through arts_skills → art scores for that skill's mapped arts.
-    if req.skill_context:
+    if req.skill_context and counted:
         linked_q = await db.execute(
             select(Skill).where(func.lower(Skill.name) == req.skill_context.strip().lower())
         )
@@ -310,7 +348,7 @@ async def complete_session(
     # Distribute a weighted score increment to every art the skill exercises.
     # compute_radar in engine.py blends this into art scores at 20% weight,
     # keeping skill-based learning the primary driver (80%).
-    if req.contributing_arts and req.skill_context:
+    if req.contributing_arts and req.skill_context and counted:
         weights  = SKILL_ART_WEIGHTS.get(req.skill_context, {})
         total_w  = sum(weights.values()) or len(req.contributing_arts)
         base_inc = (req.assess_score or 50) / 100 * 0.05  # max 0.05/session at 100%
@@ -360,6 +398,9 @@ async def complete_session(
     return {
         "ok":           True,
         "level_up":     progress.current_level,
+        # 2026-11-01: False when the learner wrote nothing real in the
+        # challenge or reflection, so this session did not move their growth.
+        "counted_toward_growth": counted,
         "radar":        radar_data,
         "next_session": next_session,
     }

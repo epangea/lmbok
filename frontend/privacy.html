@@ -46,17 +46,33 @@
     app can greet you correctly before it finishes loading your full
     profile.</li>
     <li>Your language and theme preference.</li>
-    <li>Your bioregion (derived from a one-time, city-level location lookup
-    you can decline) — never sent to us or stored on our servers, only kept
-    on your device.</li>
+    <li>The result of your bioregion lookup (coordinates and city-level
+    place name, from a one-time lookup you can decline), so you aren't asked
+    again. See below for what is saved to your account.</li>
   </ul>
 
   <h2>What we store on our servers</h2>
   <p>Your account details (email, username, display name), your learning
   progress, and anything you choose to write or contribute (session
-  responses, contributed bioregion portraits, Polis posts, etc.). We don't
-  sell or share this with third parties, and we don't run advertising of
-  any kind.</p>
+  responses, contributed bioregion portraits, Polis posts, etc.). We also
+  save your bioregion — its name, plus a short note in your learner profile
+  that includes your city-level place name — because your sessions are
+  tailored to where you live. If no bioregion portrait exists near you, your
+  coordinates are sent to our server so a draft portrait can be generated. We don't
+  sell this or share it with third parties for their own purposes (the AI
+  services described below only receive what's needed to write a response),
+  and we don't run advertising of any kind.</p>
+
+  <h2>AI services</h2>
+  <p>Sessions, companions and your learner profile are written with the help
+  of AI providers (such as Groq or Google Gemini, or a self-hosted model).
+  To write a session for you, we send the provider what it needs to make it
+  fit you: your life phase and the Art or skill you chose, interests you've
+  shared, your bioregion name if you've set one, your learner profile (what
+  the platform has distilled from your conversations and reflections), and
+  short excerpts of your recent responses. Companion conversations are sent
+  the same way. The providers process this to return a response, under their
+  own terms. Sessions served from the shared library involve no AI call.</p>
 
   <h2>Questions</h2>
   <p>This is a small, single-maintainer project. If you have questions

@@ -66,14 +66,28 @@ the map of what you're plugging into:
    replace it."
 5. **Learner interests** — free text the learner has shared, woven in "where natural," never
    forced.
-6. **Continuity block** (`prior_session_context.py`) — the learner's last 3 sessions for this
-   (art, phase) combination, so a new session builds on prior work instead of repeating
-   itself. Also where a companion-resolved "wrong answer was actually defensible" verdict
-   (see §2.3) gets folded back in, so a future session's prompt knows *why* that was
-   accepted, not just that it was.
-7. **Bioregion context** — soft everywhere except the five land/ecology arts, where it's
-   framed as essential shaping context.
-8. **Language instruction** — when set, a hard requirement that every single field (title
+6. **Learner portfolio block** (`prior_session_context.py::build_portfolio_block`, added
+   2026-11-01) — the learner's living profile (`learners.learner_profile`, the Prosopon / "My
+   Story" life-CV the Profile Distiller maintains, §2.4), capped at 1500 characters and
+   framed as background *data*, not instructions: it may be stale, must not be quoted or
+   revealed, must never surface fears/avoidances in learner-facing text, and should inform
+   entry points and tone without confining the learner to what they already love. It sits
+   directly after the platform-identity block, ahead of the continuity block. Omitted if the
+   learner has no profile yet.
+7. **Continuity block** (`prior_session_context.py::get_prior_session_context`) — the
+   learner's last 3 *completed* sessions for this (art, phase) combination (sessions that were
+   generated but never finished are skipped), so a new session builds on prior work instead of
+   repeating itself. Also where a companion-resolved "wrong answer was
+   actually defensible" verdict (see §2.3) gets folded back in, so a future session's prompt
+   knows *why* that was accepted, not just that it was. Since 2026-11-01 it also (a) adds
+   short excerpts (~200 characters) of the learner's own challenge/reflect responses to each
+   of those sessions and (b) lists their last 3 *completed* sessions on **other** arts, so a
+   thread that surfaced elsewhere can carry over. (a) and (b) are the "journey additions."
+8. **Bioregion context** — soft everywhere except the five land/ecology arts, where it's
+   framed as essential shaping context. Sourced from `learners.bioregion`. (This block was
+   accidentally dropped from the prompt by the P40 rewrite, commit `d7b1a09`, and restored on
+   2026-11-01; its admin Prompt Anatomy card had stayed in place the whole time.)
+9. **Language instruction** — when set, a hard requirement that every single field (title
    through every `assess_option`) is written in that language, no mixing.
 
 The model returns strict JSON (title/warmup/explore/challenge/reflect/assess_question/
@@ -94,6 +108,34 @@ Three-tier fallback, all governed by `ai_client.py`'s circuit breaker:
 This exists so a solo-maintained, free platform degrades gracefully under provider outage
 rather than hard-failing for every learner mid-outage.
 
+Note that tiers 2 and 3 serve stored sessions that were not generated for this learner, so the
+portfolio block, continuity block, interests and bioregion lines do not shape them — only the
+filters in `_select_reusable_pool()` (phase, language, skill tier, and the learner's recent
+history for the art) do.
+
+### Controlling the learner-aware parts of the prompt
+
+Two `platform_settings` keys (admin Settings → AI) govern them, both default `true`:
+
+| Key | Controls |
+|---|---|
+| `ai_include_prior_context` | The continuity block at all (assess data for the last 3 same-art sessions). |
+| `ai_include_learner_portfolio` | The portfolio block **and** the continuity block's journey additions (response excerpts, other-art sessions). With it off, the continuity block is the assess-only form from 2026-07-07 (completed sessions only since 2026-11-04). |
+
+Privacy: with both on, learner-authored text (their profile and short excerpts of their own
+responses) is sent to whichever AI provider serves the request (Groq / Gemini / Ollama) on
+every fresh session generation. The companions already send the profile to the same providers,
+but this widens how often it happens. `ai_include_learner_portfolio` is the kill switch.
+
+Sessions generated with the portfolio are stored **without** `dev_phase_id` on purpose (see the
+comment at the `Session(...)` insert in `generate_session`): the strict phase filter in
+`_select_reusable_pool()` therefore can never pick them up, so one learner's personalised
+session cannot become another learner's library content.
+
+The phase a live (or per-learner library-served) session was generated *for* is kept separately in
+`sessions.generated_for_phase_id` (added 2026-11-03). It is informational: the admin session
+browser reads it so those rows don't show a blank phase, and nothing in library selection or reuse
+looks at it. Rows created before that date have it empty.
 ---
 
 ## 2. The companions — one shared philosophy, documented exceptions
@@ -184,7 +226,18 @@ to be consistent *about*. Two silent background jobs:
 - **Profile Distiller** (`/profile-update`) reads a just-finished companion conversation and
   merges new signals into the learner's persistent "life-CV" (curiosities, practices, fears,
   recurring themes — capped at 1500 characters, distilled not appended). Fires automatically
-  every 4 exchanges in a companion thread, or once a session ends.
+  every 4 exchanges in a companion thread, or once a session ends. Since 2026-11-01 this
+  profile is also read by `/session` (the learner portfolio block, §1), not only by the
+  companions and the Guiding Star Distiller.
+  How the profile travels: `/generate/profile-update` and the companion endpoints use the
+  profile text **the client sends** (`existing_profile` / `learner_profile`, held in
+  `S.learnerProfile`), not the stored column; only `/session` reads `learners.learner_profile`
+  directly. The client fills `S.learnerProfile` from `GET /learners/me`. That endpoint did not
+  return `learner_profile` until 2026-11-03, so before then the Portfolio "My Story" card
+  stayed empty, the Guiding Star never regenerated, the companions saw no profile, and each
+  distillation started from "(no profile yet)" and overwrote the stored text with a summary
+  of just that conversation or session. Profiles stored before that date are therefore
+  recent-conversation snapshots, not accumulated histories.
 - **Guiding Star Distiller** (`/guiding-star`) reads that life-CV and compresses it into one
   short phrase (4–9 words) shown in the learner's "Where I Stand" card — deliberately poetic
   and specific, with explicit bad-example guardrails against generic output like "keep
@@ -236,7 +289,8 @@ in writing, in this file) is a design decision.
 |---|---|---|
 | Core philosophy block, `ART_LENS`, `phase_guides`, `DOMAIN_GUIDANCE` | `backend/routes/generate.py` (`generate_session`) | `/session` prompt |
 | Full "Arts to Be Human" framework detail | `PHILOSOPHY.md` | Human-readable reference; source of truth the prompt blocks above are derived from |
-| Continuity block (last 3 sessions) | `backend/prior_session_context.py` | `/session` prompt, appended |
+| Learner portfolio block (profile, ≤1500 chars) | `backend/prior_session_context.py::build_portfolio_block` | `/session` prompt, after platform identity; toggle `ai_include_learner_portfolio` |
+| Continuity block (last 3 sessions + journey additions) | `backend/prior_session_context.py::get_prior_session_context` | `/session` prompt, appended; toggles `ai_include_prior_context` / `ai_include_learner_portfolio` |
 | Circuit breaker / library fallback | `backend/circuit_breaker.py`, `_select_reusable_pool()` / `_serve_from_library()` in `generate.py` | `/session`, pre-generation |
 | Default Socratic Companion + Portfolio Companion prompts | `generate.py::scaffold_companion` | `/scaffold` |
 | Opt-in media hint parsing (`[[MEDIA: term]]`) | `generate.py::scaffold_companion` | `ScaffoldResponse.media_hint` → `frontend/app.js::mediaHintChipsHTML` |
@@ -247,7 +301,9 @@ in writing, in this file) is a design decision.
 
 ---
 
-*Last written 2026-08-17, from a direct read of `backend/routes/generate.py` at that
-commit — not from memory or an earlier summary. If the code has since changed and this
+*Last written 2026-08-17 from a direct read of `backend/routes/generate.py`; §1's prompt
+building blocks, the fallback note and §4 were updated 2026-11-01 for the learner portfolio
+block, the continuity journey additions and the restored bioregion line, verified against
+the repo at that date — not from memory or an earlier summary. If the code has since changed and this
 doc hasn't, the code wins; please open a PR updating this file rather than trusting it
 as-is.*

@@ -1530,8 +1530,10 @@ async def admin_list_sessions(
         q1 = q1.where(Session.art_id == art_id)
         count_q = count_q.where(Session.art_id == art_id)
     if dev_phase_id:
-        q1 = q1.where(Session.dev_phase_id == dev_phase_id)
-        count_q = count_q.where(Session.dev_phase_id == dev_phase_id)
+        # 2026-11-03: live AI sessions carry generated_for_phase_id instead of dev_phase_id
+        phase_cond = or_(Session.dev_phase_id == dev_phase_id, Session.generated_for_phase_id == dev_phase_id)
+        q1 = q1.where(phase_cond)
+        count_q = count_q.where(phase_cond)
     if q:
         like_q = f"%{q}%"
         q1 = q1.where(or_(Session.title.like(like_q), Session.warmup_prompt.like(like_q)))
@@ -1563,7 +1565,9 @@ async def admin_list_sessions(
                 "art_id": s.art_id,
                 "art_name": art_map.get(s.art_id, ""),
                 "dev_phase_id": s.dev_phase_id,
-                "dev_phase_name": ph_map.get(s.dev_phase_id, ""),
+                # 2026-11-03: live AI sessions have no dev_phase_id by design; show the
+                # phase they were generated for instead of a blank.
+                "dev_phase_name": ph_map.get(s.dev_phase_id or s.generated_for_phase_id, ""),
                 "primary_skill_id": s.primary_skill_id,
                 "language": getattr(s, 'language', 'en'),
                 "created_at": s.created_at.isoformat() if s.created_at else None,
@@ -1597,7 +1601,7 @@ async def admin_get_session(
         "art_id": session.art_id,
         "art_name": art_map.get(session.art_id, ""),
         "dev_phase_id": session.dev_phase_id,
-        "dev_phase_name": ph_map.get(session.dev_phase_id, ""),
+        "dev_phase_name": ph_map.get(session.dev_phase_id or session.generated_for_phase_id, ""),
         "primary_skill_id": session.primary_skill_id,
         "secondary_skill_ids": session.secondary_skill_ids,
         "recommended_by": session.recommended_by,
