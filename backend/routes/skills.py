@@ -1,4 +1,4 @@
-# FreqLearn — routes/skills.py
+# FreqLearn, routes/skills.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -33,7 +33,7 @@ async def get_mouseion_domains():
     """
     Public: the 8 Mouseion domains and their 48 skills. Added 2026-08-22 as
     the canonical source any page can fetch instead of re-hardcoding the
-    grid — first consumer is contribute.html's LECKO domain/skill selects.
+    grid, first consumer is contribute.html's LECKO domain/skill selects.
     Sourced from mouseion_domains.py (see that module's header for why this
     isn't derived from Skill.learning_domain directly).
     """
@@ -46,7 +46,7 @@ async def get_mouseion_domains():
 async def get_phases(db: AsyncSession = Depends(get_db)):
     """
     Public: all developmental phases (dev_phases table), ordered for display.
-    Added 2026-08-22 as the canonical source for age-range selectors —
+    Added 2026-08-22 as the canonical source for age-range selectors,
     first consumer is contribute.html's "Who is it for?" select, which
     previously hardcoded a stale/incomplete copy (backlog 2026.125). This is
     the same table contribute.py already validates phase_slug against, and

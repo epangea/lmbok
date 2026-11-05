@@ -1,4 +1,4 @@
--- FreqLearn — properly backfill sessions.language (v4, HEX-byte, character-set-safe)
+-- FreqLearn, properly backfill sessions.language (v4, HEX-byte, character-set-safe)
 -- Run on server:
 --   mysql freqlearn < scripts/redetect_session_languages_v4.sql
 --
@@ -22,7 +22,7 @@
 SET NAMES utf8mb4;
 
 -- ============================================================
--- 1. Russian / Cyrillic — UTF-8 bytes D0/D1 80-BF (U+0400-U+04FF)
+-- 1. Russian / Cyrillic, UTF-8 bytes D0/D1 80-BF (U+0400-U+04FF)
 -- ============================================================
 UPDATE sessions
 SET language = 'ru'
@@ -35,7 +35,7 @@ WHERE language = 'en'
   );
 
 -- ============================================================
--- 2. Vietnamese diacritics — specific UTF-8 byte pairs
+-- 2. Vietnamese diacritics, specific UTF-8 byte pairs
 --    Covers: ă â đ ê ô ơ ư + their uppercase variants
 --    UTF-8: 0xC4 0x83=ă, 0xC4 0x91=đ, 0xC6 0xA1=ạ, 0xC6 0xB0=ư,
 --           0xC3 0xA2=â, 0xC3 0xAA=ê, 0xC3 0xB4=ô, 0xC3 0x9A=ơ,
@@ -52,7 +52,7 @@ WHERE language = 'en'
   );
 
 -- ============================================================
--- 3. Arabic — D8/D9 80-BF (U+0600-U+06FF)
+-- 3. Arabic, D8/D9 80-BF (U+0600-U+06FF)
 -- ============================================================
 UPDATE sessions
 SET language = 'ar'
@@ -65,7 +65,7 @@ WHERE language = 'en'
   );
 
 -- ============================================================
--- 4. Chinese / CJK — E4..E9 prefix bytes (U+4E00-U+9FFF block)
+-- 4. Chinese / CJK, E4..E9 prefix bytes (U+4E00-U+9FFF block)
 --    Any 3-byte UTF-8 starting E4-E9 falls in the CJK Unified Ideographs
 --    range or related blocks (Hiragana, Katakana, Hangul).
 --    We use a generous pattern; tag as 'zh' (could split zh/ja/ko later).
@@ -81,7 +81,7 @@ WHERE language = 'en'
   );
 
 -- ============================================================
--- 5. French — literal accented chars (worked in v1)
+-- 5. French, literal accented chars (worked in v1)
 -- ============================================================
 UPDATE sessions
 SET language = 'fr'

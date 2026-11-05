@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>The Polis — Surfing the Frequencies</title>
+<title>The Polis, Surfing the Frequencies</title>
 <link rel="icon" type="image/png" href="/icons/icon-192.png"/>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
-<link rel="stylesheet" href="app.css?v=902190621">
+<link rel="stylesheet" href="app.css?v=2794695757">
 </head>
 <body class="page-polis">
 
@@ -24,8 +24,8 @@
 <div class="hero">
   <div class="polis-badge">CIVIC SPACE</div>
   <h1>The Polis</h1>
-  <p>A space for reasoned civic participation — not social media, not a comment section. Every voice here has earned its place through learning.</p>
-  <p style="font-size:12px;color:var(--text3)">Inspired by the Athenian Ecclesia and the Stoic vision of a cosmopolis — one human community, nested inside local ones.</p>
+  <p>A space for reasoned civic participation, not social media, not a comment section. Every voice here has earned its place through learning.</p>
+  <p style="font-size:12px;color:var(--text3)">Inspired by the Athenian Ecclesia and the Stoic vision of a cosmopolis, one human community, nested inside local ones.</p>
 </div>
 
 <div class="container" id="main-container" style="display:none">
@@ -47,20 +47,20 @@
     <div id="prop-list"><div class="empty"><div>💡</div>Loading proposals…</div></div>
   </div>
 
-  <!-- Submit proposal tab — rendered dynamically by renderProposeTab() -->
+  <!-- Submit proposal tab, rendered dynamically by renderProposeTab() -->
   <div id="tab-propose" style="display:none">
     <div id="propose-tab-body"></div>
   </div>
 
 </div>
 
-<!-- Gate (shown only if no token — redirects to home in JS) -->
+<!-- Gate (shown only if no token, redirects to home in JS) -->
 <div id="gate-container" style="display:none">
   <div style="max-width:480px;margin:0 auto 40px;background:var(--bg2);border:1px solid rgba(123,94,167,0.3);border-radius:var(--r-lg);padding:36px;text-align:center;">
     <div style="font-size:40px;margin-bottom:16px">🌳</div>
     <h2 style="font-family:var(--font-display);font-size:22px;margin-bottom:12px">The Polis opens with practice</h2>
     <p id="gate-body" style="color:var(--text2);font-size:14px;line-height:1.8;margin-bottom:24px">
-      Sign in to read the Polis. Participation unlocks at 🌳 Grove stage — earned through broad learning across multiple arts.
+      Sign in to read the Polis. Participation unlocks at 🌳 Grove stage, earned through broad learning across multiple arts.
     </p>
     <a href="/app.html" class="btn btn-polis">Return to Agora →</a>
   </div>
@@ -72,7 +72,7 @@
 var API = '/api';
 var currentRef = null;
 
-// Access/refresh tokens live in httpOnly cookies now (P-SEC1, 2026-07-16) —
+// Access/refresh tokens live in httpOnly cookies now (P-SEC1, 2026-07-16),
 // nothing to read from localStorage. fl_learner (set by app.js on login) is
 // just a display-info cache, used here only to gate the page before we've
 // made a network call.
@@ -134,7 +134,7 @@ function _accessibleScopes() {
   if (key === 'ecosystem')              return ['local','regional','global'];
   if (key === 'forest')                 return ['local','regional'];
   if (key === 'grove')                  return ['local'];
-  return []; // Seed/Sprout/Sapling — read-only, no scope
+  return []; // Seed/Sprout/Sapling, read-only, no scope
 }
 
 // Is a given item's scope within the learner's access?
@@ -157,7 +157,7 @@ async function checkGate() {
     window._myName = me.display_name || me.name || 'You';
   } catch(e) { window._myName = 'You'; }
 
-  // Always show content — reading is open to all logged-in learners
+  // Always show content, reading is open to all logged-in learners
   document.getElementById('main-container').style.display = '';
   loadReferenda();
 
@@ -178,7 +178,7 @@ function showParticipationNudge(access) {
   if (access.next_stage) {
     var weakestPct = Math.round((access.min_art_score || 0) * 100);
     var neededPct  = Math.round(access.next_stage.min_art_score * 100);
-    gapText = ' (your weakest Art is at ' + weakestPct + '% — every Art needs '
+    gapText = ' (your weakest Art is at ' + weakestPct + '%, every Art needs '
       + neededPct + '% to reach ' + access.next_stage.icon + ' ' + access.next_stage.label + ')';
   }
 
@@ -193,7 +193,7 @@ function showParticipationNudge(access) {
     + '<div style="font-size:11px;font-weight:700;color:var(--polis);letter-spacing:.8px;margin-bottom:3px">OBSERVER MODE</div>'
     + '<div style="font-size:13px;color:var(--text2);line-height:1.6">'
     + 'You are <strong style="color:var(--text)">' + icon + ' ' + stage + '</strong>. '
-    + 'Read and reflect freely — participation unlocks at 🌳 Grove' + gapText + '.'
+    + 'Read and reflect freely, participation unlocks at 🌳 Grove' + gapText + '.'
     + '</div></div>';
 
   var container = document.getElementById('main-container');
@@ -274,7 +274,7 @@ async function vote(refId, position) {
       reasoning = _raw || null;   // empty string → null (no reasoning stored)
     }
     await req('POST', '/polis/referenda/'+refId+'/vote', {position:position, reasoning:reasoning});
-    showToast('Vote recorded — thank you.');
+    showToast('Vote recorded, thank you.');
     loadReferenda();
   } catch(e) { showToast(e.message, true); }
 }
@@ -338,7 +338,7 @@ function renderDisc(refId, comments, canComment) {
 
   var html = '';
   if (!comments || !comments.length) {
-    html = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No comments yet — be the first to share your reasoning.</div>';
+    html = '<div style="color:var(--text3);font-size:13px;padding:8px 0">No comments yet, be the first to share your reasoning.</div>';
   } else {
     roots.forEach(function(c){ html += renderComment(c, false); });
   }
@@ -411,7 +411,7 @@ async function postComment(refId) {
 
   try {
     await req('POST', '/polis/referenda/'+refId+'/discussion', {body: body.trim(), parent_id: parentId});
-    // Replace temp with real data on next load — not critical, stays until panel reopened
+    // Replace temp with real data on next load, not critical, stays until panel reopened
   } catch(e) {
     showToast(e.message, true);
     // Remove optimistic node on failure
@@ -434,7 +434,7 @@ async function loadProposals() {
     var props = await req('GET', '/polis/proposals');
     var list  = document.getElementById('prop-list');
     if (!props || !props.length) {
-      list.innerHTML = '<div class="empty"><div>💡</div>No proposals yet — submit the first one.'
+      list.innerHTML = '<div class="empty"><div>💡</div>No proposals yet, submit the first one.'
         + '<br><a href="https://onehouse.top/index.php?title=THE_BLUEPRINT" target="_blank" rel="noopener" '
         + 'style="font-size:12px;color:var(--wave);margin-top:8px;display:inline-block">📖 Read The Blueprint →</a></div>';
       return;
@@ -475,19 +475,19 @@ function renderProposeTab() {
   var scopes = _accessibleScopes();
 
   if (scopes.length === 0) {
-    // Pre-Grove: aspirational gate — show what's coming, not a wall
+    // Pre-Grove: aspirational gate, show what's coming, not a wall
     var a = _accessData || {};
     var icon       = a.icon || '🫘';
     var stage      = a.label || 'Seed';
     // Gate is per-Art: every one of the 15 Arts must reach 0.40 to reach
     // Grove. 0.40 mirrors the 'grove' threshold in AVATAR_STAGES
-    // (utils.py) / computeAvatarStage (app.js) — keep in sync.
+    // (utils.py) / computeAvatarStage (app.js), keep in sync.
     var GROVE_THRESHOLD = 0.40;
     var weakestPct = Math.round((a.min_art_score || 0) * 100);
     var gaps = [];
     if ((a.min_art_score || 0) < GROVE_THRESHOLD) {
       gaps.push('<strong style="color:var(--wave)">Your weakest Art is at ' + weakestPct
-        + '%</strong> — every one of the 15 Arts needs to reach '
+        + '%</strong>, every one of the 15 Arts needs to reach '
         + Math.round(GROVE_THRESHOLD * 100) + '%');
     }
 
@@ -497,7 +497,7 @@ function renderProposeTab() {
       + '<div style="font-family:var(--font-display);font-size:18px;font-weight:700;margin-bottom:10px">Your voice is growing</div>'
       + '<p style="color:var(--text2);font-size:14px;line-height:1.8;margin-bottom:20px">'
       + 'You are <strong style="color:var(--text)">' + icon + ' ' + stage + '</strong>. '
-      + 'Proposal submission opens at 🌳 <strong>Grove</strong> — the first stage of civic maturity.<br><br>'
+      + 'Proposal submission opens at 🌳 <strong>Grove</strong>, the first stage of civic maturity.<br><br>'
       + 'Grove members can submit <strong>local</strong> proposals rooted in their bioregion.<br>'
       + '🌲 Forest members unlock <strong>regional</strong> proposals spanning watersheds.<br>'
       + '🌍 Ecosystem members contribute to <strong>global</strong> civic dialogue.'
@@ -553,7 +553,7 @@ async function submitProposal() {
       scope:       document.getElementById('p-scope').value,
       bioregion:   document.getElementById('p-bio').value.trim() || null,
     });
-    showToast('Proposal submitted — thank you!');
+    showToast('Proposal submitted, thank you!');
     document.getElementById('p-title').value = '';
     document.getElementById('p-desc').value  = '';
     document.getElementById('p-bio').value   = '';
@@ -566,7 +566,7 @@ async function submitProposal() {
 checkGate();
 </script>
 
-<!-- Service worker registration — see frontend/sw.js header comment. -->
+<!-- Service worker registration, see frontend/sw.js header comment. -->
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {

@@ -1,29 +1,29 @@
 # ============================================================
-# FreqLearn — routes/admin.py
+# FreqLearn, routes/admin.py
 # Admin-only endpoints (X-Admin-Key auth)
 #
 # ENV REQUIRED:
-#   ADMIN_KEY=<your-secret>   — set in /var/www/freqlearn/backend/.env
+#   ADMIN_KEY=<your-secret>, set in /var/www/freqlearn/backend/.env
 #
 # Register in main.py:
 #   from routes.admin import router as admin_router
 #   app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
 #
 # Endpoints:
-#   GET    /api/admin/scavenger/listings            — ALL pending/live listings (scavenged AND
-#                                                       org-submitted — see 2026-07-17 fix note below)
-#   POST   /api/admin/scavenger/run                 — AI scavenger run → inserts listings
-#   PATCH  /api/admin/scavenger/listings/{id}/approve — approve (set is_active=1), any source
-#   DELETE /api/admin/scavenger/listings/{id}       — hard delete; scavenged listings only
+#   GET    /api/admin/scavenger/listings, ALL pending/live listings (scavenged AND
+#                                                       org-submitted, see 2026-07-17 fix note below)
+#   POST   /api/admin/scavenger/run, AI scavenger run → inserts listings
+#   PATCH  /api/admin/scavenger/listings/{id}/approve, approve (set is_active=1), any source
+#   DELETE /api/admin/scavenger/listings/{id}, hard delete; scavenged listings only
 #                                                       (org-submitted listings can't be deleted
-#                                                       here — see note below)
-#   GET    /api/admin/coverage                      — Phase × Art session counts (P24)
-#   GET    /api/admin/seed-profiles                 — read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
-#   GET    /api/admin/learners                      — all learners with streak/XP stats (real data)
+#                                                       here, see note below)
+#   GET    /api/admin/coverage, Phase × Art session counts (P24)
+#   GET    /api/admin/seed-profiles, read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
+#   GET    /api/admin/learners, all learners with streak/XP stats (real data)
 #
 # FIX 2026-07-17 (found during P2 org+Polis end-to-end test build):
 #   Org-submitted listings (orgs.py POST /api/orgs/listings sets scavenged=False,
-#   is_active=False, "pending admin approval") were UNAPPROVABLE — the only admin
+#   is_active=False, "pending admin approval") were UNAPPROVABLE, the only admin
 #   listing endpoints filtered `scavenged == True`, so an org-submitted listing
 #   never appeared in `GET /scavenger/listings` and could never be PATCHed live.
 #   Orgs could register, log in, and submit a listing that would then sit inactive
@@ -31,14 +31,14 @@
 #   `scavenged == True` filter from the list/approve endpoints below (both sources
 #   now show up, each tagged with a `source` field so admin can tell them apart);
 #   DELETE (hard-delete/reject) stays scavenged-only since destroying a real org's
-#   submitted data isn't the right "reject" behavior — an org listing that isn't
+#   submitted data isn't the right "reject" behavior, an org listing that isn't
 #   approved just stays inactive.
-#   GET    /api/admin/coverage                      — Phase × Art session counts (P24)
-#   GET    /api/admin/seed-profiles                 — read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
-#   GET    /api/admin/learners                      — all learners with streak/XP stats (real data)
-#   GET    /api/admin/session-config                — list all session_config rows (Prompt Anatomy content)
-#   PUT    /api/admin/session-config/{key}           — update one row's value; logs to session_config_ledger
-#   GET    /api/admin/session-config/{key}/ledger    — change history for one key (2026-08-26)
+#   GET    /api/admin/coverage, Phase × Art session counts (P24)
+#   GET    /api/admin/seed-profiles, read-only list of bioregion_seed_profiles (P_FIELDGUIDE)
+#   GET    /api/admin/learners, all learners with streak/XP stats (real data)
+#   GET    /api/admin/session-config, list all session_config rows (Prompt Anatomy content)
+#   PUT    /api/admin/session-config/{key}, update one row's value; logs to session_config_ledger
+#   GET    /api/admin/session-config/{key}/ledger, change history for one key (2026-08-26)
 # ============================================================
 
 import os
@@ -71,13 +71,13 @@ router = APIRouter()
 
 ADMIN_KEY        = os.getenv("ADMIN_KEY", "")
 # ── Admin session signing (P-SEC2, 2026-07-17) ──────────────
-# Reuses the same JWT_SECRET env var learner/org auth already sign with —
+# Reuses the same JWT_SECRET env var learner/org auth already sign with,
 # not a new secret to manage, and admin-session JWTs carry their own
 # "scope": "admin" claim so they can't be confused with a learner/org token
 # even though the signing key is shared.
 JWT_SECRET       = os.getenv("JWT_SECRET", "change-this-in-production-please")
 JWT_ALG          = "HS256"
-ADMIN_SESSION_EXP_MIN = 8 * 60   # 8 hours — admin re-logs-in after this, no refresh token (single trusted operator, not worth the complexity)
+ADMIN_SESSION_EXP_MIN = 8 * 60   # 8 hours, admin re-logs-in after this, no refresh token (single trusted operator, not worth the complexity)
 SCAVENGER_ORG_ID = 18   # organizations.id for 'freqlearn-scavenger'
 
 # Valid art slugs for the platform
@@ -93,10 +93,10 @@ VALID_TYPES = ("job", "internship", "volunteer", "project", "contract", "gig", "
 # ── Auth dependency (P-SEC2, 2026-07-17) ────────────────────
 # ADMIN_KEY itself is now only ever checked once, server-side, inside
 # /login below. Every route below this line is gated on a short-lived
-# signed session cookie instead — the raw ADMIN_KEY never travels back to
+# signed session cookie instead, the raw ADMIN_KEY never travels back to
 # the browser and is never stored client-side (fl_admin_key localStorage
 # is retired). This mirrors get_current_learner in routes/auth.py: 401 for
-# "not authenticated" (missing/invalid/expired cookie), not 403 — 403 is
+# "not authenticated" (missing/invalid/expired cookie), not 403, 403 is
 # for "authenticated but not allowed," which doesn't apply here since
 # there's only one admin role.
 
@@ -120,7 +120,7 @@ class AdminLoginRequest(BaseModel):
 async def admin_login(req: AdminLoginRequest, response: Response):
     if not ADMIN_KEY:
         raise HTTPException(500, "ADMIN_KEY not configured on server")
-    # constant-time compare — this is a shared secret comparison, same class
+    # constant-time compare, this is a shared secret comparison, same class
     # of check as a password, worth doing properly even though it's a single
     # trusted operator today
     if not secrets.compare_digest(req.admin_key, ADMIN_KEY):
@@ -146,7 +146,7 @@ async def admin_logout(response: Response):
 @router.get("/session")
 async def admin_session(_: None = Depends(require_admin)):
     """Cheap endpoint for the frontend to check 'am I still logged in?' on
-    page load — the session cookie is httpOnly so JS can't just read it."""
+    page load, the session cookie is httpOnly so JS can't just read it."""
     return {"ok": True}
 
 
@@ -184,7 +184,7 @@ async def get_scavenged_listings(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Return all listings pending/live review — both AI-scavenged AND
+    """Return all listings pending/live review, both AI-scavenged AND
     org-submitted (2026-07-17 fix, see module docstring). Each item's
     `source` field ("scavenger" | "org") tells the two apart."""
     rows = (await db.execute(
@@ -254,7 +254,7 @@ Return ONLY a JSON array of {count} objects. No preamble, no markdown, no explan
 
     inserted = []
     for item in listings_data:
-        # Sanitise arts — only allow valid slugs
+        # Sanitise arts, only allow valid slugs
         arts = [a for a in (item.get("required_arts") or []) if a in VALID_ARTS]
         ltype = item.get("listing_type", "other")
         if ltype not in VALID_TYPES:
@@ -293,8 +293,8 @@ async def approve_listing(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Approve a listing — makes it visible to learners. Works for both
-    AI-scavenged and org-submitted listings (2026-07-17 fix — previously
+    """Approve a listing, makes it visible to learners. Works for both
+    AI-scavenged and org-submitted listings (2026-07-17 fix, previously
     scoped to `scavenged == True` only, which left every org-submitted
     listing permanently unapprovable; see module docstring)."""
     listing = (await db.execute(
@@ -410,7 +410,7 @@ async def reject_listing(
     if listing.is_active:
         raise HTTPException(
             400,
-            "This listing is live (approved and visible to learners) — "
+            "This listing is live (approved and visible to learners), "
             "it can't be deleted from here. Ask the org to withdraw it, "
             "or check for real learner interest/matches first."
         )
@@ -423,7 +423,7 @@ async def reject_listing(
             400,
             f"This listing has {match_count} learner match"
             f"{'es' if match_count != 1 else ''} on record (it was live at "
-            "some point) — deleting it would orphan real match history. "
+            "some point), deleting it would orphan real match history. "
             "It's already hidden from learners; leave it as-is."
         )
 
@@ -505,8 +505,8 @@ async def seed_dry_run(
     _: None = Depends(require_admin),
 ):
     """
-    Dry run — calls AI, prints what would be generated, writes nothing to DB.
-    Returns immediately with the full output (dry runs are fast — no DB writes,
+    Dry run, calls AI, prints what would be generated, writes nothing to DB.
+    Returns immediately with the full output (dry runs are fast, no DB writes,
     no 3s delays between calls).
     """
     arts   = data.get("arts", "")
@@ -542,7 +542,7 @@ async def seed_run(
     _: None = Depends(require_admin),
 ):
     """
-    Real run — generates sessions and writes to DB.
+    Real run, generates sessions and writes to DB.
     Launches as background task; poll GET /api/admin/seed/status for progress.
     """
     global _seed_job
@@ -558,9 +558,9 @@ async def seed_run(
     if phases: args += ["--phases",  phases]
     args += ["--per-art", per]
 
-    # Fire and forget — frontend polls /seed/status
+    # Fire and forget, frontend polls /seed/status
     asyncio.ensure_future(_run_seed(args))
-    return {"ok": True, "message": f"Seed job started — poll /api/admin/seed/status for progress"}
+    return {"ok": True, "message": f"Seed job started, poll /api/admin/seed/status for progress"}
 
 
 # ── Coverage matrix (P24) ──────────────────────────────────
@@ -572,7 +572,7 @@ async def get_coverage(
 ):
     """
     Phase × Art session counts for the admin coverage matrix.
-    Returns up to 60 rows (15 arts × 4 phases) — much cheaper than
+    Returns up to 60 rows (15 arts × 4 phases), much cheaper than
     shipping the full library to the browser for client-side counting.
     """
     result = await db.execute(text("""
@@ -594,20 +594,20 @@ async def get_coverage(
     }
 
 
-# ── Bioregion seed profiles — read-only (P_FIELDGUIDE) ──────────────────────
+# ── Bioregion seed profiles, read-only (P_FIELDGUIDE) ──────────────────────
 # Layer 1 ("Where I Stand" dashboard card + public Field Guide tab) is
 # author-curated, not AI-generated, so this is intentionally read-only.
-# Uses SELECT * rather than named columns — bioregion_seed_profiles' exact
+# Uses SELECT * rather than named columns, bioregion_seed_profiles' exact
 # schema hasn't been confirmed via DESCRIBE in this file, and a generic
 # row→dict pass-through means this endpoint can't break on a column-name
 # mismatch. The public GET /api/bioregions/seed-profiles endpoint (already
-# live, unauthenticated) returns the same data — this route exists purely so
+# live, unauthenticated) returns the same data, this route exists purely so
 # the admin panel doesn't need a second round trip or a different auth model
 # to show the same table.
 #
 # NOTE: write endpoints (create/update/delete) are intentionally NOT included
 # here. Adding them safely requires confirming bioregion_seed_profiles'
-# column names with DESCRIBE first — see MAINTENANCE.md gotchas.
+# column names with DESCRIBE first, see MAINTENANCE.md gotchas.
 
 @router.get("/seed-profiles")
 async def get_seed_profiles_admin(
@@ -777,10 +777,10 @@ async def get_stats(
 
 # ── Learners (real data) ───────────────────────────────────
 #
-# Schema used — all columns confirmed via DESCRIBE learners (2026-06-23):
+# Schema used, all columns confirmed via DESCRIBE learners (2026-06-23):
 #   learners:        id, username, email, display_name (nullable), created_at,
 #                    last_seen_at, bioregion, is_active, phase_id
-#                    NOTE: no 'name' column — display name is 'display_name'
+#                    NOTE: no 'name' column, display name is 'display_name'
 #   learner_streaks: learner_id, current_streak, longest_streak,
 #                    total_sessions, total_xp, total_minutes, last_activity_date
 #   sessions:        learner_id, art_id, status  (status='completed' confirmed enum value)
@@ -788,7 +788,7 @@ async def get_stats(
 #
 # Top art is derived from completed sessions (most frequent art_id per learner)
 # rather than learner_arts, whose schema has not been DESCRIBE'd in this file.
-# This is also more accurate — it reflects what the learner actually completes.
+# This is also more accurate, it reflects what the learner actually completes.
 #
 # display_name is aliased as 'name' in the response; COALESCE with username so
 # the field is never null even if the learner skipped setting a display name.
@@ -803,7 +803,7 @@ async def get_learners(
     2026-07-24 (P9.2): added email_verified + a computed `status` field.
     Previously this endpoint only exposed `is_active` (defaults True at
     registration, independent of email verification), so the admin UI
-    badged every brand-new, unverified signup as "Active" — misleading,
+    badged every brand-new, unverified signup as "Active", misleading,
     since login() itself already blocks unverified accounts. `status` is
     now the single source of truth for the UI: 'pending' (email not yet
     verified), 'active' (verified + not deactivated), or 'deactivated'
@@ -884,7 +884,7 @@ async def admin_update_learner(
       - {"is_active": true}   → reactivate
       - {"email_verified": true} → manual verification override, for a
         learner stuck on a broken/undelivered email. Deliberately a plain
-        admin action (no separate audit table) — same trust boundary as
+        admin action (no separate audit table), same trust boundary as
         every other admin mutation here, and it's a rare, visible action
         an admin does directly to one account, not a bulk/automated one.
     Only these two fields are writable through this endpoint.
@@ -920,7 +920,7 @@ async def admin_delete_learner(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Real, permanent hard delete (P9.2) — deliberately different from
+    Real, permanent hard delete (P9.2), deliberately different from
     delete_org()'s soft-delete-disguised-as-DELETE above. Charbel's
     explicit call: admins need to actually remove test accounts, not
     just deactivate them.
@@ -961,7 +961,7 @@ async def admin_delete_learner(
     except IntegrityError as e:
         await db.rollback()
         logger.error(f"Hard delete of learner {learner_id} failed: {e}")
-        raise HTTPException(409, f"Could not fully delete learner {learner_id} — a dependent row exists that this endpoint doesn't yet cascade. Nothing was deleted (rolled back). Detail: {e}")
+        raise HTTPException(409, f"Could not fully delete learner {learner_id}, a dependent row exists that this endpoint doesn't yet cascade. Nothing was deleted (rolled back). Detail: {e}")
 
     return {"ok": True, "deleted": learner_id}
 
@@ -1002,7 +1002,7 @@ async def admin_send_learner_message(
     Send a composed email to a learner and log it (P9.2). `data` needs
     `subject` and `body`; `template` is an optional free-text label the
     frontend sends for its own history display (e.g. "welcome",
-    "support", "congrats", "org_notify", "custom") — not validated
+    "support", "congrats", "org_notify", "custom"), not validated
     against an enum here, since new templates shouldn't need a migration.
     """
     subject = (data.get("subject") or "").strip()
@@ -1669,17 +1669,17 @@ async def admin_delete_session(
     return {"ok": True, "deleted": session_id}
 
 # ============================================================
-# P9 — Outreach section (2026-07-24)
+# P9, Outreach section (2026-07-24)
 # Real review/send/discard mechanics for the admin Outreach queue.
 # Charbel's call: placeholder seed data for now (see migration
-# 2026-07-24-outreach-drafts.sql) — real org/learner auto-matching
+# 2026-07-24-outreach-drafts.sql), real org/learner auto-matching
 # to populate this table is a separate, later scoping pass.
 #
-#   GET    /api/admin/outreach              — list drafts (pending first, then newest)
-#   PATCH  /api/admin/outreach/{id}         — edit subject/body before sending
-#   POST   /api/admin/outreach/{id}/send    — send via mail.send_mail(), mark sent
-#   PATCH  /api/admin/outreach/{id}/discard — mark discarded
-#   DELETE /api/admin/outreach/{id}         — hard delete (discarded/sent
+#   GET    /api/admin/outreach, list drafts (pending first, then newest)
+#   PATCH  /api/admin/outreach/{id}, edit subject/body before sending
+#   POST   /api/admin/outreach/{id}/send, send via mail.send_mail(), mark sent
+#   PATCH  /api/admin/outreach/{id}/discard, mark discarded
+#   DELETE /api/admin/outreach/{id}, hard delete (discarded/sent
 #                                              only; added 2026-08-15,
 #                                              Charbel's explicit call)
 # ============================================================
@@ -1767,7 +1767,7 @@ async def admin_discard_outreach(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Mark a draft discarded. Soft — never hard-deleted."""
+    """Mark a draft discarded. Soft, never hard-deleted."""
     result = await db.execute(select(OutreachDraft).where(OutreachDraft.id == draft_id))
     draft = result.scalar_one_or_none()
     if not draft:
@@ -1797,7 +1797,7 @@ async def admin_delete_outreach(
     if not draft:
         raise HTTPException(404, "Outreach draft not found")
     if draft.status == "pending":
-        raise HTTPException(400, "Cannot delete a pending draft — discard or send it first")
+        raise HTTPException(400, "Cannot delete a pending draft, discard or send it first")
 
     await db.delete(draft)
     await db.commit()
@@ -1812,12 +1812,12 @@ async def admin_delete_outreach(
 # story-email precedent). Orgs are deliberately out of scope for v1 --
 # same "learners are the audience unless stated otherwise" default the
 # existing Learner message feature already uses.
-#   GET    /api/admin/newsletters                    — list all (drafts + sent), most recent first
-#   GET    /api/admin/newsletters/audience-count      — how many learners would receive one right now
-#   POST   /api/admin/newsletters                     — create a draft
-#   PATCH  /api/admin/newsletters/{id}                — edit a draft's subject/body
-#   DELETE /api/admin/newsletters/{id}                 — delete a draft or a completed send record
-#   POST   /api/admin/newsletters/{id}/send            — send to the full audience (background job)
+#   GET    /api/admin/newsletters, list all (drafts + sent), most recent first
+#   GET    /api/admin/newsletters/audience-count, how many learners would receive one right now
+#   POST   /api/admin/newsletters, create a draft
+#   PATCH  /api/admin/newsletters/{id}, edit a draft's subject/body
+#   DELETE /api/admin/newsletters/{id}, delete a draft or a completed send record
+#   POST   /api/admin/newsletters/{id}/send, send to the full audience (background job)
 
 def _newsletter_audience_query(filters: Optional[dict] = None):
     """Active, verified, not-opted-out learners. A learner with no
@@ -1908,7 +1908,7 @@ async def admin_newsletter_audience_count(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """How many learners are eligible right now — shown in the composer
+    """How many learners are eligible right now, shown in the composer
     before Send so an admin can sanity-check the blast radius. Accepts
     the same optional filters the send itself will apply, so the number
     updates live as an admin narrows the segment or excludes people."""
@@ -2148,7 +2148,7 @@ async def admin_newsletter_languages(
     _: None = Depends(require_admin),
 ):
     """The platform's supported language codes, for the audience-filter
-    dropdown — reuses auth.py's SUPPORTED_LANGS (the same set registration
+    dropdown, reuses auth.py's SUPPORTED_LANGS (the same set registration
     validates a learner's language against) rather than hardcoding a
     second copy of the list in the frontend."""
     return sorted(SUPPORTED_LANGS)
@@ -2213,7 +2213,7 @@ async def admin_update_newsletter(
     _: None = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Edit a draft's subject/body/audience. Only drafts are editable —
+    """Edit a draft's subject/body/audience. Only drafts are editable,
     once a send has started or finished the row is a historical record."""
     result = await db.execute(select(Newsletter).where(Newsletter.id == newsletter_id))
     n = result.scalar_one_or_none()
@@ -2240,7 +2240,7 @@ async def admin_delete_newsletter(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a draft, or a completed send record kept only for history.
-    A newsletter that's actively 'sending' can't be deleted — the
+    A newsletter that's actively 'sending' can't be deleted, the
     background job holds no lock on the row, but pulling it out from
     under an in-flight send would just orphan the job's own final
     status update; let it finish first."""
@@ -2249,7 +2249,7 @@ async def admin_delete_newsletter(
     if not n:
         raise HTTPException(404, "Newsletter not found")
     if n.status == "sending":
-        raise HTTPException(400, "Newsletter is currently sending — wait for it to finish")
+        raise HTTPException(400, "Newsletter is currently sending, wait for it to finish")
 
     await db.delete(n)
     await db.commit()
@@ -2264,7 +2264,7 @@ async def admin_send_newsletter_test(
     db: AsyncSession = Depends(get_db),
 ):
     """Send the current draft to a single address (typically the admin's
-    own inbox) without touching status/counts or the real audience — so
+    own inbox) without touching status/counts or the real audience, so
     an admin can check rendering/deliverability before ever broadcasting.
     Synchronous (single recipient, not the bulk job below) since one
     sendmail call is fast enough not to matter."""
@@ -2302,7 +2302,7 @@ async def admin_send_newsletter(
     """Kick off a send to the current audience (respecting any saved
     filters and per-send exclusions). The actual sending happens in a
     background task (see _send_newsletter_job below) so this request
-    returns immediately — mail.send_mail() shells out to sendmail
+    returns immediately, mail.send_mail() shells out to sendmail
     synchronously per recipient (same as every other call site in this
     file), and with real learner counts in the hundreds+ that would
     otherwise block this single-process app's whole event loop, for
@@ -2341,7 +2341,7 @@ async def _send_newsletter_job(
     (asyncio.to_thread) so send_mail()'s blocking sendmail subprocess
     call never freezes the app for other users, with a short delay
     between sends so a large audience doesn't hammer the MTA in a tight
-    loop. A per-recipient failure is caught and logged, not raised — one
+    loop. A per-recipient failure is caught and logged, not raised, one
     bad address shouldn't stop the rest of the send."""
     sent = 0
     failed = 0
@@ -2370,15 +2370,15 @@ async def _send_newsletter_job(
             logger.error(f"Newsletter {newsletter_id} vanished before its send job could record results")
 
 
-# ── P8 — Validation section (2026-07-25) ────────────────────
+# ── P8, Validation section (2026-07-25) ────────────────────
 # Site-admin visibility into org-verified skill demonstrations and task
-# line-item completions across every org — the "Synergy" sidebar group's
+# line-item completions across every org, the "Synergy" sidebar group's
 # read-only oversight page. Full spec: PROJECT_MASTER PART 22. Writes only
 # happen via the org rep (orgs.py) or learner (matching.py) endpoints; this
 # is deliberately read-only from the admin side, same as Outreach's approach
-# to org-authored content — admin observes, doesn't author.
-#   GET /api/admin/verified-skills — every org-verified skill demonstration
-#   GET /api/admin/task-completions — every task line-item submission/verification
+# to org-authored content, admin observes, doesn't author.
+#   GET /api/admin/verified-skills, every org-verified skill demonstration
+#   GET /api/admin/task-completions, every task line-item submission/verification
 
 @router.get("/verified-skills")
 async def admin_list_verified_skills(

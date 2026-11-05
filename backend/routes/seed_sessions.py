@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================================
-# FreqLearn — seed_sessions.py  (v3)
+# FreqLearn, seed_sessions.py  (v3)
 # Pre-generates session content for all 15 arts × 13 phases,
 # storing everything in MariaDB so the platform runs at zero AI cost.
 #
@@ -161,8 +161,8 @@ ARTS = [
      "Critical thinking, systems thinking, scientific method, philosophy, logic"),
     ("respect",     "Respecting",    "The golden rule extended to all living things",
      "Ethics, ecological awareness, nonviolence, extending moral circles"),
-    ("build",       "Building",      "Designing and constructing things — at any scale, in any domain",
-     "Construction and design thinking in its full breadth: shelter, furniture, tools, instruments, spacecraft, software systems, community spaces, infrastructure. Natural building (cob, bamboo, straw bale, rammed earth) is one valid context among many — as is mechanical engineering, electronics, instrument-making, urban design, or any act of bringing something into the world. Permaculture design principles apply where relevant but are not the default frame."),
+    ("build",       "Building",      "Designing and constructing things, at any scale, in any domain",
+     "Construction and design thinking in its full breadth: shelter, furniture, tools, instruments, spacecraft, software systems, community spaces, infrastructure. Natural building (cob, bamboo, straw bale, rammed earth) is one valid context among many, as is mechanical engineering, electronics, instrument-making, urban design, or any act of bringing something into the world. Permaculture design principles apply where relevant but are not the default frame."),
     ("grow",        "Growing",       "Regenerative agriculture and food sovereignty",
      "Permaculture, agroforestry, composting, seed-saving, soil health"),
     ("consume",     "Consuming",     "Water, resource and energy stewardship",
@@ -216,26 +216,26 @@ def build_prompt(art_slug, art_name, art_tagline, art_context,
 
 Generate learning session #{session_num} for:
 
-ART: The art of {art_name} — {art_tagline}
+ART: The art of {art_name}, {art_tagline}
 CONTEXT: {art_context}
 PHASE: {phase_name} (ages {age_range})
 
-PHASE-SPECIFIC GUIDANCE — apply to every part of the session:
+PHASE-SPECIFIC GUIDANCE, apply to every part of the session:
 {phase_guidance}
 
 Session design principles:
 - Enter through lived experience; exit into expanded awareness
 - Ground abstract concepts in concrete, sensory, real-world practice
 - The challenge must produce something real: a written piece, a design, an action, a practice
-- Reflection questions must open rather than close — no yes/no answers
-- This is session #{session_num} for this art/phase — vary the angle and entry point{avoid_block}
+- Reflection questions must open rather than close, no yes/no answers
+- This is session #{session_num} for this art/phase, vary the angle and entry point{avoid_block}
 - Follow the universal learning cycle: observe → connect → act → reflect (applies across all human arts and domains)
-- CONTEXTUAL FRAME: Ground all examples, metaphors, and challenges in the specific world of {art_name} as described in CONTEXT above. Do not default to gardening, soil, seeds, or permaculture unless the art is Eating, Growing, or Consuming. A Moving session should feel like movement; a Listening session should feel like deep listening; a Building session could be about constructing anything — a shelter, an instrument, a rocket, a piece of furniture.
+- CONTEXTUAL FRAME: Ground all examples, metaphors, and challenges in the specific world of {art_name} as described in CONTEXT above. Do not default to gardening, soil, seeds, or permaculture unless the art is Eating, Growing, or Consuming. A Moving session should feel like movement; a Listening session should feel like deep listening; a Building session could be about constructing anything, a shelter, an instrument, a rocket, a piece of furniture.
 - CRITICAL: The assess question and all 4 options must be about {art_name} and this session's core concept. They must NOT reference permaculture, gardening, or ecological land practice unless the art is Growing, Eating, or Consuming. Violating this means the session has failed.
 
 Return ONLY valid JSON with exactly these keys:
 {{
-  "title": "A poetic session title — max 8 words",
+  "title": "A poetic session title, max 8 words",
   "warmup": "2-4 sentences. Open attention. Ask learner to notice something in their environment or memory.",
   "explore": "3-5 sentences. Introduce the core insight. One concrete analogy or surprising example.",
   "challenge": "3-5 sentences. Exactly what learner will create or do. Specific but open to interpretation.",
@@ -246,7 +246,7 @@ Return ONLY valid JSON with exactly these keys:
 }}
 
 The assess_correct field is the 0-based index of the correct answer.
-The assess question must be about THIS art and THIS session's concept — never generic.
+The assess question must be about THIS art and THIS session's concept, never generic.
 Return ONLY the JSON object. No preamble, no explanation, no markdown fences."""
 
 
@@ -378,7 +378,7 @@ async def generate_one(art, phase, session_num, dry_run=False, language="en", av
     ) + _lang_instruction(language)
 
     if dry_run:
-        print(f"\n[DRY RUN] {art_name} × {phase_name} [{language}] #{session_num} — prompt: {len(prompt)} chars")
+        print(f"\n[DRY RUN] {art_name} × {phase_name} [{language}] #{session_num}, prompt: {len(prompt)} chars")
         return {
             "title":            f"[DRY] {art_name} × {phase_name} #{session_num}",
             "warmup":           "Dry run warmup",
@@ -396,7 +396,7 @@ async def generate_one(art, phase, session_num, dry_run=False, language="en", av
     provider = _settings["ai_provider"]
     if provider == "library":
         raise RuntimeError(
-            "AI provider is set to Library-only in Admin > Settings — "
+            "AI provider is set to Library-only in Admin > Settings, "
             "seeding needs live AI. Switch it to Groq or Ollama to run this."
         )
     order = [provider] + [p for p in ("groq", "ollama", "gemini") if p != provider]
@@ -415,7 +415,7 @@ async def generate_one(art, phase, session_num, dry_run=False, language="en", av
                 return await generate_with_ollama(prompt)
         except Exception as e:
             errors.append(f"{prov}: {str(e)[:120]}")
-    raise RuntimeError(f"All AI providers failed — {' | '.join(errors)}")
+    raise RuntimeError(f"All AI providers failed, {' | '.join(errors)}")
 
 
 
@@ -463,7 +463,7 @@ async def main(args):
         provider = _settings["ai_provider"]
         if provider == "library":
             print("\nERROR: AI provider is set to Library-only in Admin > Settings > AI generation.")
-            print("  Seeding needs live AI — switch it to Groq or Ollama first.")
+            print("  Seeding needs live AI, switch it to Groq or Ollama first.")
             conn.close()
             sys.exit(1)
         if provider == "groq" and not GROQ_KEY:
@@ -548,7 +548,7 @@ async def main(args):
     total = len(work)
 
     print(f"\n{'='*60}")
-    print(f"Surfing the Frequencies — Session Library Generator v3")
+    print(f"Surfing the Frequencies, Session Library Generator v3")
     print(f"{'='*60}")
     print(f"Arts:        {len(target_arts)}")
     print(f"Phases:      {len(target_phases)}")
@@ -572,7 +572,7 @@ async def main(args):
             conn.close()
             return
     elif not args.dry_run and args.yes:
-        print(f"--yes flag set — skipping confirmation, generating {total} sessions.")
+        print(f"--yes flag set, skipping confirmation, generating {total} sessions.")
 
     generated = errors = 0
     consecutive_failures = 0
@@ -589,13 +589,13 @@ async def main(args):
             data = await generate_one(art, phase, n, args.dry_run, lang, avoid)
             if not args.dry_run:
                 sid = await store_session(conn, art_id, phase_id, skill_id, data, lang)
-                print(f"✓ id={sid} — {data['title']}")
+                print(f"✓ id={sid}, {data['title']}")
             else:
                 print("✓")
             generated += 1
             consecutive_failures = 0
 
-            # Configurable delay — use --delay 8 or higher on free-tier Groq
+            # Configurable delay, use --delay 8 or higher on free-tier Groq
             if not args.dry_run:
                 time.sleep(args.delay)
 

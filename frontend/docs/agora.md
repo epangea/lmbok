@@ -1,4 +1,4 @@
-# Agora — your dashboard
+# Agora, your dashboard
 
 The Agora (Greek for "gathering place") is the first thing you see when you log in. It's laid out in three columns:
 
@@ -6,4 +6,4 @@ The Agora (Greek for "gathering place") is the first thing you see when you log 
 - **Middle:** your current journey, the platform's next recommended session, and a breakdown by skill domain
 - **Right:** any active match with an organization, plus your achievements
 
-Think of it as home base — everywhere else in the platform is one click away from here.
+Think of it as home base, everywhere else in the platform is one click away from here.

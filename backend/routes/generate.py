@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — routes/generate.py
+# FreqLearn, routes/generate.py
 # AI-powered session content generation.
 #
 # P41 (2026-07-29): all actual AI calls now go through ai_client.ai_complete(),
@@ -23,7 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel
 from db import get_db
-# FIX: ArtsSkills added here — it was missing from this import,
+# FIX: ArtsSkills added here, it was missing from this import,
 # causing NameError in the reuse branch before the inline import was reached.
 from models import Session, Arts, DevPhase, Skill, Learner, Lecko, ArtsSkills
 from utils import get_session_config
@@ -36,7 +36,7 @@ router = APIRouter()
 
 class GenerateRequest(BaseModel):
     art_slug:          str
-    phase_slug:        str | None = "adult"
+    phase_slug:        str | None = None   # optional; when omitted the learner's own phase_id is used
     skill_id:          int | None = None
     skill_context:     str | None = None   # display name when launched from a Learning Domain skill
     learner_interests: str | None = None
@@ -72,9 +72,9 @@ async def _select_reusable_pool(
     (2026-08-05) alongside adding the new skill tier below.
 
     Filters, in order:
-      1. art_id (hard — caller already knows the art)
-      2. dev_phase_id — HARD, no fallback (2026-08-24 policy change: an
-         unresolved/untagged phase must never be served — see the
+      1. art_id (hard, caller already knows the art)
+      2. dev_phase_id, HARD, no fallback (2026-08-24 policy change: an
+         unresolved/untagged phase must never be served, see the
          elemental-phases restructure). A missing phase_id on the
          request, or no phase-matched sessions, both yield an empty
          pool rather than falling back to untagged/legacy content.
@@ -82,9 +82,9 @@ async def _select_reusable_pool(
          content or served without any phase filter when the learner's
          own phase was unset. That fallback is what let unknown-phase
          learners be served arbitrary content; removed per Charbel.
-      3. language — HARD, no fallback. Serving the wrong language is worse
+      3. language, HARD, no fallback. Serving the wrong language is worse
          than no reuse at all (2026-07-20 fix). Unchanged from pre-P6.
-      4. skill (P6, new) — TIERED, only applied when req.skill_id is set
+      4. skill (P6, new), TIERED, only applied when req.skill_id is set
          (skill_context-only requests, which have no FK to match against,
          skip this tier entirely -- same permissive behavior as before P6):
            a. exact primary_skill_id match, if any exist
@@ -93,7 +93,7 @@ async def _select_reusable_pool(
               unrelated skill just to keep reuse alive)
            c. else, no reuse for this request -- same hard-fail shape as
               the language filter, not a fall-through to "any skill".
-      5. already-seen exclusion — learner's last 30 sessions for this art,
+      5. already-seen exclusion, learner's last 30 sessions for this art,
          by warmup_prompt. Unchanged from pre-P6.
 
     Returns the final reusable pool (caller does random.choice from it),
@@ -184,7 +184,7 @@ async def generate_session(
     if not art:
         raise HTTPException(404, f"Art not found: {req.art_slug}")
 
-    # ── Resolve developmental phase — HARD requirement (2026-08-24) ──
+    # ── Resolve developmental phase, HARD requirement (2026-08-24) ──
     # No more silent "adult" default. Try the request's explicit
     # phase_slug first, then the learner's own stored phase_id (set via
     # /me/preferences, computed from birth_year once that logic ships).
@@ -293,7 +293,7 @@ async def generate_session(
         db=db, learner=learner, art=art, phase_id=phase_id, req=req,
     )
 
-    # ── Inline reuse (OFF by default — see BRIEFING 2026-07-09) ─────
+    # ── Inline reuse (OFF by default, see BRIEFING 2026-07-09) ─────
     # This branch used to fire unconditionally whenever >=3 stored sessions
     # existed for the art, which meant it silently pre-empted the AI-first
     # path for almost every request (2,623 stored sessions means nearly
@@ -371,25 +371,25 @@ async def generate_session(
         skill_line = f"\nThe primary skill being developed is: {skill_name}."
 
     # ── Bioregion line (2026-07-23, restored 2026-11-01): grounds the session in the learner's ──
-    # actual place, when known. Sourced directly from learner.bioregion —
+    # actual place, when known. Sourced directly from learner.bioregion,
     # already on the fetched Learner row (models.py), so no extra query.
-    # For the land/ecology arts (build, grow, consume, live, eat — the same
+    # For the land/ecology arts (build, grow, consume, live, eat, the same
     # five ART_LENS already ties to permaculture), bioregion is essential,
     # specific shaping context, not just flavor. For every other art it's
     # soft-worded ("only where it naturally deepens... never force it") so
     # this doesn't push a generic ecological frame onto arts like feel,
-    # collaborate, or understand — that boundary is still ART_LENS/lens_line's job.
+    # collaborate, or understand, that boundary is still ART_LENS/lens_line's job.
     # NOTE: this block was unintentionally dropped from the prompt by the P40
     # rewrite (commit d7b1a09) while its Prompt Anatomy card stayed in place;
     # restored verbatim from 72e9243.
     bioregion_line = ""
     if learner.bioregion:
         bioregion_line = (
-            f"\nThe learner is rooted in the {learner.bioregion} bioregion — their local "
+            f"\nThe learner is rooted in the {learner.bioregion} bioregion, their local "
             f"ecological and cultural place in the world. For arts grounded in land and "
             f"ecology (build, grow, consume, live, eat), this bioregion is essential context: "
-            f"let it shape real specifics — climate, native species, growing seasons, local "
-            f"water and energy realities — so the lesson is genuinely local and relevant, not "
+            f"let it shape real specifics, climate, native species, growing seasons, local "
+            f"water and energy realities, so the lesson is genuinely local and relevant, not "
             f"generic. For every other art, weave it in only where it naturally deepens the "
             f"session (a local example, a nearby reference point); never force it, and never "
             f"let it override the art's own frame."
@@ -412,11 +412,11 @@ async def generate_session(
         guidance_str = f" {guidance}" if guidance else ""
         domain_line = (
             f"\nThe learner approaches this session from a background in {' '.join(domain_parts)}.{guidance_str} "
-            f"Let this inform their starting point and comfort zone — "
+            f"Let this inform their starting point and comfort zone, "
             f"but follow the art's own frame for direction and examples, never reducing the session to domain content."
         )
 
-    # Language instruction — added before prompt so Claude sees it first
+    # Language instruction, added before prompt so Claude sees it first
     lang_names = {
         'fr': 'French (français)',
         'es': 'Spanish (español)',
@@ -463,7 +463,7 @@ async def generate_session(
     # the permaculture/land/ecology frame that dominated the seed content.
     # Note: permaculture principles legitimately appear in Build (bioconstruction),
     # Grow (regenerative agriculture), Consume (water/resource/energy management),
-    # and Live (footprint/waste) — but NOT in Move, Feel, Listen, Give, etc.
+    # and Live (footprint/waste), but NOT in Move, Feel, Listen, Give, etc.
     # 2026-08-26: the 15 ART_LENS variants moved to session_config
     # (key scheme "art_lens:<art_slug>"), admin-editable via the Prompt
     # Anatomy panel. Was a hardcoded ART_LENS dict here.
@@ -472,10 +472,10 @@ async def generate_session(
         default="the full range of human experience relevant to this art",
     )
     lens_line = (
-        f"\nCONTEXTUAL FRAME — this art is defined as: {art_lens}. "
+        f"\nCONTEXTUAL FRAME, this art is defined as: {art_lens}. "
         f"Ground every example, metaphor, and challenge in THIS domain. "
         f"Permaculture principles may appear where the art explicitly includes them "
-        f"(build, grow, consume, live, eat) — but must NOT be the default frame for "
+        f"(build, grow, consume, live, eat), but must NOT be the default frame for "
         f"arts like move, feel, notice, listen, give, receive, understand, respect, "
         f"express, or collaborate."
     )
@@ -495,20 +495,20 @@ async def generate_session(
 {portfolio_block}{continuity_block}
 Generate a complete 5-phase learning session for the following context:
 
-ART: The art of {art.name} — {art.tagline}
+ART: The art of {art.name}, {art.tagline}
 ART DESCRIPTION: {art.description or art.tagline}
 DEVELOPMENT PHASE: {phase_name} (ages {age_range})
 {skill_line}{domain_line}{interests_line}{bioregion_line}{lens_line}
 
-PHASE-SPECIFIC GUIDANCE — this is critical, apply it to every part of the session:
+PHASE-SPECIFIC GUIDANCE, this is critical, apply it to every part of the session:
 {phase_guidance}
 
 Session design rules:
 - Enter through the learner's existing experience; exit into the target art
-- Use real-world, grounded challenges — never abstract theory
+- Use real-world, grounded challenges, never abstract theory
 - Follow the universal learning cycle: observe → connect → act → reflect (this applies to all human arts, not any single domain)
 - The challenge must produce something real: a written piece, a design, a decision, a practice
-- The reflection must open rather than close — genuine questions, not leading ones
+- The reflection must open rather than close, genuine questions, not leading ones
 - The assess question must test the core concept of THIS session, not generic trivia
 - CRITICAL: The assess question and all 4 options must be about the art being taught ({art.name}). They must NOT reference gardening, soil, seeds, composting, permaculture, or any ecological/land practice unless the art slug is "grow". Violating this rule means the session has failed.
 
@@ -586,7 +586,7 @@ Return only the JSON. No preamble, no explanation, no markdown code blocks.{lang
 
     # ── Store in DB immediately ───────────────────────────────
     # Find the first skill for this art to satisfy the FK constraint
-    # FIX: removed inline "from models import ArtsSkills" — it's now at the top.
+    # FIX: removed inline "from models import ArtsSkills", it's now at the top.
     skill_q2 = await db.execute(
         select(ArtsSkills).where(ArtsSkills.art_id == art.id).limit(1)
     )
@@ -643,7 +643,7 @@ Return only the JSON. No preamble, no explanation, no markdown code blocks.{lang
 
 # ============================================================
 # POST /api/generate/scaffold
-# Socratic companion — one reply per call, stateless on server.
+# Socratic companion, one reply per call, stateless on server.
 # The full message history is sent by the client each time.
 # ============================================================
 
@@ -673,7 +673,7 @@ class ScaffoldResponse(BaseModel):
     reply: str
     # 2026.116: short search term for an OPT-IN image/video lookup chip,
     # e.g. "slow squat". None when the reply doesn't warrant one. Never a
-    # URL from the model — the backend only ever hands back a search term;
+    # URL from the model, the backend only ever hands back a search term;
     # the frontend builds the actual search URLs itself (see media_hint
     # parsing below and renderSandboxThread in app.js).
     media_hint: str | None = None
@@ -681,7 +681,7 @@ class ScaffoldResponse(BaseModel):
 
 # ============================================================
 # POST /api/generate/assess-companion   (P40, 2026-07-23)
-# Socratic companion for a "wrong" assess pick — sibling to
+# Socratic companion for a "wrong" assess pick, sibling to
 # /scaffold rather than a branch inside it, because this needs a
 # structured {reply, resolved, score_update} response, not
 # /scaffold's plain-text contract. Stateless on server, same as
@@ -838,14 +838,14 @@ async def scaffold_companion(
     ctx = req.context
     art_line      = f"Art being explored: {ctx.art_name}" if ctx.art_name else ""
     skill_line    = f"Skill focus: {ctx.skill_name}" if ctx.skill_name else ""
-    # Build domain line for scaffold — same intent as session generation
+    # Build domain line for scaffold, same intent as session generation
     if ctx.learning_domain or ctx.skill_type:
         _d_parts = []
         if ctx.learning_domain:
             _d_parts.append(f'"{ctx.learning_domain}"')
         if ctx.skill_type:
             _d_parts.append(f"({ctx.skill_type})")
-        domain_line = f"The learner brings a background in {' '.join(_d_parts)} — let this inform their starting point, always following the art's own frame."
+        domain_line = f"The learner brings a background in {' '.join(_d_parts)}, let this inform their starting point, always following the art's own frame."
     else:
         domain_line = ""
     phase_line    = f"Current phase: {ctx.phase_label}" if ctx.phase_label else ""
@@ -853,41 +853,41 @@ async def scaffold_companion(
     intent_line   = f"What the learner wrote they want to explore: \"{ctx.mouseion_intent}\"" if ctx.mouseion_intent else ""
     profile_line  = f"\nLEARNER PROFILE (accumulated from past conversations):\n{ctx.learner_profile}" if ctx.learner_profile else ""
     work_line     = f"\nThe learner's challenge response so far:\n\"{ctx.challenge_text}\"" if ctx.challenge_text else ""
-    avatar_line   = f"Learner's avatar stage: {ctx.avatar_stage} — a point on the path Seed→Sprout→Sapling→Grove→Forest→Ecosystem, reflecting their breadth across the 15 Arts." if ctx.avatar_stage else ""
+    avatar_line   = f"Learner's avatar stage: {ctx.avatar_stage}, a point on the path Seed→Sprout→Sapling→Grove→Forest→Ecosystem, reflecting their breadth across the 15 Arts." if ctx.avatar_stage else ""
     bioregion_line = f"Learner's bioregion: {ctx.bioregion_name}." if ctx.bioregion_name else ""
 
     if ctx.phase_label == "Portfolio":
-        # ── Portfolio companion — reflective mirror, speaks directly from the life-CV ──
-        profile_block = ctx.learner_profile.strip() if ctx.learner_profile else "(No profile accumulated yet — the learner is just starting out.)"
+        # ── Portfolio companion, reflective mirror, speaks directly from the life-CV ──
+        profile_block = ctx.learner_profile.strip() if ctx.learner_profile else "(No profile accumulated yet, the learner is just starting out.)"
         name_str = ctx.learner_name or "the learner"
         avatar_str = f" They are at the {ctx.avatar_stage} stage of their journey across the 15 Arts." if ctx.avatar_stage else ""
         bioregion_str = f" They are rooted in the {ctx.bioregion_name} bioregion." if ctx.bioregion_name else ""
-        system_prompt = f"""You are the Portfolio companion inside "Surfing the Frequencies" — a lifelong learning platform built around 15 Arts of Living: Being (Move · Eat · Feel · Notice · Express), Becoming (Live · Listen · Give · Receive · Collaborate), Connecting (Understand · Respect · Build · Grow · Consume).
+        system_prompt = f"""You are the Portfolio companion inside "Surfing the Frequencies", a lifelong learning platform built around 15 Arts of Living: Being (Move · Eat · Feel · Notice · Express), Becoming (Live · Listen · Give · Receive · Collaborate), Connecting (Understand · Respect · Build · Grow · Consume).
 
-Your role here is different from elsewhere in the platform. You are not a Socratic guide — you are a reflective mirror. The learner has come to their Portfolio to understand themselves. You speak directly, warmly, and honestly. You answer questions. You help them see patterns they might have missed. You affirm what is real and gently name what is unresolved.
+Your role here is different from elsewhere in the platform. You are not a Socratic guide, you are a reflective mirror. The learner has come to their Portfolio to understand themselves. You speak directly, warmly, and honestly. You answer questions. You help them see patterns they might have missed. You affirm what is real and gently name what is unresolved.
 
-You have been given {name_str}'s accumulated life profile — everything the platform has learned about them through their learning conversations.{avatar_str}{bioregion_str}
+You have been given {name_str}'s accumulated life profile, everything the platform has learned about them through their learning conversations.{avatar_str}{bioregion_str}
 
 THEIR PROFILE:
 {profile_block}
 
 YOUR ROLE:
-- Speak directly and warmly — this is not a place for Socratic questioning
+- Speak directly and warmly, this is not a place for Socratic questioning
 - Answer questions about what the profile reveals: patterns, strengths, blind spots, recurring themes
 - Help the learner articulate what they already sense about themselves
-- If the profile is thin or empty, be honest: "Your story is just beginning here — the more you explore, the more I'll have to reflect back to you."
+- If the profile is thin or empty, be honest: "Your story is just beginning here, the more you explore, the more I'll have to reflect back to you."
 - Never invent things not grounded in the profile
-- Never be clinical or list-heavy — speak as a thoughtful companion who has read their story carefully
+- Never be clinical or list-heavy, speak as a thoughtful companion who has read their story carefully
 - Short-to-medium responses: 3–5 sentences, conversational, no bullet points
 - Do not mention the platform mechanics (XP, levels, sessions) unless the learner brings them up
 
 Respond only with your reply. No preamble, no meta-commentary."""
 
     else:
-        # ── Default Socratic companion — for Mouseion, Challenge, Reflect ──
-        system_prompt = f"""You are the Socratic companion inside "Surfing the Frequencies" — a free lifelong learning platform built on the philosophy of "To Be Human" by Charbel Haddad. The platform is built around 15 Arts of Living: Being (Move · Eat · Feel · Notice · Express), Becoming (Live · Listen · Give · Receive · Collaborate), Connecting (Understand · Respect · Build · Grow · Consume).
+        # ── Default Socratic companion, for Mouseion, Challenge, Reflect ──
+        system_prompt = f"""You are the Socratic companion inside "Surfing the Frequencies", a free lifelong learning platform built on the philosophy of "To Be Human" by Charbel Haddad. The platform is built around 15 Arts of Living: Being (Move · Eat · Feel · Notice · Express), Becoming (Live · Listen · Give · Receive · Collaborate), Connecting (Understand · Respect · Build · Grow · Consume).
 
-Your role is that of a More Knowledgeable Other (MKO) — not a teacher who delivers answers, but a companion who helps the learner find their own way through. You ask questions, not give answers. You surface what the learner already knows. You guide without leading. You are Socratic: you help the learner think, not think for them.
+Your role is that of a More Knowledgeable Other (MKO), not a teacher who delivers answers, but a companion who helps the learner find their own way through. You ask questions, not give answers. You surface what the learner already knows. You guide without leading. You are Socratic: you help the learner think, not think for them.
 
 {name_line}
 {art_line}
@@ -904,18 +904,18 @@ TONE AND STYLE:
 - Warm, curious, never condescending
 - Short responses: 2–4 sentences maximum, usually ending in one open question
 - Never lecture. Never summarise the learner's own words back at them flatly.
-- If the learner is in the Mouseion (free exploration), help them discover what they truly want to explore — their real curiosity beneath the surface question
-- If the learner is in Challenge phase, help them go deeper into their own work — what did they notice? what surprised them? what would they change?
-- If the learner is in Reflect phase, help them connect the session to their life — not the "lesson" but the living of it
+- If the learner is in the Mouseion (free exploration), help them discover what they truly want to explore, their real curiosity beneath the surface question
+- If the learner is in Challenge phase, help them go deeper into their own work, what did they notice? what surprised them? what would they change?
+- If the learner is in Reflect phase, help them connect the session to their life, not the "lesson" but the living of it
 - Never mention permaculture, ecology, or land unless the art slug is "grow" or "consume"
 - Never say "great question" or hollow affirmations
-- Draw on the full breadth of human knowledge — science, art, philosophy, daily life, community — wherever it serves the learner's curiosity
+- Draw on the full breadth of human knowledge, science, art, philosophy, daily life, community, wherever it serves the learner's curiosity
 - The platform's philosophy: learning should feel like surfing, not drowning. You are the wave, not the shore.
 
-CLARIFICATION vs. REFLECTION — an important distinction:
-- If the learner is asking what a word, term, or instruction in their challenge MEANS (e.g. "what's a slow squat", "what do you mean by arm sweep") — that is comprehension, not the reflective answer. Answer it directly and plainly in 1–2 sentences, then hand the moment back to the exercise with a short Socratic follow-up. Do not deflect a genuine "I don't know what this word means" question back at them with more questions — that's not Socratic, it's just confusing.
-- Stay fully Socratic only on questions about the MEANING of their own experience, choices, or conclusions — that's the part worth them discovering themselves.
-- When (and only when) you plainly define a concrete, physical, visual, or gross-motor term this way, end your reply on its own new line with exactly: [[MEDIA: short search term]] — e.g. [[MEDIA: slow squat exercise]]. Use this only for something a photo or short video would genuinely clarify faster than words (a movement, a pose, a physical object). Never use it for abstract, emotional, or reflective content. Omit it entirely otherwise.
+CLARIFICATION vs. REFLECTION, an important distinction:
+- If the learner is asking what a word, term, or instruction in their challenge MEANS (e.g. "what's a slow squat", "what do you mean by arm sweep"), that is comprehension, not the reflective answer. Answer it directly and plainly in 1–2 sentences, then hand the moment back to the exercise with a short Socratic follow-up. Do not deflect a genuine "I don't know what this word means" question back at them with more questions, that's not Socratic, it's just confusing.
+- Stay fully Socratic only on questions about the MEANING of their own experience, choices, or conclusions, that's the part worth them discovering themselves.
+- When (and only when) you plainly define a concrete, physical, visual, or gross-motor term this way, end your reply on its own new line with exactly: [[MEDIA: short search term]], e.g. [[MEDIA: slow squat exercise]]. Use this only for something a photo or short video would genuinely clarify faster than words (a movement, a pose, a physical object). Never use it for abstract, emotional, or reflective content. Omit it entirely otherwise.
 
 Respond only with your reply to the learner. No preamble, no meta-commentary."""
 
@@ -933,7 +933,7 @@ Respond only with your reply to the learner. No preamble, no meta-commentary."""
     )
 
     # 2026.116: strip the optional [[MEDIA: term]] marker out of the visible
-    # reply. Only ever a plain search term, never a URL — the model can't
+    # reply. Only ever a plain search term, never a URL, the model can't
     # inject a link this way, the frontend builds the actual search URLs.
     raw = ai_resp.content
     media_hint = None
@@ -966,9 +966,9 @@ async def assess_companion(
     reflect_line  = f"\nWhat the learner has reflected on so far this session:\n\"{ctx.reflect_summary}\"" if ctx.reflect_summary else ""
     prior_line    = f"\n{ctx.prior_context}" if ctx.prior_context else ""
 
-    system_prompt = f"""You are the Assess companion inside "Surfing the Frequencies" — a free lifelong learning platform built on the philosophy of "To Be Human" by Charbel Haddad.
+    system_prompt = f"""You are the Assess companion inside "Surfing the Frequencies", a free lifelong learning platform built on the philosophy of "To Be Human" by Charbel Haddad.
 
-The learner just answered an assess question and picked an option the platform's answer key marks as not the single best answer. Your job is NOT to simply tell them they're wrong. The options were AI-generated and often contain genuine partial truth even in the "incorrect" ones — your real task is to have an honest, Socratic conversation to figure out together whether their reasoning actually holds up, or whether there's a better answer and why.
+The learner just answered an assess question and picked an option the platform's answer key marks as not the single best answer. Your job is NOT to simply tell them they're wrong. The options were AI-generated and often contain genuine partial truth even in the "incorrect" ones, your real task is to have an honest, Socratic conversation to figure out together whether their reasoning actually holds up, or whether there's a better answer and why.
 
 {name_line}
 {art_line}
@@ -983,20 +983,20 @@ Learner picked: {selected_letter}. "{selected_text}"
 Answer key says: {correct_letter}. "{correct_text}"
 
 YOUR ROLE:
-- Ask the learner why they chose what they chose before judging anything. Assume good faith — there is often a real reason.
-- If their reasoning is sound and logically defensible, or if you genuinely agree more than one option is acceptable here, say so plainly and explain why — don't just defer to the answer key if it's actually wrong or the question is ambiguous.
-- If the answer key's option really is meaningfully better, guide them to discover why themselves through questions — don't just announce the "correct" answer.
+- Ask the learner why they chose what they chose before judging anything. Assume good faith, there is often a real reason.
+- If their reasoning is sound and logically defensible, or if you genuinely agree more than one option is acceptable here, say so plainly and explain why, don't just defer to the answer key if it's actually wrong or the question is ambiguous.
+- If the answer key's option really is meaningfully better, guide them to discover why themselves through questions, don't just announce the "correct" answer.
 - Never make the learner feel incapable, incompetent, or less intelligent for picking a different option. This is a discussion between equals, not a correction.
 - Warm, curious, short responses: 2-4 sentences, usually ending in one open question, until the discussion is genuinely settled.
 - Never say "great question" or hollow affirmations.
 
-CLARIFICATION vs. REASONING — an important distinction (2026.116/2026.117, same principle as the sandbox companion): if the learner is asking what a WORD in the question or options means, not defending their reasoning, that's comprehension, not the thing you're evaluating. Answer it directly and plainly in 1–2 sentences, then return to the Socratic evaluation of their actual reasoning. Don't deflect a genuine "I don't know what this word means" with more questions — stay Socratic only on whether their reasoning about the concept holds up, not on vocabulary. When you plainly define a concrete, physical, visual, or gross-motor term this way, set the "media_hint" field below to a short search term (e.g. "slow squat exercise"); omit it (null) otherwise, and never for abstract or reflective content.
+CLARIFICATION vs. REASONING, an important distinction (2026.116/2026.117, same principle as the sandbox companion): if the learner is asking what a WORD in the question or options means, not defending their reasoning, that's comprehension, not the thing you're evaluating. Answer it directly and plainly in 1–2 sentences, then return to the Socratic evaluation of their actual reasoning. Don't deflect a genuine "I don't know what this word means" with more questions, stay Socratic only on whether their reasoning about the concept holds up, not on vocabulary. When you plainly define a concrete, physical, visual, or gross-motor term this way, set the "media_hint" field below to a short search term (e.g. "slow squat exercise"); omit it (null) otherwise, and never for abstract or reflective content.
 
-RESPONSE FORMAT — this is critical:
+RESPONSE FORMAT, this is critical:
 Respond with ONLY a JSON object, no preamble, no markdown fences, no other text:
 {{"reply": "<your message to the learner>", "resolved": <true if this discussion has reached a real conclusion, otherwise false>, "score_update": <an integer 0-100 if you are now confident enough to set/raise the learner's score for this assess, otherwise null>, "media_hint": <a short search term string if this reply plainly defined a concrete physical/visual term, otherwise null>}}
 
-Only set "resolved": true and a non-null "score_update" once you have genuinely evaluated their reasoning (through actual back-and-forth, not on the very first message) and reached a real conclusion — either that their answer holds up, that more than one answer is valid, or that the answer key's option is indeed the best one and they now understand why. Keep "score_update" null and "resolved": false while the conversation is still open."""
+Only set "resolved": true and a non-null "score_update" once you have genuinely evaluated their reasoning (through actual back-and-forth, not on the very first message) and reached a real conclusion, either that their answer holds up, that more than one answer is valid, or that the answer key's option is indeed the best one and they now understand why. Keep "score_update" null and "resolved": false while the conversation is still open."""
 
     chat_messages = [{"role": m.role, "content": m.content} for m in req.messages]
 
@@ -1017,7 +1017,7 @@ Only set "resolved": true and a non-null "score_update" once you have genuinely 
     )
     raw = ai_resp.content
 
-    # Strip accidental markdown fences before parsing — models occasionally
+    # Strip accidental markdown fences before parsing, models occasionally
     # wrap JSON in ```json ... ``` despite instructions not to.
     cleaned = raw.strip()
     if cleaned.startswith("```"):
@@ -1039,7 +1039,7 @@ Only set "resolved": true and a non-null "score_update" once you have genuinely 
         if not reply_text:
             raise ValueError("empty reply")
     except Exception:
-        # Model didn't return valid JSON — fail soft with the raw text as the
+        # Model didn't return valid JSON, fail soft with the raw text as the
         # reply rather than erroring the whole conversation out for the learner.
         reply_text, resolved, score_update, media_hint = raw, False, None, None
 
@@ -1049,13 +1049,13 @@ Only set "resolved": true and a non-null "score_update" once you have genuinely 
 # ============================================================
 # POST /api/generate/profile-update
 # Distils a sandbox conversation into the learner's life-CV.
-# Fire-and-forget from client — returns quickly.
+# Fire-and-forget from client, returns quickly.
 # ============================================================
 
 class ProfileUpdateRequest(BaseModel):
     messages:        list[ScaffoldMessage]   # the sandbox conversation to distil
     existing_profile: str | None = None      # current learner_profile text
-    bioregion_note:   str | None = None      # optional — direct bioregion line to upsert, no AI call needed
+    bioregion_note:   str | None = None      # optional, direct bioregion line to upsert, no AI call needed
 
 
 @router.post("/profile-update")
@@ -1066,7 +1066,7 @@ async def update_learner_profile(
 ):
     from sqlalchemy import text as sql_text
 
-    # ── Bioregion-only update — no AI call, direct upsert into profile ──
+    # ── Bioregion-only update, no AI call, direct upsert into profile ──
     if req.bioregion_note and (not req.messages or len(req.messages) < 2):
         existing = (req.existing_profile or "").strip()
         note_line = f"BIOREGION: {req.bioregion_note}"
@@ -1093,7 +1093,7 @@ async def update_learner_profile(
     )
     existing = req.existing_profile or "(no profile yet)"
 
-    prompt = f"""You maintain a compact learner profile — a living 1–2 page "life CV" — for a learner on the Surfing the Frequencies platform. The profile captures who this person is as a learner and a human: their curiosities, interests, loves, fears, desires, recurring themes, what energises or drains them, how they think and express themselves.
+    prompt = f"""You maintain a compact learner profile, a living 1–2 page "life CV", for a learner on the Surfing the Frequencies platform. The profile captures who this person is as a learner and a human: their curiosities, interests, loves, fears, desires, recurring themes, what energises or drains them, how they think and express themselves.
 
 EXISTING PROFILE:
 {existing}
@@ -1104,7 +1104,7 @@ NEW CONVERSATION TO DISTIL:
 Your task:
 1. Read the new conversation carefully.
 2. Extract any meaningful new signals: new interests mentioned, questions they asked, emotions surfaced, themes that recurred, ways they engaged, things they avoided or resisted.
-3. Merge these signals into the existing profile — updating, enriching, or correcting it. Do not simply append; distil.
+3. Merge these signals into the existing profile, updating, enriching, or correcting it. Do not simply append; distil.
 4. Keep the profile under 1500 characters total.
 5. Format it as plain text with short labelled sections. Example structure (adapt as needed):
 
@@ -1115,7 +1115,7 @@ LOVES: [what lights them up]
 FEARS / AVOIDS: [what they shy away from, what drains them]
 DESIRES: [what they're working toward, what they want from learning]
 RECURRING THEMES: [patterns across conversations]
-TONE: [how they communicate — poetic, direct, playful, careful...]
+TONE: [how they communicate, poetic, direct, playful, careful...]
 RECENT THREADS: [last 2–3 topics/arts explored]
 
 Return ONLY the updated profile text. No preamble, no explanation."""
@@ -1149,7 +1149,7 @@ Return ONLY the updated profile text. No preamble, no explanation."""
 # POST /api/generate/guiding-star
 # Distils the learner's life-CV into a single short motivation phrase
 # ("Guiding Star") for display in the Where I Stand card.
-# Fire-and-forget friendly — fast, cached by client.
+# Fire-and-forget friendly, fast, cached by client.
 # ============================================================
 
 class GuidingStarRequest(BaseModel):
@@ -1169,15 +1169,15 @@ async def generate_guiding_star(
     if not req.learner_profile or len(req.learner_profile.strip()) < 20:
         raise HTTPException(400, "learner_profile too short to distil")
 
-    prompt = f"""You read a learner's accumulated life profile from the "Surfing the Frequencies" platform — a lifelong learning platform built around 15 Arts of Living. From this profile, distil a single short phrase that captures the learner's deepest motivation or guiding orientation as a learner and a human.
+    prompt = f"""You read a learner's accumulated life profile from the "Surfing the Frequencies" platform, a lifelong learning platform built around 15 Arts of Living. From this profile, distil a single short phrase that captures the learner's deepest motivation or guiding orientation as a learner and a human.
 
 Call it their "Guiding Star."
 
 Rules:
 - 4–9 words maximum
-- Must feel like something the learner themselves would recognise and claim — not a description of them, but a phrase that could belong to them
-- Poetic, grounded, and specific — not generic ("keep learning", "grow every day") but genuinely drawn from their profile
-- No quotation marks, no labels, no preamble — return only the phrase itself
+- Must feel like something the learner themselves would recognise and claim, not a description of them, but a phrase that could belong to them
+- Poetic, grounded, and specific, not generic ("keep learning", "grow every day") but genuinely drawn from their profile
+- No quotation marks, no labels, no preamble, return only the phrase itself
 - Examples of the right register: "To understand before being understood" / "Finding stillness at the edge of things" / "Making meaning from what others pass over" / "To build what lasts with what is already here"
 
 LEARNER PROFILE:
@@ -1207,7 +1207,7 @@ async def get_session_library(
 ):
     """
     Returns the stored session content library.
-    Admin use — shows all generated sessions for a given art.
+    Admin use, shows all generated sessions for a given art.
     """
     q = select(Session).where(Session.warmup_prompt != None)
     if art_slug:

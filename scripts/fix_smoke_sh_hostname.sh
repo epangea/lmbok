@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FreqLearn — fix smoke.sh to point at the real production hostname.
+# FreqLearn, fix smoke.sh to point at the real production hostname.
 # Run once on server:
 #   bash /var/www/freqlearn/scripts/fix_smoke_sh_hostname.sh
 #
@@ -21,17 +21,17 @@ fi
 # Make a backup just in case
 cp "$TARGET" "${TARGET}.bak.$(date +%Y%m%d_%H%M%S)"
 
-# Replace UI_BASE default — old: http://127.0.0.1
+# Replace UI_BASE default, old: http://127.0.0.1
 sed -i 's|UI_BASE="${UI_BASE:-http://127\.0\.0\.1}"|UI_BASE="${UI_BASE:-https://build.onehouse.top}"|' "$TARGET"
 
-# Replace API_BASE default — old: http://127.0.0.1:8000
+# Replace API_BASE default, old: http://127.0.0.1:8000
 # (API on port 8000 is only reachable locally; for the smoke test against
 #  the production hostname, the API goes through the same nginx proxy,
 #  so API_BASE should also be the public hostname.)
 sed -i 's|API_BASE="${API_BASE:-http://127\.0\.0\.1:8000}"|API_BASE="${API_BASE:-https://build.onehouse.top}"|' "$TARGET"
 
 # Verify
-echo "=== After patch — first 10 lines of $TARGET ==="
+echo "=== After patch, first 10 lines of $TARGET ==="
 head -n 10 "$TARGET"
 
 echo ""

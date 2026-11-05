@@ -1,5 +1,5 @@
 -- ============================================================
--- 2026-08-23 — Admin Newsletter section
+-- 2026-08-23, Admin Newsletter section
 --
 -- Why: admin panel had no way to broadcast an email to every learner
 -- at once. Outreach (2026-07-24) sends one-off emails to orgs;
@@ -21,7 +21,7 @@
 -- old or new, should simply start subscribed.
 -- ============================================================
 
--- ---- PART A: read-only preflight — confirm current shape before touching it ----
+-- ---- PART A: read-only preflight, confirm current shape before touching it ----
 SHOW TABLES LIKE 'newsletters';
 DESCRIBE learner_preferences;
 
@@ -48,7 +48,7 @@ ALTER TABLE learner_preferences
 
 COMMIT;
 
--- ---- Verify — don't trust this script's own exit code, count rows independently ----
+-- ---- Verify, don't trust this script's own exit code, count rows independently ----
 -- (2026-08-20's domain-taxonomy delete found a real bug where a COMMIT
 -- written as a SQL comment instead of a real statement let MariaDB
 -- silently roll everything back in batch mode -- confirm with a fresh

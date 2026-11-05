@@ -1,4 +1,4 @@
-# FreqLearn — show current sessions.language distribution after the bad backfill
+# FreqLearn, show current sessions.language distribution after the bad backfill
 # Run on server:  bash scripts/show_lang_distribution.sh
 
 set -e

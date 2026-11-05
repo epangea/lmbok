@@ -1,5 +1,5 @@
 #!/bin/bash
-# bump_asset_versions.sh — auto cache-bust app.css / app.js (2026-08-11)
+# bump_asset_versions.sh, auto cache-bust app.css / app.js (2026-08-11)
 #
 # Problem this solves: app.css is referenced with a manually-typed
 # "?v=YYYYMMDDx" query string from 6 separate HTML files (app.html,

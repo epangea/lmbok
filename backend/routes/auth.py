@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn Backend — routes/auth.py
+# FreqLearn Backend, routes/auth.py
 # Registration, login, JWT access + refresh tokens
 # ============================================================
 
@@ -51,7 +51,7 @@ class LoginRequest(BaseModel):
     password: str
 
 class RegisterResponse(BaseModel):
-    """Registration no longer logs the learner in (2026-07-20 — gating access
+    """Registration no longer logs the learner in (2026-07-20, gating access
     on email verification). No cookies are set on this response; the learner
     must click the emailed link, then log in normally."""
     ok:      bool = True
@@ -59,7 +59,7 @@ class RegisterResponse(BaseModel):
     message: str = "Check your inbox to verify your account."
 
 class AuthResponse(BaseModel):
-    """Tokens no longer travel in the body (P-SEC1, 2026-07-16) — they're set
+    """Tokens no longer travel in the body (P-SEC1, 2026-07-16), they're set
     as httpOnly cookies by the route handler instead. Kept minimal for the
     frontend to update its own state."""
     learner_id:          int
@@ -90,7 +90,7 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 async def _generate_unique_username(db: AsyncSession, email: str) -> str:
-    """Registration dropped the visible username field (2026-07-20 — email +
+    """Registration dropped the visible username field (2026-07-20, email +
     password only). `Learner.username` is still unique/NOT NULL in the DB, so
     derive one from the email's local part and disambiguate on collision.
     Learners can still set a display_name in onboarding; this is only the
@@ -117,7 +117,7 @@ def _generate_verification_token() -> str:
 
 def _send_verification_email(to_addr: str, display_name: str, token: str) -> None:
     link = f"{_VERIFY_URL_BASE}/app.html?token={token}"
-    subject = "Verify your email — Surfing the Frequencies"
+    subject = "Verify your email, Surfing the Frequencies"
     body = (
         f"Hi {display_name},\n\n"
         "Time to Surf the Frequencies!\n\n"
@@ -208,7 +208,7 @@ async def register(
         # 2026-07-20: registration no longer logs the learner in. Previously
         # this set login cookies immediately, so a fresh signup skipped email
         # verification entirely (login() checks email_verified, but register()
-        # never did) — new accounts got full access without ever confirming
+        # never did), new accounts got full access without ever confirming
         # the address. Now: no cookies, no refresh token issued here; the
         # learner must click the emailed link, then log in normally.
         return RegisterResponse(email=learner.email)
@@ -238,7 +238,7 @@ async def verify_email(token: str, db: AsyncSession = Depends(get_db)):
 
         # verification_expires comes back from MariaDB as a naive datetime (the
         # column isn't DateTime(timezone=True)) even though it was written from
-        # an aware datetime.now(timezone.utc) at registration — MySQL just stores
+        # an aware datetime.now(timezone.utc) at registration, MySQL just stores
         # the wall-clock value. Comparing it directly against an aware "now"
         # raises TypeError ("can't compare offset-naive and offset-aware
         # datetimes"), which was silently 500ing this endpoint uncaught. Strip
@@ -427,7 +427,7 @@ async def refresh(request: Request, response: Response, db: AsyncSession = Depen
         clear_learner_cookies(response)
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
-    await db.delete(stored)  # rotate — one use only
+    await db.delete(stored)  # rotate, one use only
 
     new_refresh = make_refresh_token()
     db.add(RefreshToken(

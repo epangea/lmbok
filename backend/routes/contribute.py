@@ -1,14 +1,14 @@
 # ============================================================
-# FreqLearn — routes/contribute.py
+# FreqLearn, routes/contribute.py
 # Community LECKO contribution portal (Wikipedia-style)
 #
 # Public endpoints (no auth required):
-#   GET  /api/contribute/leckos          — browse approved LECKOs
-#   POST /api/contribute/leckos          — submit a new LECKO
+#   GET  /api/contribute/leckos, browse approved LECKOs
+#   POST /api/contribute/leckos, submit a new LECKO
 #
 # Admin endpoints (require auth + admin flag - future):
-#   GET  /api/contribute/leckos/pending  — list pending submissions
-#   PATCH /api/contribute/leckos/{id}    — approve or reject
+#   GET  /api/contribute/leckos/pending, list pending submissions
+#   PATCH /api/contribute/leckos/{id}, approve or reject
 # ============================================================
 
 from datetime import datetime, timezone
@@ -158,7 +158,7 @@ async def submit_lecko(
     db.add(lecko)
     await db.commit()
     await db.refresh(lecko)
-    return {"ok": True, "id": lecko.id, "message": "Thank you — your LECKO has been submitted for review."}
+    return {"ok": True, "id": lecko.id, "message": "Thank you, your LECKO has been submitted for review."}
 
 
 @router.patch("/leckos/{lecko_id}")

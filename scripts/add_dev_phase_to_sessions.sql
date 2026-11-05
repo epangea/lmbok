@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — add_dev_phase_to_sessions.sql
+-- FreqLearn, add_dev_phase_to_sessions.sql
 -- Adds dev_phase_id to sessions so the reuse branch can serve
 -- phase-appropriate content to child/adolescent/elder learners.
 -- NULL = untagged (pre-seeded adult content, acceptable fallback).
@@ -12,7 +12,7 @@ ALTER TABLE sessions
 
 -- Tag existing sessions as adult (phase_id=4 = adult in most seeds;
 -- verify with: SELECT id, slug FROM dev_phases;)
--- Leave NULL if unsure — NULL sessions are served as fallback to any phase.
+-- Leave NULL if unsure, NULL sessions are served as fallback to any phase.
 
 -- Verify
 SELECT COUNT(*) AS total_sessions,

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ============================================================
-# LMBoK — seed_exercises.py
+# LMBoK, seed_exercises.py
 #
 # Generates ONE exercise per (Art x Development phase) with the platform's
 # own AI chain AND stores it in the `sessions` table as a library row, in the
@@ -66,7 +66,7 @@ TEXT_KEYS = ("title", "warmup", "explore", "challenge", "reflect", "assess_quest
 _UI_FALLBACK = {
     "session.art_of_x_reflection": "The art of {art} · {group} · reflection",
     "session.sit_with_this": "Take a moment to sit with this. The next phase will invite you to put it into practice.",
-    "session.placeholder_no_wrong_answer": "Write freely — there is no wrong answer here...",
+    "session.placeholder_no_wrong_answer": "Write freely, there is no wrong answer here...",
     "session.explainer": "What's this question about?",
 }
 
@@ -243,7 +243,7 @@ async def main(args) -> int:
             work.append((art, tag, p, pid, have + 1))
 
     print("=" * 64)
-    print("LMBoK — exercise seeder (one per art x phase)")
+    print("LMBoK, exercise seeder (one per art x phase)")
     print(f"Combos to generate: {len(work)}   already filled, skipped: {skipped}")
     print(f"Provider: {ss._settings['ai_provider']}   insert into DB: {not args.no_insert}")
     if args.after_id:

@@ -1,4 +1,4 @@
--- FreqLearn — verify which sessions contain real CJK characters
+-- FreqLearn, verify which sessions contain real CJK characters
 -- vs. em-dashes / smart quotes mis-tagged as 'zh'
 -- Run on server:
 --   mysql freqlearn < scripts/verify_zh_after_fix.sql

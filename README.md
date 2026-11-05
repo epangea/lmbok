@@ -1,43 +1,43 @@
-# LMBoK — Surfing the Frequencies
+# LMBoK, Surfing the Frequencies
 
 **A free, lifelong learning platform for making a quality life accessible to everyone.**
 
-LMBoK (Life Management Body of Knowledge, also known by its working name **ePangea**) is a forever-free, human-centered, open-source lifelong-learning framework. **FreqLearn** is its technical home — a learning platform built around a simple bet: that intrinsic motivation, autonomous thinking, and self-defined satisfaction can be nurtured at scale, for free, for anyone.
+LMBoK (Life Management Body of Knowledge, also known by its working name **ePangea**) is a forever-free, human-centered, open-source lifelong-learning framework. **FreqLearn** is its technical home, a learning platform built around a simple bet: that intrinsic motivation, autonomous thinking, and self-defined satisfaction can be nurtured at scale, for free, for anyone.
 
 Live at [build.onehouse.top](https://build.onehouse.top).
 
 ## Two projects, one vision
 
-**Learning & Growth — LMBoK (ePangea)**
+**Learning & Growth, LMBoK (ePangea)**
 Built around **15 human arts**, **48 skills across 8 practical domains**, and **13 developmental phases**, shaped by the learner's own bioregion. Two features carry this beyond individual study:
-1. A **community matching tool** connecting real local challenges with learner progress — putting theory into practice, with real impact and meaning.
-2. **Polis** — an Avaaz-like referenda, discussion, and voting section that can shape One 'Ouse's Blueprint.
+1. A **community matching tool** connecting real local challenges with learner progress, putting theory into practice, with real impact and meaning.
+2. **Polis**, an Avaaz-like referenda, discussion, and voting section that can shape One 'Ouse's Blueprint.
 
 → [build.onehouse.top](https://build.onehouse.top)
 
-**Collective & Civic — One 'Ouse (The Blueprint)**
-A MediaWiki-like open dialogue where we design a blueprint for how we — all of us — want humanity to live together. Your own voice becomes your vote; nobody speaks on your behalf unless you choose that. Open to everyone, everywhere. If you — or someone you know — feels inadequate expressing yourself constructively in that kind of space, LMBoK was designed with exactly that struggle in mind: build the capacity there, bring your voice here.
+**Collective & Civic, One 'Ouse (The Blueprint)**
+A MediaWiki-like open dialogue where we design a blueprint for how we, all of us, want humanity to live together. Your own voice becomes your vote; nobody speaks on your behalf unless you choose that. Open to everyone, everywhere. If you, or someone you know, feels inadequate expressing yourself constructively in that kind of space, LMBoK was designed with exactly that struggle in mind: build the capacity there, bring your voice here.
 
 → [onehouse.top](https://onehouse.top)
 
-**These are not two unrelated products.** LMBoK is where you grow the capacity to participate; One 'Ouse is where that participation actually shapes something. Polis is the intended bridge between the two — a learner's civic voice, earned through real learning, feeding directly into the Blueprint. This integration is a core piece of unfinished vision, not a someday nice-to-have — see Roadmap below.
+**These are not two unrelated products.** LMBoK is where you grow the capacity to participate; One 'Ouse is where that participation actually shapes something. Polis is the intended bridge between the two, a learner's civic voice, earned through real learning, feeding directly into the Blueprint. This integration is a core piece of unfinished vision, not a someday nice-to-have, see Roadmap below.
 
 ## Philosophy
 
-FreqLearn is built on **["The Arts to Be Human"](https://docs.google.com/document/d/1RFxrO_mzHjTjk5qAg09KZzXIgqBija5F/edit?usp=sharing&ouid=102217663626879191510&rtpof=true&sd=true)** — a framework organizing human development around:
+FreqLearn is built on **["The Arts to Be Human"](https://docs.google.com/document/d/1RFxrO_mzHjTjk5qAg09KZzXIgqBija5F/edit?usp=sharing&ouid=102217663626879191510&rtpof=true&sd=true)**, a framework organizing human development around:
 
 - **15 universal arts**, grouped under three domains: *Being*, *Becoming*, and *Connecting*
 - **48 skills, grouped into 8 Mouseion domains (6 skills each)**
 - **13 developmental phases** (elemental restructure, 2026-08-24): Light → Sandy/Moist/Humus Soil → Low/Medium/High Fire → Low/High Wind → Water → Metal → Stone → Wood, spanning unborn through 81+
 
-Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-reliance, and civic agency. The goal isn't credentials — it's a self-directed, AI-assisted path through your own development, at your own pace, in your own language.
+Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-reliance, and civic agency. The goal isn't credentials, it's a self-directed, AI-assisted path through your own development, at your own pace, in your own language.
 
 ## How it works
 
 - Learners move through a **Socratic AI companion** (Warmup → Explore → Challenge → Reflect → Assess) across each art
-- Progress is tracked through **avatar stages** (Seed → Sprout → Sapling → Grove → Forest → Ecosystem) based on the learner's **weakest** of the 15 Arts — every Art must clear a stage's score threshold, so breadth/roundedness is the bottleneck, not volume in a favorite Art. No XP thresholds, no leaderboards, no streaks (this is intentional)
+- Progress is tracked through **avatar stages** (Seed → Sprout → Sapling → Grove → Forest → Ecosystem) based on the learner's **weakest** of the 15 Arts, every Art must clear a stage's score threshold, so breadth/roundedness is the bottleneck, not volume in a favorite Art. No XP thresholds, no leaderboards, no streaks (this is intentional)
 - Reaching **Grove** stage or higher unlocks **Polis**, the civic participation layer described above (referenda, proposals, threaded discussion), scoped by community, regional, or global reach
-- **Orgs / Ekklesia** — organization accounts post real local challenges; learner progress is matched against them
+- **Orgs / Ekklesia**, organization accounts post real local challenges; learner progress is matched against them
 - A **bioregion** feature roots each learner's experience in the actual ecological place they live, not a nation-state abstraction
 - Learners can **contribute** bioregion portraits and other content back into the platform, subject to moderation
 
@@ -45,41 +45,44 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
 
 - **Backend:** FastAPI (Python), MariaDB, async SQLAlchemy
 - **Frontend:** vanilla JS SPA (no framework), nginx
-- **AI:** Groq (primary) → Ollama (local fallback) → stored session library (final fallback via circuit breaker), all via `httpx` — no vendor SDKs
+- **AI:** the provider selected in admin Settings (Groq, Gemini or Ollama), with automatic fallback to the other two and a circuit breaker per purpose. `/session` falls back to the stored session library when every provider fails. All calls go through `httpx` in `backend/ai_client.py`, no vendor SDKs
 - **Infra:** DigitalOcean droplet, Certbot/nginx, fail2ban
 
 ## Project structure
 
     backend/
-      ai_client.py             Provider-agnostic AI client (Groq / Ollama / library)
-      circuit_breaker.py       In-memory AI failure breaker -> library fallback
+      ai_client.py             Provider-agnostic AI client (Groq / Gemini / Ollama), failover, circuit breakers
+      cookie_auth.py           httpOnly cookie + CSRF helpers for learner, org and admin sessions
       db.py                    Database connection/session setup
-      engine.py                SQLAlchemy engine config
+      engine.py                Recommendation engine: radar scores and next-skill recommendations
       mail.py                  Email sending (verification, notifications)
       main.py                  FastAPI app entrypoint
       models.py                SQLAlchemy models
-      prior_session_context.py Builds the learner portfolio + continuity blocks for AI prompts
-      utils.py                 Shared helpers (avatar stage computation, etc.)
+      mouseion_domains.py      The 8 Mouseion domains x 6 skills grouping (backend source of truth)
+      prior_session_context.py Learner portfolio + continuity blocks for the session prompt
+      utils.py                 Shared helpers (avatar stage and phase computation, etc.)
       requirements.txt
       routes/
-        admin.py              Admin panel API
+        admin.py               Admin panel API
         auth.py                Auth (login, register, tokens)
         bioregions.py          Bioregion profiles + learner-contributed portraits
         contribute.py          Learner content contribution + moderation
-        generate.py            AI session generation (Groq -> Ollama -> library)
-        groq_generate.py       Groq provider integration
-        ollama_generate.py     Ollama provider integration
-        learners.py            Learner profile + progress endpoints
+        generate.py            AI session generation (provider chain, portfolio/continuity prompt, library fallback)
+        gemini_generate.py     Gemini provider status endpoint
+        groq_generate.py       Groq provider status endpoint
+        ollama_generate.py     Ollama provider status endpoint
+        learners.py            Learner profile, preferences, streak and weekly-story endpoints
         matching.py            Learner/org challenge matching algorithm
         orgs.py                Organization accounts
         peripatos.py           Save-to-Peripatos feature
-        polis.py               Civic participation (Polis) -- see One 'Ouse integration in Roadmap
+        polis.py               Civic participation (Polis), see One 'Ouse integration in Roadmap
         progress.py            Progress tracking
-        radar.py                Skill radar chart data
-        reflections.py          Reflect-phase content
-        sessions.py             Session CRUD
-        skills.py               Skill/domain taxonomy
-        weekly_report.py        Weekly summary generation
+        radar.py               Skill radar chart data
+        reflections.py         Reflect-phase content
+        seed_sessions.py       Standalone script that pre-generates the stored session library
+        sessions.py            Session completion and growth-credit rules
+        skills.py              Skill/domain taxonomy
+        weekly_report.py       Weekly summary generation
 
     frontend/
       index.html    Landing page (public marketing site, served at /)
@@ -93,15 +96,17 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
       privacy.html  Privacy note
       favicon.ico
       docs/         Learner-facing Help content (*.md, rendered in-app via the
-                     Help section) -- see manifest.json for the index. NOT the
+                     Help section), see manifest.json for the index. NOT the
                      same thing as this repo's root-level maintainer docs below.
 
-    scripts/        DB migrations, seed data, diagnostics, and one-off fixes
-                    (kept for history -- see commit log for context on each)
+    scripts/        DB migrations, seed data, diagnostics, smoke/e2e tests and
+                    scripts/verify_portfolio.sh (live checks for the learner portfolio)
 
 ## Documentation
 
-- [`LANDING_PAGE.md`](LANDING_PAGE.md) — how to edit the landing page (copy, translations, video IDs) and how it integrates with the app (auth-aware redirect, Home link, CTAs)
+- [`PHILOSOPHY.md`](PHILOSOPHY.md): the framework behind the platform (15 Arts, developmental phases, Mouseion skill map, design principles and anti-patterns)
+- [`SESSION_ARCHITECTURE.md`](SESSION_ARCHITECTURE.md): how a session is generated, which prompt blocks it is built from, and how the AI companions behave
+- [`LANDING_PAGE.md`](LANDING_PAGE.md): how to edit the landing page (copy, translations, video IDs) and how it integrates with the app (auth-aware redirect, Home link, CTAs)
 
 ## Roadmap (high level)
 
@@ -114,8 +119,8 @@ The detailed, day-to-day backlog is tracked in a local project doc, not in this 
 
 ## Status
 
-Actively developed, pre-1.0. Single maintainer ([@epangea](https://github.com/epangea)) building toward a full public release. Contributions are welcome via pull request — see `CODEOWNERS`. `main` is protected; all changes go through PR review.
+Actively developed, pre-1.0. Single maintainer ([@epangea](https://github.com/epangea)) building toward a full public release. Contributions are welcome via pull request, see `CODEOWNERS`. `main` is protected; all changes go through PR review.
 
 ## License
 
-[AGPL-3.0](LICENSE) — chosen deliberately: if you run a modified version of this platform as a public service, your changes must be open too. This project exists to stay open.
+[AGPL-3.0](LICENSE), chosen deliberately: if you run a modified version of this platform as a public service, your changes must be open too. This project exists to stay open.

@@ -1,4 +1,4 @@
-// sw.js — LMBoK / Surfing the Frequencies service worker
+// sw.js, LMBoK / Surfing the Frequencies service worker
 //
 // Scope: whole origin (served from site root, default scope covers
 // index.html, app.html, org.html, admin.html, polis.html, contribute.html).
@@ -14,7 +14,7 @@
 //     last resort so the app still opens rather than showing a browser
 //     offline page.
 //   - /api/* requests: NEVER intercepted. These carry cookies/CSRF and
-//     return live, per-learner data — caching them would risk serving
+//     return live, per-learner data, caching them would risk serving
 //     stale or cross-session content. Always network passthrough.
 //   - Everything else (fonts, misc static assets): cache-first with a
 //     network fallback that also updates the cache (stale-while-revalidate
@@ -23,12 +23,12 @@
 // Versioning: CACHE_NAME below is derived from a content hash by
 // scripts/bump_asset_versions.sh, the same script that already maintains
 // the ?v= query strings on app.css/app.js. It is intentionally NOT
-// hand-edited — running that script is what bumps it. A changed
+// hand-edited, running that script is what bumps it. A changed
 // CACHE_NAME is also what makes the browser see this file itself as
 // "different" on its next periodic check, which is what actually
 // triggers the update flow (see frontend/app.js's registerServiceWorker
 // section for the "update available" prompt this pairs with).
-const CACHE_NAME = 'lmbok-shell-4290091728';
+const CACHE_NAME = 'lmbok-shell-804936312';
 
 // Precached at install. Kept intentionally small (the learner-facing
 // shell only) rather than every page on the site -- org.html/admin.html/
@@ -38,8 +38,8 @@ const CACHE_NAME = 'lmbok-shell-4290091728';
 const PRECACHE_URLS = [
   '/',
   '/app.html',
-  '/app.css?v=902190621',
-  '/app.js?v=8280730',
+  '/app.css?v=2794695757',
+  '/app.js?v=3015466554',
   '/manifest.json',
   '/favicon.ico',
   '/icons/icon-192.png',

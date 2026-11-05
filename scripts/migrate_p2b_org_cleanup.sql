@@ -56,7 +56,7 @@ WHERE o.password_hash IS NULL
   AND o.slug != 'freqlearn-scavenger';
 
 
--- ── PART B: Cleanup — uncomment when Part A looks correct ────
+-- ── PART B: Cleanup, uncomment when Part A looks correct ────
 
 
 START TRANSACTION;

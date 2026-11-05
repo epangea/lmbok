@@ -1,4 +1,4 @@
--- FreqLearn — fix Spanish mis-tagged as Vietnamese + Vietnamese over-matching
+-- FreqLearn, fix Spanish mis-tagged as Vietnamese + Vietnamese over-matching
 -- Run on server AFTER fix_zh_false_positives_v5.sql:
 --   mysql freqlearn < scripts/fix_es_vs_vi.sql
 --

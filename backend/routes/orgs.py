@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — routes/orgs.py
+# FreqLearn, routes/orgs.py
 # Organization auth + listing management
 #
 # SETUP REQUIRED (one-time SQL before deploying):
@@ -12,23 +12,23 @@
 #   app.include_router(orgs_router, prefix="/api/orgs", tags=["orgs"])
 #
 # Endpoints:
-#   POST /api/orgs/register              — register a new org account
-#   POST /api/orgs/login                 — login → org access token
-#   GET  /api/orgs/me                    — get org profile
-#   PATCH /api/orgs/me                   — update org profile
-#   GET  /api/orgs/me/listings           — list this org's listings
-#   POST /api/orgs/listings              — create a listing
-#   PATCH /api/orgs/listings/{id}        — update a listing
-#   DELETE /api/orgs/listings/{id}       — delete a listing
-#   GET  /api/orgs/listings/{id}/matches — who expressed interest (+ anonymized AI candidates)
-#   GET  /api/orgs/messages/{match_id}   — Pnyx thread (org side)
-#   POST /api/orgs/messages/{match_id}   — send message to learner
-#   POST /api/orgs/listings/{id}/parse-needs      — P11: AI parses needs_text -> skill targets
-#   POST /api/orgs/listings/{id}/generate-matches — P11: rank learners, create top-10 ai_suggested matches
-#   POST /api/orgs/listings/{id}/matches/{mid}/notify — P11: invite one anonymized candidate
-#   GET  /api/orgs/matches/{mid}/validation                  — P8: task/skill validation state for a connected match
-#   POST /api/orgs/matches/{mid}/tasks/{idx}/verify           — P8: org rep verifies/rejects a task line item
-#   POST /api/orgs/matches/{mid}/skills/{skill_id}/verify     — P8: org rep verifies a skill demonstration level
+#   POST /api/orgs/register, register a new org account
+#   POST /api/orgs/login, login → org access token
+#   GET  /api/orgs/me, get org profile
+#   PATCH /api/orgs/me, update org profile
+#   GET  /api/orgs/me/listings, list this org's listings
+#   POST /api/orgs/listings, create a listing
+#   PATCH /api/orgs/listings/{id}, update a listing
+#   DELETE /api/orgs/listings/{id}, delete a listing
+#   GET  /api/orgs/listings/{id}/matches, who expressed interest (+ anonymized AI candidates)
+#   GET  /api/orgs/messages/{match_id}, Pnyx thread (org side)
+#   POST /api/orgs/messages/{match_id}, send message to learner
+#   POST /api/orgs/listings/{id}/parse-needs, P11: AI parses needs_text -> skill targets
+#   POST /api/orgs/listings/{id}/generate-matches, P11: rank learners, create top-10 ai_suggested matches
+#   POST /api/orgs/listings/{id}/matches/{mid}/notify, P11: invite one anonymized candidate
+#   GET  /api/orgs/matches/{mid}/validation, P8: task/skill validation state for a connected match
+#   POST /api/orgs/matches/{mid}/tasks/{idx}/verify, P8: org rep verifies/rejects a task line item
+#   POST /api/orgs/matches/{mid}/skills/{skill_id}/verify, P8: org rep verifies a skill demonstration level
 # ============================================================
 
 import os
@@ -86,7 +86,7 @@ async def get_current_org(
     db: AsyncSession = Depends(get_db),
 ) -> Organization:
     """Dependency: validates org access token from the fl_org_access httpOnly
-    cookie (2026-07-16, P-SEC1 — previously a Bearer header, script-readable
+    cookie (2026-07-16, P-SEC1, previously a Bearer header, script-readable
     when stashed in localStorage)."""
     token = request.cookies.get(ORG_ACCESS_COOKIE)
     if not token:
@@ -481,7 +481,7 @@ async def get_listing_matches(
         out.append({
             "match_id":      m.id,
             "learner_id":    m.learner_id,
-            "display_name":  learner.display_name if learner else "—",
+            "display_name":  learner.display_name if learner else "-",
             "phase_icon":    phase.icon if phase else "🌱",
             "phase_color":   phase.color if phase else "#1D9E75",
             "anonymized":    False,
@@ -537,9 +537,9 @@ async def update_match_status(
 
 # ── P11: AI needs-matching ──────────────────────────────────
 # Added 2026-07-24. Full spec: PROJECT_MASTER PART 18.
-#   POST /listings/{id}/parse-needs      — AI parses needs_text into skill targets
-#   POST /listings/{id}/generate-matches — ranks learners, creates top-10 ai_suggested matches
-#   POST /listings/{id}/matches/{mid}/notify — org invites one anonymized candidate
+#   POST /listings/{id}/parse-needs, AI parses needs_text into skill targets
+#   POST /listings/{id}/generate-matches, ranks learners, creates top-10 ai_suggested matches
+#   POST /listings/{id}/matches/{mid}/notify, org invites one anonymized candidate
 
 @router.post("/listings/{listing_id}/parse-needs")
 async def parse_listing_needs(
@@ -548,7 +548,7 @@ async def parse_listing_needs(
     db: AsyncSession = Depends(get_db),
 ):
     """Parses needs_text against the closed vocabulary of active skills, returns
-    a candidate needs_skill_targets list for the org to review — does NOT save
+    a candidate needs_skill_targets list for the org to review, does NOT save
     it; the org confirms via PATCH /listings/{id} with the reviewed list."""
     listing_q = await db.execute(
         select(OpportunityListing).where(
@@ -560,7 +560,7 @@ async def parse_listing_needs(
     if not listing:
         raise HTTPException(404, "Listing not found")
     if not listing.needs_text or not listing.needs_text.strip():
-        raise HTTPException(400, "needs_text is empty — write what you're looking for first")
+        raise HTTPException(400, "needs_text is empty, write what you're looking for first")
 
     from models import Skill
     skills = (await db.execute(select(Skill).where(Skill.is_active == True))).scalars().all()
@@ -568,7 +568,7 @@ async def parse_listing_needs(
 
     system_prompt = f"""You are matching an organization's stated needs to a fixed catalog of learner skills for "Surfing the Frequencies", a free lifelong learning platform.
 
-CLOSED VOCABULARY — you may ONLY use skill slugs from this list, never invent new ones:
+CLOSED VOCABULARY, you may ONLY use skill slugs from this list, never invent new ones:
 {vocab}
 
 The organization wrote this free-text description of what they need:
@@ -577,11 +577,11 @@ The organization wrote this free-text description of what they need:
 Do two things with this text:
 
 1. Pick the skill slugs (from the list above only) that best match what they're looking for, and a minimum proficiency level for each (levels run 0-3, use 1 for "some experience", 2 for "solid", 3 for "advanced").
-2. Break the need down into a short list of concrete, checkable tasks a learner could actually complete and an org rep could later verify happened (e.g. "Facilitate two group discussions", "Draft a first-aid checklist") — not restatements of the skills, actual deliverables/actions.
+2. Break the need down into a short list of concrete, checkable tasks a learner could actually complete and an org rep could later verify happened (e.g. "Facilitate two group discussions", "Draft a first-aid checklist"), not restatements of the skills, actual deliverables/actions.
 
 Respond with ONLY a JSON object, no preamble, no markdown fences, in this exact shape:
 {{"needs_skill_targets": [{{"slug": "skill-slug", "min_level": 1}}, ...], "needs_tasks": ["task description", ...]}}
-Include at most 6 skills — the ones most central to the need, not every tangential match. Include at most 5 tasks."""
+Include at most 6 skills, the ones most central to the need, not every tangential match. Include at most 5 tasks."""
 
     try:
         ai_resp = await ai_client.ai_complete(
@@ -647,7 +647,7 @@ async def generate_ai_matches(
         raise HTTPException(404, "Listing not found")
     targets = listing.needs_skill_targets or []
     if not targets:
-        raise HTTPException(400, "No needs_skill_targets set — run parse-needs and save it first")
+        raise HTTPException(400, "No needs_skill_targets set, run parse-needs and save it first")
 
     learners = (await db.execute(select(Learner).where(Learner.is_active == True))).scalars().all()
     progress_rows = (await db.execute(select(LearnerSkillProgress))).scalars().all()
@@ -708,7 +708,7 @@ async def notify_ai_match(
     org: Organization = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """Org invites one anonymized AI-suggested candidate — sends an email,
+    """Org invites one anonymized AI-suggested candidate, sends an email,
     moves them from 'suggested' to 'invited'. Identity stays hidden from the
     org until the learner accepts."""
     listing_q = await db.execute(
@@ -743,14 +743,14 @@ async def notify_ai_match(
         f"Hi {learner.display_name or 'there'},\n\n"
         f"{org.name} is looking for help with \"{listing.title}\" and your skills "
         f"on Surfing the Frequencies came up as a strong match.\n\n"
-        f"Sign in and visit the Koinonia to see the details and accept or decline — "
+        f"Sign in and visit the Koinonia to see the details and accept or decline, "
         f"your name and profile stay private to them unless you accept.\n\n"
-        f"— Surfing the Frequencies"
+        f"Surfing the Frequencies"
     )
     try:
         send_mail(to=learner.email, subject=subject, body=body)
     except Exception:
-        pass  # best-effort — the in-app 'invited' status is the source of truth either way
+        pass  # best-effort, the in-app 'invited' status is the source of truth either way
 
     match.learner_status = "invited"
     match.notified_at = datetime.now(timezone.utc)
@@ -761,7 +761,7 @@ async def notify_ai_match(
 # ── P8: org validation (task line items + skill demonstrations) ──────
 # Added 2026-07-25. Full spec: PROJECT_MASTER PART 22. Both endpoints below
 # only work on a match the org has explicitly marked 'connected' (the same
-# org_status PATCH /listings/{id}/matches/{id} already sets) — validation is
+# org_status PATCH /listings/{id}/matches/{id} already sets), validation is
 # scoped to matches that have become a real, ongoing working relationship,
 # not every candidate that ever crossed the org's screen.
 
@@ -830,7 +830,7 @@ async def get_org_validation(
         })
 
     # Learner's session/LECKO history, light summary only (no prompt/response
-    # content) — org rep uses this alongside whatever session_ids the learner
+    # content), org rep uses this alongside whatever session_ids the learner
     # cited to judge the skill demonstration, without exposing full session
     # transcripts the learner never explicitly submitted as evidence.
     sess_q = await db.execute(
@@ -867,7 +867,7 @@ async def verify_task(
     org: Organization = Depends(get_current_org),
     db: AsyncSession = Depends(get_db),
 ):
-    """Org rep checks off (or rejects) a task line item — works whether or
+    """Org rep checks off (or rejects) a task line item, works whether or
     not the learner submitted first (P8 scoping: org can validate proactively
     off the learner's session history, not only review a learner submission)."""
     if req.status not in ("verified", "rejected"):
@@ -913,7 +913,7 @@ async def verify_skill(
     db: AsyncSession = Depends(get_db),
 ):
     """Org rep confirms a skill demonstration at developing/proficient/master.
-    Writes to verified_skills only — deliberately NOT learner_skill_progress
+    Writes to verified_skills only, deliberately NOT learner_skill_progress
     (see PART 22): this is a citable credential tied to this Need, not an
     automatic write to the learner's self-paced global skill level."""
     if req.level not in ("developing", "proficient", "master"):

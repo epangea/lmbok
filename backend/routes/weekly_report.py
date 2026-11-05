@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FreqLearn — weekly learner report mailer.
+FreqLearn, weekly learner report mailer.
 
 Enqueues a personalized weekly snapshot for every learner who used the
 platform in the last 7 days. Designed to be triggered from cron.
@@ -9,9 +9,9 @@ Usage:
     python scripts/weekly_report.py
 
 Environment (from backend/.env or system env):
-    DATABASE_URL        — asyncpg DSN
-    FREQLEARN_MAIL_FROM   — sender address
-    FREQLEARN_MAIL_REPLY_TO — reply-to address
+    DATABASE_URL, asyncpg DSN
+    FREQLEARN_MAIL_FROM, sender address
+    FREQLEARN_MAIL_REPLY_TO, reply-to address
 """
 
 import asyncio
@@ -90,13 +90,13 @@ def _load_db_url() -> str:
                 f"mysql+aiomysql://{db_user}:{db_password}"
                 f"@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
             )
-    raise RuntimeError("DATABASE_URL not set — weekly report cannot run")
+    raise RuntimeError("DATABASE_URL not set, weekly report cannot run")
 
 
 async def _weekly_story_paragraph(session_local, name: str, story_rows) -> str | None:
     """Freshly distil this week's session challenge/reflect answers (and any
     resolved companion verdicts) into a short "this week's growth" paragraph
-    for the email. Deliberately NOT persisted to learners.learner_profile —
+    for the email. Deliberately NOT persisted to learners.learner_profile,
     that's My Story's own accumulated distillation (see
     generate.py::update_learner_profile); this is a one-off summary of just
     this week, generated fresh each send. Returns None (fail-soft) if there's
@@ -125,7 +125,7 @@ async def _weekly_story_paragraph(session_local, name: str, story_rows) -> str |
 THIS WEEK'S SESSION CONTENT:
 {transcript}
 
-Write 2–4 sentences, second person ("you"), grounded in the specific substance above — not generic encouragement, and not a restatement of session titles or stats (those are shown elsewhere in the email). No preamble, no heading, just the paragraph itself."""
+Write 2–4 sentences, second person ("you"), grounded in the specific substance above, not generic encouragement, and not a restatement of session titles or stats (those are shown elsewhere in the email). No preamble, no heading, just the paragraph itself."""
 
     try:
         async with session_local() as db:
@@ -154,7 +154,7 @@ async def main() -> None:
     week_start = (datetime.now(timezone.utc) - timedelta(days=WINDOW_DAYS)).date()
 
     async with engine.begin() as conn:
-        # Deliberately NOT filtered by weekly_report_opt_out — that flag
+        # Deliberately NOT filtered by weekly_report_opt_out, that flag
         # only gates the email send below; every active learner still gets
         # their weekly_stories row so opting out of the email doesn't mean
         # opting out of having your own progress recorded.
@@ -197,7 +197,7 @@ async def main() -> None:
                 LIMIT 5
             """), {"lid": lid, "days": WINDOW_DAYS})).mappings().all()
 
-            top_arts = ", ".join(r["slug"] for r in art_rows) or "—"
+            top_arts = ", ".join(r["slug"] for r in art_rows) or "-"
             name = row["display_name"] or row["username"]
 
             story_rows = (await conn.execute(text("""

@@ -1,4 +1,4 @@
--- FreqLearn — fix zh false positives v6 (heuristic: ratio of multi-byte to total)
+-- FreqLearn, fix zh false positives v6 (heuristic: ratio of multi-byte to total)
 -- Run on server AFTER fix_zh_false_positives_v5.sql:
 --   mysql freqlearn < scripts/fix_zh_false_positives_v6.sql
 --

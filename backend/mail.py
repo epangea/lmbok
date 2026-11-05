@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — utils/email.py
+# FreqLearn, utils/email.py
 # Thin wrapper around the host's sendmail binary.
 # No external libraries required; the droplet's MTA is already
 # configured with valid DNS (SPF/DKIM/DMARC).

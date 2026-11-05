@@ -1,4 +1,4 @@
-# FreqLearn — routes/learners.py
+# FreqLearn, routes/learners.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -55,7 +55,7 @@ async def get_me(
         "weekly_report_opt_out": bool(prefs.weekly_report_opt_out) if prefs else False,
         # 2026-11-03: My Story's life-CV. app.js reads `me.learner_profile` from
         # this endpoint in five places (initial load, _reloadProfileAndGuidingStar,
-        # onboarding, bioregion save) to fill S.learnerProfile — the Portfolio
+        # onboarding, bioregion save) to fill S.learnerProfile, the Portfolio
         # "My Story" card, the Guiding Star, and the `learner_profile` /
         # `existing_profile` the client sends back to the companions and to
         # /generate/profile-update (which merges into the CLIENT-supplied
@@ -236,7 +236,7 @@ async def seed_initial_progress(
 
 # ── P8: org-verified skills, learner's own aggregate view ────────────
 # Added 2026-07-25. Full spec: PROJECT_MASTER PART 22. Every VerifiedSkill
-# row across every one of this learner's matches — the citable "org vouches
+# row across every one of this learner's matches, the citable "org vouches
 # for this" credentials, separate from (and not written into) their global
 # learner_skill_progress.current_level.
 @router.get("/me/verified-skills")
@@ -268,7 +268,7 @@ async def get_my_verified_skills(
 
 
 # ── Weekly Story history, learner's own view ─────────────────────────
-# Added 2026-09-02. Portfolio's "Weekly Story" tab — a reverse-chronological
+# Added 2026-09-02. Portfolio's "Weekly Story" tab, a reverse-chronological
 # read-only history of the "this week's growth" paragraphs weekly_report.py
 # generates, separate from learner_profile (My Story's Life-CV, which is a
 # merged/compressed current snapshot with no history of its own). Written
@@ -300,7 +300,7 @@ async def get_my_weekly_stories(
 # connecting familiarity self-assessment (which used to drive /me/seed-progress
 # via ArtsGroup). This version classifies against the 8 Mouseion domains,
 # matched by Skill.name against MOUSEION_DOMAIN_SKILLS below (mirrored from
-# frontend/app.js's _DOMS) rather than by Skill.learning_domain — that column
+# frontend/app.js's _DOMS) rather than by Skill.learning_domain, that column
 # is populated with a different, legacy subject-matter taxonomy, not the 8
 # Mouseion domains (see MOUSEION_DOMAIN_SKILLS comment). One small AI call,
 # run once at onboarding completion. See SESSION_ARCHITECTURE.md §2.4
@@ -329,10 +329,10 @@ async def seed_progress_from_prosopon_answers(
     """
     Classifies the learner's 3 onboarding answers against the 8 Mouseion
     domains and seeds light learner_skill_progress signal (evidence_count=2,
-    current_level=0 — the same "some experience" tier the old familiarity
+    current_level=0, the same "some experience" tier the old familiarity
     screen used for its middle option) for every skill in each matched
     domain. Never overwrites existing real progress. No-ops silently if all
-    3 answers were skipped or the AI call fails — onboarding must never
+    3 answers were skipped or the AI call fails, onboarding must never
     block on this.
     """
     text = " ".join(x for x in (req.curiosity, req.cares_about, req.wants_to_do) if x).strip()
@@ -346,7 +346,7 @@ async def seed_progress_from_prosopon_answers(
 
 {text}
 
-Which of these 8 learning domains genuinely connect to what they wrote? Pick 1-4, only ones with a real connection — do not force a match for every answer.
+Which of these 8 learning domains genuinely connect to what they wrote? Pick 1-4, only ones with a real connection, do not force a match for every answer.
 
 Domains: {", ".join(MOUSEION_DOMAINS)}
 

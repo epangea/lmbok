@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — routes/matching.py
+# FreqLearn, routes/matching.py
 # ============================================================
 
 from datetime import datetime, timezone
@@ -24,7 +24,7 @@ router = APIRouter()
 # ── Avatar stage → match bonus ────────────────────────────────
 # Grove+ learners have demonstrated breadth across arts and domains.
 # Their matches get a small bonus to surface opportunities that fit
-# their growth pattern — not to reward gamification, but to surface
+# their growth pattern, not to reward gamification, but to surface
 # the signal that they're genuinely multi-dimensional learners.
 AVATAR_BONUS = {
     'seed':      0,
@@ -199,7 +199,7 @@ async def get_my_matches(
         .order_by(OpportunityMatch.matched_at.desc())
     )).scalars().all()
     # P11: a 'suggested' ai_suggested match is a candidate the org hasn't
-    # invited yet — the learner shouldn't see it at all until notify_ai_match
+    # invited yet, the learner shouldn't see it at all until notify_ai_match
     # moves it to 'invited'. Everything else (learner_initiated, or an
     # ai_suggested match already invited/accepted/declined) is visible.
     rows = [m for m in rows if not (m.origin == "ai_suggested" and m.learner_status == "suggested")]
@@ -225,7 +225,7 @@ async def accept_ai_match(
     db: AsyncSession = Depends(get_db),
 ):
     """P11: learner accepts an org-invited AI match. Moves learner_status to
-    'interested' — the same value that already means "mutual/visible" for
+    'interested', the same value that already means "mutual/visible" for
     learner_initiated matches, so the org's existing get_listing_matches
     reveal logic picks this up with no further change needed."""
     match = (await db.execute(
@@ -283,7 +283,7 @@ async def express_interest(
     )).scalar_one_or_none()
     if existing:
         # 2026-07-18: a withdrawn match (see withdraw_interest below) still has
-        # a row here — the (learner_id, listing_id) unique constraint means a
+        # a row here, the (learner_id, listing_id) unique constraint means a
         # learner re-expressing interest after withdrawing must reactivate the
         # existing row, not silently no-op and report "already_exists" while
         # actually still being withdrawn underneath.
@@ -306,7 +306,7 @@ async def withdraw_interest(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db),
 ):
-    """Withdraw interest in a match. Soft-delete only (2026-07-18 fix) —
+    """Withdraw interest in a match. Soft-delete only (2026-07-18 fix),
     hard-deleting the OpportunityMatch row 500'd (FK constraint violation)
     whenever any Message rows referenced it, since messages.match_id has no
     ON DELETE CASCADE. Same fix pattern orgs.py's delete_listing() already
@@ -379,7 +379,7 @@ async def send_message(
 
 # ── P8: learner-side validation (task submissions + skill visibility) ────
 # Added 2026-07-25. Full spec: PROJECT_MASTER PART 22. Mirrors orgs.py's
-# _require_connected_match gate — the learner can only see/submit against a
+# _require_connected_match gate, the learner can only see/submit against a
 # match the org has marked 'connected'.
 
 async def _require_connected_learner_match(match_id: int, learner: Learner, db: AsyncSession):
@@ -403,7 +403,7 @@ async def get_learner_validation(
     db: AsyncSession = Depends(get_db),
 ):
     """Learner's own view of a connected match: task line items (with their
-    own submission state) and skill targets (with any org-verified level —
+    own submission state) and skill targets (with any org-verified level,
     read-only from the learner's side, org rep is the one who sets it)."""
     match, listing = await _require_connected_learner_match(match_id, learner, db)
 
@@ -456,7 +456,7 @@ async def submit_task(
     db: AsyncSession = Depends(get_db),
 ):
     """Learner declares a task line item complete, optionally pointing to
-    which sessions/LECKOs they used — org rep reviews and verifies/rejects."""
+    which sessions/LECKOs they used, org rep reviews and verifies/rejects."""
     match, listing = await _require_connected_learner_match(match_id, learner, db)
     tasks = listing.needs_tasks or []
     if task_index < 0 or task_index >= len(tasks):

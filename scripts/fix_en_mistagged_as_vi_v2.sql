@@ -1,5 +1,5 @@
 -- fix_en_mistagged_as_vi.sql
--- 2026-06-28 — written after diag_vietnamese_overcount.sql output confirmed
+-- 2026-06-28, written after diag_vietnamese_overcount.sql output confirmed
 -- that 151 of 157 vi-tagged rows are actually ENGLISH, not Spanish/Portuguese.
 --
 -- Vietnamese-specific byte markers (UTF-8):
@@ -28,7 +28,7 @@
 -- Expected post-fix distribution (from 1799 sessions):
 --   en  ≈ 1791   (was 1640, +151 from the 2026-06-27 fix script that ran
 --                 to completion, plus any remaining rows)
---   vi  ≈ 6-12   (genuine Vietnamese — exact count depends on whether
+--   vi  ≈ 6-12   (genuine Vietnamese, exact count depends on whether
 --                 the 6 "Vietnamese-specific bytes" rows from 2026-06-27
 --                 have been preserved)
 --   es  = 1

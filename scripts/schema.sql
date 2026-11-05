@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — schema.sql v2
+-- FreqLearn, schema.sql v2
 -- Updated to reflect the 15 Arts framework from "To Be Human"
 -- by Charbel Haddad, Vietnam 2026
 --
@@ -110,7 +110,7 @@ CREATE TABLE skill_prerequisites (
     FOREIGN KEY (requires_skill) REFERENCES skills(id)
 ) ENGINE=InnoDB;
 
--- ── LECKO — Learning Experience Knowledge Chunk Object ────────
+-- ── LECKO, Learning Experience Knowledge Chunk Object ────────
 CREATE TABLE leckos (
     id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     art_id          TINYINT UNSIGNED NOT NULL,
@@ -373,17 +373,17 @@ CREATE TABLE refresh_tokens (
 INSERT INTO dev_phases (name, slug, age_range, age_min, age_max, icon, color, description, sort_order) VALUES
 ('Light (Unborn)',              'light',      NULL,    NULL, NULL, '☀️', '#FFC93C', 'The parent is the primary learner, tuning in before the child arrives.', 1),
 ('Sandy Soil (Depending 1)',    'sandy-soil', '0~2',   0,    2,    '🌱', '#8BC34A', 'Loose, absorbent, entirely dependent on what surrounds it.',             2),
-('Moist Soil (Depending 2)',    'moist-soil', '3~5',   3,    5,    '🌱', '#4CAF50', 'Holding and retaining — curiosity-led exploration takes root.',          3),
-('Humus Soil (Depending 3)',    'humus-soil', '6~8',   6,    8,    '🌱', '#2E7D32', 'Rich and self-sustaining — the most fertile ground for growth.',         4),
+('Moist Soil (Depending 2)',    'moist-soil', '3~5',   3,    5,    '🌱', '#4CAF50', 'Holding and retaining, curiosity-led exploration takes root.',          3),
+('Humus Soil (Depending 3)',    'humus-soil', '6~8',   6,    8,    '🌱', '#2E7D32', 'Rich and self-sustaining, the most fertile ground for growth.',         4),
 ('Low Fire (Weaning 1)',        'low-fire',   '9~11',  9,    11,   '🔥', '#FF8A50', 'A first spark of independence, still close to the hearth.',              5),
 ('Medium Fire (Weaning 2)',     'medium-fire','12~14', 12,   14,   '🔥', '#FF5722', 'Identity catching alight. Peers become a second family.',                6),
-('High Fire (Weaning 3)',       'high-fire',  '15~17', 15,   17,   '🔥', '#E53935', 'Full blaze — pushing outward, testing independence in earnest.',         7),
+('High Fire (Weaning 3)',       'high-fire',  '15~17', 15,   17,   '🔥', '#E53935', 'Full blaze, pushing outward, testing independence in earnest.',         7),
 ('Low Wind (Adulting 1)',       'low-wind',   '18~22', 18,   22,   '🪁', '#4FC3F7', 'Newly airborne, finding direction through movement.',                    8),
-('High Wind (Adulting 2)',      'high-wind',  '23~27', 23,   27,   '🪁', '#00ACC1', 'A steadier current — building momentum toward a chosen path.',           9),
-('Water (Adult)',               'water',      '28~38', 28,   38,   '💧', '#1E88E5', 'Flowing and shaping — building, leading, contributing.',                10),
-('Metal (Maturing)',            'metal',      '39~59', 39,   59,   '⚙️', '#C9A227', 'Forged and dependable — the load-bearing years.',                       11),
-('Stone (Mature)',              'stone',      '60~80', 60,   80,   '🪨', '#8D6E63', 'Weathered and solid — wisdom transmission, legacy taking shape.',       12),
-('Wood (Cresting)',             'wood',       '81+',   81,   NULL, '🌳', '#A0672E', 'Rooted, weathered, still standing — integration and acceptance.',       13);
+('High Wind (Adulting 2)',      'high-wind',  '23~27', 23,   27,   '🪁', '#00ACC1', 'A steadier current, building momentum toward a chosen path.',           9),
+('Water (Adult)',               'water',      '28~38', 28,   38,   '💧', '#1E88E5', 'Flowing and shaping, building, leading, contributing.',                10),
+('Metal (Maturing)',            'metal',      '39~59', 39,   59,   '⚙️', '#C9A227', 'Forged and dependable, the load-bearing years.',                       11),
+('Stone (Mature)',              'stone',      '60~80', 60,   80,   '🪨', '#8D6E63', 'Weathered and solid, wisdom transmission, legacy taking shape.',       12),
+('Wood (Cresting)',             'wood',       '81+',   81,   NULL, '🌳', '#A0672E', 'Rooted, weathered, still standing, integration and acceptance.',       13);
 
 INSERT INTO arts_group (name, slug, tagline, color_hex, sort_order) VALUES
 ('Being',      'being',      'Developing the self through inward awareness',       '#1D9E75', 1),

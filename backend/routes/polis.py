@@ -1,33 +1,33 @@
 # ============================================================
-# FreqLearn — routes/polis.py   [polis9_13.py — P27]
-# Civic participation portal — The Polis
+# FreqLearn, routes/polis.py   [polis9_13.py, P27]
+# Civic participation portal, The Polis
 #
 # ACCESS MODEL:
-#   Read  (browse referenda, discussions, proposals) — any authenticated learner
-#   Write (vote, comment, upvote, submit, support)   — Grove+ via require_polis_access
+#   Read  (browse referenda, discussions, proposals), any authenticated learner
+#   Write (vote, comment, upvote, submit, support), Grove+ via require_polis_access
 #   Proposal scope additionally stage-gated (P27):
-#     local    — Grove+    (any Polis-access holder)
-#     regional — Forest+   (9 arts, 3 domains)
-#     global   — Ecosystem (all 15 Arts at 100%)
+#     local, Grove+    (any Polis-access holder)
+#     regional, Forest+   (9 arts, 3 domains)
+#     global, Ecosystem (all 15 Arts at 100%)
 #
 # DB CALL STRATEGY:
 #   require_polis_access fetches stage once and returns PolisAccess(learner, stage).
-#   Write endpoints receive it via Depends — stage is already in hand, no re-fetch.
+#   Write endpoints receive it via Depends, stage is already in hand, no re-fetch.
 #   submit_proposal uses ctx.stage for scope check: zero extra DB calls.
 #
 # Avatar stage (utils.compute_avatar_stage; mirrors computeAvatarStage() in
 # app.js). Corrected 2026-11-01: this header still described the pre-2026-09-05
 # XP/arts-touched thresholds. XP no longer gates anything here. A stage needs
 # EVERY one of the 15 Arts at or above its threshold (weakest Art = bottleneck):
-#   Seed      — start
-#   Sprout    — all 15 Arts >= 0.10
-#   Sapling   — all 15 Arts >= 0.20
-#   Grove     — all 15 Arts >= 0.40   <- Polis write unlocks here
-#   Forest    — all 15 Arts >= 0.65
-#   Ecosystem — all 15 Arts >= 1.00
+#   Seed, start
+#   Sprout, all 15 Arts >= 0.10
+#   Sapling, all 15 Arts >= 0.20
+#   Grove, all 15 Arts >= 0.40   <- Polis write unlocks here
+#   Forest, all 15 Arts >= 0.65
+#   Ecosystem, all 15 Arts >= 1.00
 #
 # One score for gate and badge (2026-11-01, backlog 2026.180): utils.
-# get_learner_stage now reads engine.compute_radar() art_scores — the same
+# get_learner_stage now reads engine.compute_radar() art_scores, the same
 # per-art scores the frontend badge shows. From 2026-09-05 until then it read
 # learner_art_progress.score alone (credited only by skill-click sessions, at
 # most 0.05 per session in total), so the gate could refuse a stage the badge
@@ -35,15 +35,15 @@
 # A session feeds those scores only when the learner wrote something real in
 # its challenge or reflection (sessions.MIN_RESPONSE_CHARS).
 #
-# GET  /api/polis/my-access                               — stage + access status
-# GET  /api/polis/referenda                               — open referenda (filter: scope, bioregion)
-# POST /api/polis/referenda/{id}/vote                     — cast a vote (Grove+)
-# GET  /api/polis/referenda/{id}/discussion               — comments (open read)
-# POST /api/polis/referenda/{id}/discussion               — post a comment (Grove+)
-# POST /api/polis/referenda/{id}/discussion/{cid}/upvote  — upvote (Grove+, deduped)
-# GET  /api/polis/proposals                               — proposals (filter: scope, bioregion)
-# POST /api/polis/proposals                               — submit proposal (Grove+, scope enforced)
-# POST /api/polis/proposals/{id}/support                  — endorse a proposal (Grove+)
+# GET  /api/polis/my-access, stage + access status
+# GET  /api/polis/referenda, open referenda (filter: scope, bioregion)
+# POST /api/polis/referenda/{id}/vote, cast a vote (Grove+)
+# GET  /api/polis/referenda/{id}/discussion, comments (open read)
+# POST /api/polis/referenda/{id}/discussion, post a comment (Grove+)
+# POST /api/polis/referenda/{id}/discussion/{cid}/upvote, upvote (Grove+, deduped)
+# GET  /api/polis/proposals, proposals (filter: scope, bioregion)
+# POST /api/polis/proposals, submit proposal (Grove+, scope enforced)
+# POST /api/polis/proposals/{id}/support, endorse a proposal (Grove+)
 # ============================================================
 
 from dataclasses import dataclass
@@ -98,7 +98,7 @@ async def require_polis_access(
         raise HTTPException(
             403,
             f"The Polis opens at Grove stage ({stage['icon']} {stage['label']} -> \U0001f333 Grove). "
-            f"Keep surfing — every one of the 15 Arts needs to reach a score of "
+            f"Keep surfing, every one of the 15 Arts needs to reach a score of "
             f"{grove_threshold:.2f} (your weakest art is currently at {stage['min_art_score']:.2f})."
         )
     return PolisAccess(learner=learner, stage=stage)
@@ -138,7 +138,7 @@ async def list_referenda(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db)
 ):
-    """Open referenda — readable by any authenticated learner.
+    """Open referenda, readable by any authenticated learner.
     Optional query params: ?scope=local&bioregion=Annamite+Coast"""
     if scope and scope not in VALID_SCOPES:
         raise HTTPException(400, "scope must be local, regional, or global")
@@ -221,7 +221,7 @@ async def get_discussion(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db)
 ):
-    """Discussion thread — readable by any authenticated learner."""
+    """Discussion thread, readable by any authenticated learner."""
     rows = await db.execute(text(
         "SELECT d.id, d.learner_id, d.parent_id, d.body, d.upvotes, d.created_at,"
         "       l.display_name, dp.icon AS phase_icon, dp.color AS phase_color"
@@ -301,7 +301,7 @@ async def list_proposals(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db)
 ):
-    """Proposals — readable by any authenticated learner.
+    """Proposals, readable by any authenticated learner.
     Optional query params: ?scope=regional&bioregion=Annamite+Coast"""
     if scope and scope not in VALID_SCOPES:
         raise HTTPException(400, "scope must be local, regional, or global")
@@ -344,7 +344,7 @@ async def submit_proposal(
     if req.scope not in VALID_SCOPES:
         raise HTTPException(400, "Scope must be local, regional, or global")
 
-    # Scope enforcement via ctx.stage — already computed by require_polis_access.
+    # Scope enforcement via ctx.stage, already computed by require_polis_access.
     # No additional DB call needed.
     if ctx.stage["key"] not in SCOPE_PERMITTED.get(req.scope, set()):
         _, min_icon, min_label = SCOPE_MIN_STAGE[req.scope]
@@ -353,7 +353,7 @@ async def submit_proposal(
         raise HTTPException(
             403,
             f"Submitting a {req.scope} proposal requires {min_icon} {min_label} stage "
-            f"(you are {stage_icon} {stage_label}). Keep surfing — you're on your way."
+            f"(you are {stage_icon} {stage_label}). Keep surfing, you're on your way."
         )
 
     result = await db.execute(text(

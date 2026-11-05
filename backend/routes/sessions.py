@@ -1,6 +1,6 @@
 # ============================================================
-# FreqLearn Backend — routes/sessions.py  (v2)
-# Session lifecycle — matches schema v2
+# FreqLearn Backend, routes/sessions.py  (v2)
+# Session lifecycle, matches schema v2
 # ============================================================
 
 from datetime import datetime, timezone, date
@@ -30,7 +30,7 @@ class StartSessionRequest(BaseModel):
     language:         str | None = "en"  # UI language at generation time
 
 # 2026-11-01: a session counts toward the learner's growth score (skill
-# evidence, level-ups, direct art credit — i.e. everything the avatar stage
+# evidence, level-ups, direct art credit, i.e. everything the avatar stage
 # and the Polis gate are computed from) only when the learner wrote something
 # real in the challenge or the reflection. Self-rating alone no longer moves
 # the avatar. The session itself is still saved, and XP/streak/activity are
@@ -70,10 +70,10 @@ class CompleteSessionRequest(BaseModel):
     assess_score:       int | None = None
     assess_selected_index: int | None = None   # 0-based index of the option the learner picked; NULL if not answered
     # P40: set when the learner engaged the assess companion (wrong pick) and
-    # it reached a conclusion — {"resolved": bool, "final_score": int|None,
+    # it reached a conclusion, {"resolved": bool, "final_score": int|None,
     # "summary": str}. None when no companion conversation happened (correct
     # pick, or the learner used the self-rating fallback instead). When present,
-    # assess_score above is already the companion-adjusted value — the frontend
+    # assess_score above is already the companion-adjusted value, the frontend
     # applies that override before building this request, no server-side
     # recompute needed.
     assess_companion_verdict: dict | None = None
@@ -213,12 +213,12 @@ async def complete_session(
     # 2026-07-07: persist which option the learner actually picked. The
     # LEARNER CONTINUITY block in generate.py uses this to show "learner
     # chose B 'X', correct was D 'Y'" so the AI can address a misconception
-    # — especially useful when the wrong answer is close to the correct one.
+    #, especially useful when the wrong answer is close to the correct one.
     session.assess_selected_index = req.assess_selected_index
     # P40: persist the companion's verdict summary, if a companion
     # conversation happened. assess_score above already carries the
     # companion-adjusted value when this is set (frontend applies the
-    # override before sending /complete) — no additional scoring logic here.
+    # override before sending /complete), no additional scoring logic here.
     session.assess_companion_verdict = req.assess_companion_verdict
     session.completed_at       = datetime.now(timezone.utc)
 
@@ -240,14 +240,14 @@ async def complete_session(
     # 2026-11-01: growth credit requires a real challenge/reflect response.
     counted = has_real_response(req.challenge_response, req.reflect_response)
 
-    # FIX: DB columns may be NULL for brand-new rows — guard with `or 0`
+    # FIX: DB columns may be NULL for brand-new rows, guard with `or 0`
     if counted:
         progress.recall_count   = (progress.recall_count   or 0) + 1
         progress.evidence_count = (progress.evidence_count or 0) + 1
     progress.current_level    = (progress.current_level  or 0)
     progress.last_practiced_at = datetime.now(timezone.utc)
 
-    # Spaced repetition — next_review_at driven by self-rating (assess_score):
+    # Spaced repetition, next_review_at driven by self-rating (assess_score):
     #   Still learning (≤50) → review in 2 days
     #   Getting it    (51–85) → review in 5 days
     #   I knew this   (>85)  → review in 14 days
@@ -286,7 +286,7 @@ async def complete_session(
         streak.total_xp          += req.xp_earned
         streak.total_minutes     += req.duration_seconds // 60
     else:
-        # First session ever — create the streak row
+        # First session ever, create the streak row
         streak = LearnerStreak(
             learner_id=learner.id,
             current_streak=1,
@@ -543,7 +543,7 @@ async def get_activity_log(
     for the last N days. Used by the Progress page XP history chart.
 
     Default window: 30 days. Max enforced at 90.
-    Days with no activity are NOT included (sparse — frontend fills gaps).
+    Days with no activity are NOT included (sparse, frontend fills gaps).
     Each row: date (ISO string), sessions_done, xp_earned, minutes_spent.
     """
     from datetime import timedelta

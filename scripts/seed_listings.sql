@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — seed_listings.sql
+-- FreqLearn, seed_listings.sql
 -- Sample opportunity listings for the New Match card.
 -- required_arts: JSON array of art slugs the listing needs.
 -- Run: mysql -u freqlearn -p freqlearn < seed_listings.sql

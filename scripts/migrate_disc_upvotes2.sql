@@ -2,8 +2,8 @@
 -- Run: mysql freqlearn < migrate_disc_upvotes.sql
 --
 -- Types matched to actual DB:
---   learner_id  INT UNSIGNED  — matches learners.id (int(10) unsigned)
---   comment_id  INT           — matches polis_discussions.id (int(11))
+--   learner_id  INT UNSIGNED, matches learners.id (int(10) unsigned)
+--   comment_id  INT, matches polis_discussions.id (int(11))
 
 CREATE TABLE IF NOT EXISTS polis_discussion_upvotes (
   learner_id  INT UNSIGNED NOT NULL,

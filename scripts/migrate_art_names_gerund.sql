@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — migrate_art_names_gerund.sql
+-- FreqLearn, migrate_art_names_gerund.sql
 -- Renames all 15 arts to gerund form as per "To Be Human"
 -- by Charbel Haddad. Slugs unchanged (referenced by sessions).
 -- Run: mysql -u freqlearn -p freqlearn < migrate_art_names_gerund.sql

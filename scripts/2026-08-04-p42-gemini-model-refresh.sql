@@ -1,4 +1,4 @@
--- FreqLearn — 2026-08-04 (P42 follow-on: Gemini model refresh)
+-- FreqLearn, 2026-08-04 (P42 follow-on: Gemini model refresh)
 --
 -- The 2026-07-29b migration set ai_model_gemini_large/small to
 -- 'gemini-2.5-flash' / 'gemini-2.5-flash-lite' -- Google's own recommended

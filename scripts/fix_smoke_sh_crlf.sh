@@ -20,7 +20,7 @@ sed -i 's/\r$//' "$TARGET"
 
 # Verify
 if file "$TARGET" | grep -q "CRLF"; then
-  echo "WARN: $TARGET still has CRLF — sed may not have worked"
+  echo "WARN: $TARGET still has CRLF, sed may not have worked"
   exit 2
 fi
 

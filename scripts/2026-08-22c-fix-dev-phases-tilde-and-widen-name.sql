@@ -1,7 +1,7 @@
 -- 2026-08-22c-fix-dev-phases-tilde-and-widen-name.sql
 --
 -- Supersedes 2026-08-22b-fix-dev-phases-age-ranges.sql, which failed at line
--- 26 ("Data too long for column 'name'") and committed nothing — dev_phases
+-- 26 ("Data too long for column 'name'") and committed nothing, dev_phases
 -- is untouched by that attempt. Root cause of that failure: `name` was
 -- VARCHAR(30), too narrow for the full ParentGuide/GuardianGuide labels.
 -- This script widens it first, then applies the correct values.
@@ -10,7 +10,7 @@
 -- ("Onboarding redesign...") added the ParentGuide/GuardianGuide labels to
 -- frontend/app.js's PHASES array and claimed in its message that age ranges
 -- were updated to 12-19/20-59/60+, but the actual diff never touched the
--- age numbers — only the name labels changed. So app.js, dev_phases, and
+-- age numbers, only the name labels changed. So app.js, dev_phases, and
 -- everywhere else have been quietly showing the old 12-17/18-60/61+ boundary
 -- this whole time despite being documented as fixed. Confirmed by git show
 -- 3ef1da3 -- frontend/app.js. This script (paired with the app.js edit made

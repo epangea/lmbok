@@ -1,4 +1,4 @@
--- FreqLearn — properly reclassify the 157 'vi' rows
+-- FreqLearn, properly reclassify the 157 'vi' rows
 -- Run AFTER diag_vietnamese_overcount.sql confirms the overcount:
 --   mysql freqlearn < scripts/fix_vietnamese_overcount.sql
 --

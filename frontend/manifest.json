@@ -1,7 +1,7 @@
 {
-  "name": "LMBoK — Surfing the Frequencies",
+  "name": "LMBoK, Surfing the Frequencies",
   "short_name": "LMBoK",
-  "description": "A free, lifelong learning platform built around 15 Arts to Be Human — for every human on Earth.",
+  "description": "A free, lifelong learning platform built around 15 Arts to Be Human, for every human on Earth.",
   "start_url": "/?src=pwa",
   "scope": "/",
   "display": "standalone",

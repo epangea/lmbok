@@ -1,5 +1,5 @@
 -- ============================================================
--- 2026-07-23 — add sessions.assess_companion_verdict (P40)
+-- 2026-07-23, add sessions.assess_companion_verdict (P40)
 --
 -- Why: P40 replaces the assess phase's red/coral "wrong answer" flag
 -- with a Socratic AI companion conversation (new endpoint
@@ -7,13 +7,13 @@
 -- /generate/scaffold pattern). When the learner engages the
 -- companion and it concludes their reasoning holds up (or that more
 -- than one answer is legitimately acceptable), it can silently raise
--- assess_score AND leave a short written verdict summary here —
+-- assess_score AND leave a short written verdict summary here,
 -- consumed by prior_session_context.py's LEARNER CONTINUITY block so
 -- future sessions know *why* a "wrong" pick was actually accepted,
 -- not just that the score was high.
 --
 -- Storing a short AI-written summary, not the raw transcript
--- (privacy/size — same pattern as the Digital Avatar Story, which
+-- (privacy/size, same pattern as the Digital Avatar Story, which
 -- summarizes rather than stores raw conversation history).
 --
 -- Purely additive, nullable column. Safe to run any time; existing
@@ -23,7 +23,7 @@
 -- companion in favor of the self-rating fallback).
 -- ============================================================
 
--- ---- PART A: read-only preflight — confirm current state before altering ----
+-- ---- PART A: read-only preflight, confirm current state before altering ----
 DESCRIBE sessions;
 
 -- ---- PART B: the actual change ----

@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — requirements.txt
+# FreqLearn, requirements.txt
 # Pinned for stability on Ubuntu 22.04/24.04
 # Install: pip install -r requirements.txt
 # ============================================================

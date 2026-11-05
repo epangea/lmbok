@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — routes/ollama_generate.py
+# FreqLearn, routes/ollama_generate.py
 # Ollama status endpoint only. Actual generation calls all go through
 # ai_client.ai_complete() now (P41, 2026-07-29) -- see ai_client.py's
 # module docstring for the full story.

@@ -5,7 +5,7 @@
 -- B1 uses IF NOT EXISTS so it's safe to re-run if it already executed.
 -- ═══════════════════════════════════════════════════════════════════════════
 
--- ── PART A — Confirm current state before running ────────────────────────────
+-- ── PART A, Confirm current state before running ────────────────────────────
 
 -- A1. Check which new columns already exist on bioregion_portraits
 SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT
@@ -15,7 +15,7 @@ WHERE TABLE_SCHEMA = DATABASE()
   AND COLUMN_NAME IN ('version_number','vitality_snapshot','change_notes')
 ORDER BY COLUMN_NAME;
 -- Expected after a partial previous run: version_number may or may not appear.
--- If all three appear, B1 is already done — skip to B2.
+-- If all three appear, B1 is already done, skip to B2.
 
 -- A2. Confirm version archive table still does not exist
 SELECT COUNT(*) AS version_table_exists
@@ -25,9 +25,9 @@ WHERE TABLE_SCHEMA = DATABASE()
 -- Expected: 0 (table creation failed last time)
 
 
--- ── PART B — Schema changes ──────────────────────────────────────────────────
+-- ── PART B, Schema changes ──────────────────────────────────────────────────
 
--- B1. Add columns to bioregion_portraits (IF NOT EXISTS — safe to re-run)
+-- B1. Add columns to bioregion_portraits (IF NOT EXISTS, safe to re-run)
 ALTER TABLE bioregion_portraits
   ADD COLUMN IF NOT EXISTS version_number    TINYINT UNSIGNED NOT NULL DEFAULT 1
     COMMENT 'Increments each time a new portrait is generated',
@@ -66,7 +66,7 @@ CREATE TABLE IF NOT EXISTS bioregion_portrait_versions (
   COMMENT='Archive of all past portrait generations; current version lives in bioregion_portraits';
 
 
--- ── PART C — Post-check ──────────────────────────────────────────────────────
+-- ── PART C, Post-check ──────────────────────────────────────────────────────
 
 -- C1. Confirm all three new columns exist on bioregion_portraits
 SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE
@@ -86,7 +86,7 @@ FROM bioregion_portraits ORDER BY id;
 SELECT COUNT(*) AS archived_versions FROM bioregion_portrait_versions;
 -- Expected: 0
 
--- C4. FK is correctly formed — this will error if the FK is broken
+-- C4. FK is correctly formed, this will error if the FK is broken
 SELECT COUNT(*) AS fk_check
 FROM information_schema.KEY_COLUMN_USAGE
 WHERE TABLE_SCHEMA        = DATABASE()

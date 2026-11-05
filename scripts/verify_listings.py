@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FreqLearn — Listing URL Verifier
+FreqLearn, Listing URL Verifier
 Checks all source_urls in opportunity_listings and reports status.
 Run from server with venv active.
 
@@ -23,7 +23,7 @@ DB_CONFIG = {
     "database": "freqlearn",
 }
 
-# ── Listings with URLs (from audit — extend as scavenger adds more) ──
+# ── Listings with URLs (from audit, extend as scavenger adds more) ──
 LISTINGS = [
     {"id": 68, "title": "Program Coordinator, Community Outreach Program",
      "url": "https://www.worldvision.org/jobs"},
@@ -55,7 +55,7 @@ async def check_url(client: httpx.AsyncClient, listing: dict) -> dict:
         elif r.status_code in DEAD_CODES:
             result["note"] = f"🔴 DEAD ({r.status_code})"
         elif r.status_code in WARN_CODES:
-            # Some servers reject HEAD — retry with GET
+            # Some servers reject HEAD, retry with GET
             try:
                 r2 = await client.get(url, follow_redirects=True, timeout=TIMEOUT)
                 result["status"] = r2.status_code
@@ -68,7 +68,7 @@ async def check_url(client: httpx.AsyncClient, listing: dict) -> dict:
     except httpx.ConnectError:
         result["note"] = "🔴 DEAD (connection refused / DNS failure)"
     except httpx.TimeoutException:
-        result["note"] = "⚠️  Timeout — server slow or blocking"
+        result["note"] = "⚠️  Timeout, server slow or blocking"
     except Exception as e:
         result["note"] = f"⚠️  Error: {e}"
     return result
@@ -76,7 +76,7 @@ async def check_url(client: httpx.AsyncClient, listing: dict) -> dict:
 
 async def main():
     fix_mode = "--fix" in sys.argv
-    print(f"\nFreqLearn URL Verifier — {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"\nFreqLearn URL Verifier, {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"Mode: {'FIX (will deactivate dead listings)' if fix_mode else 'REPORT ONLY'}")
     print("=" * 70)
 
@@ -115,7 +115,7 @@ WHERE  id IN ({ids});
     if warn:
         print(f"\n⚠️  Listings needing manual review ({len(warn)}):")
         for r in warn:
-            print(f"   [{r['id']}] {r['title']} — {r['note']}")
+            print(f"   [{r['id']}] {r['title']}, {r['note']}")
 
     if fix_mode and dead:
         print("\nApplying fixes to DB...")
@@ -133,7 +133,7 @@ WHERE  id IN ({ids});
             conn.close()
             print(f"✅ Deactivated {len(dead)} listings in DB.")
         except ImportError:
-            print("aiomysql not installed — run the SQL manually from the output above.")
+            print("aiomysql not installed, run the SQL manually from the output above.")
         except Exception as e:
             print(f"DB error: {e}")
 

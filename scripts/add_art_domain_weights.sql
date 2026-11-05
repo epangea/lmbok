@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — add_art_domain_weights.sql
+-- FreqLearn, add_art_domain_weights.sql
 -- Creates the art_domain_weights table and seeds all 51 mappings
 -- (15 arts × 1–4 domains each, weights per art summing to 1.00).
 --

@@ -1,10 +1,10 @@
 -- 2026-08-25-add-dev-phases-age-bounds.sql
 --
 -- Adds numeric age_min/age_max to dev_phases. age_range ('0~2', '81+',
--- NULL for Light) is display text only — computing a learner's phase
+-- NULL for Light) is display text only, computing a learner's phase
 -- from birth_year needs real numbers to compare against, not a string
 -- to parse at request time. age_max NULL means unbounded (Wood, 81+).
--- Light keeps both NULL — it's resolved via is_expecting_parent, never
+-- Light keeps both NULL, it's resolved via is_expecting_parent, never
 -- by age.
 --
 -- Preflight:
@@ -26,7 +26,7 @@ UPDATE dev_phases SET age_min = 28, age_max = 38  WHERE slug = 'water';
 UPDATE dev_phases SET age_min = 39, age_max = 59  WHERE slug = 'metal';
 UPDATE dev_phases SET age_min = 60, age_max = 80  WHERE slug = 'stone';
 UPDATE dev_phases SET age_min = 81, age_max = NULL WHERE slug = 'wood';
--- 'light' stays NULL/NULL — resolved via is_expecting_parent, not age.
+-- 'light' stays NULL/NULL, resolved via is_expecting_parent, not age.
 
 -- Verify:
 SELECT slug, age_range, age_min, age_max FROM dev_phases ORDER BY sort_order;

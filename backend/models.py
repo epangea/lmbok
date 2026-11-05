@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn Backend — models.py  (v2 — matches schema v2)
+# FreqLearn Backend, models.py  (v2, matches schema v2)
 # All classes derived from schema.sql v2
 # ============================================================
 
@@ -138,6 +138,10 @@ class LearnerPreferences(Base):
 
 
 class LearnerArtProgress(Base):
+    # Direct-practice bonus per art. Written only by sessions.complete_session, and only for
+    # sessions launched from a Learning Domain skill that carry a real challenge/reflect
+    # response. It feeds 20% of the radar art score (engine.compute_radar); it does not decide
+    # the avatar stage or Polis access by itself (those read the radar score).
     __tablename__ = "learner_art_progress"
     learner_id: Mapped[int]   = mapped_column(ForeignKey("learners.id"), primary_key=True)
     art_id:     Mapped[int]   = mapped_column(ForeignKey("arts.id"),     primary_key=True)
@@ -257,11 +261,11 @@ class RadarSnapshot(Base):
 
 
 class WeeklyStory(Base):
-    # One row per learner per weekly_report.py run — a persisted history of
+    # One row per learner per weekly_report.py run, a persisted history of
     # the "this week's growth" paragraph, kept separate from
     # learners.learner_profile (My Story's merged/compressed current
     # snapshot, which has no history of its own). Written for every active
-    # learner regardless of learner_preferences.weekly_report_opt_out —
+    # learner regardless of learner_preferences.weekly_report_opt_out,
     # that flag only gates the email send, not whether progress is tracked.
     __tablename__ = "weekly_stories"
     id:         Mapped[int]      = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -298,7 +302,7 @@ class Organization(Base):
     is_active:     Mapped[bool]          = mapped_column(Boolean, default=True)
     created_at:    Mapped[datetime]      = mapped_column(DateTime, default=func.now())
     # 2026-07-18 fix: these two columns were added to the live DB via the
-    # ALTER TABLE in orgs.py's module docstring, but never added here — so
+    # ALTER TABLE in orgs.py's module docstring, but never added here, so
     # every Organization(password_hash=...) construction in orgs.py's
     # register_org() raised "'password_hash' is an invalid keyword argument
     # for Organization" (a Python TypeError, before any DB call), which is
@@ -345,7 +349,7 @@ class OpportunityMatch(Base):
     listing_id:     Mapped[int]            = mapped_column(ForeignKey("opportunity_listings.id"), nullable=False)
     # P11 (2026-07-24): 'learner_initiated' = learner expressed interest on a
     # public listing (original flow, unchanged). 'ai_suggested' = the org's
-    # AI needs-matching ranked this learner into its top 10 — org sees them
+    # AI needs-matching ranked this learner into its top 10, org sees them
     # anonymized until notified_at is set and the learner accepts.
     origin:         Mapped[str]            = mapped_column(String(20), default="learner_initiated")
     match_score:    Mapped[Optional[int]]  = mapped_column(Integer)
@@ -353,7 +357,7 @@ class OpportunityMatch(Base):
     skills_gap:     Mapped[Optional[dict]] = mapped_column(JSON)
     arts_met:       Mapped[Optional[dict]] = mapped_column(JSON)
     # learner_status values: pending | interested | declined | connected |
-    # withdrawn (original 5) + suggested | invited (P11, ai_suggested only —
+    # withdrawn (original 5) + suggested | invited (P11, ai_suggested only,
     # 'suggested' = ranked but not yet notified, 'invited' = org notified,
     # awaiting response. Accepting an invite moves straight to 'interested',
     # the same value that already means "mutual/visible" everywhere else.)
@@ -365,7 +369,7 @@ class OpportunityMatch(Base):
 
 
 # P8 (2026-07-25, migration scripts/2026-07-25-p8-org-validation.sql):
-# org validation system — task line-item completions + org-verified skill
+# org validation system, task line-item completions + org-verified skill
 # demonstrations. See PROJECT_MASTER PART 22 for the full spec. Both tables
 # key off match_id (opportunity_matches.id), and both are only ever reachable
 # once a match's org_status == "connected" (routes enforce this, not the DB).
@@ -374,13 +378,13 @@ class TaskCompletion(Base):
     id:           Mapped[int]            = mapped_column(Integer, primary_key=True, autoincrement=True)
     match_id:     Mapped[int]            = mapped_column(ForeignKey("opportunity_matches.id"), nullable=False)
     task_index:   Mapped[int]            = mapped_column(SmallInteger, nullable=False)  # index into the listing's needs_tasks array at submission time
-    task_text:    Mapped[str]            = mapped_column(String(300), nullable=False)   # snapshot — later needs_tasks edits don't relabel a completed item
+    task_text:    Mapped[str]            = mapped_column(String(300), nullable=False)   # snapshot, later needs_tasks edits don't relabel a completed item
     status:       Mapped[str]            = mapped_column(String(20), default="submitted")  # submitted | verified | rejected
     learner_note: Mapped[Optional[str]]  = mapped_column(Text)
     session_ids:  Mapped[Optional[dict]] = mapped_column(JSON)   # sessions/LECKOs the learner points to as evidence
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     verified_at:  Mapped[Optional[datetime]] = mapped_column(DateTime)
-    verified_by:  Mapped[Optional[str]]  = mapped_column(String(160))  # free-text org rep name — orgs have no per-rep login
+    verified_by:  Mapped[Optional[str]]  = mapped_column(String(160))  # free-text org rep name, orgs have no per-rep login
     org_note:     Mapped[Optional[str]]  = mapped_column(Text)
     created_at:   Mapped[datetime]       = mapped_column(DateTime, default=func.now())
     __table_args__ = (UniqueConstraint("match_id", "task_index", name="uq_match_task"),)

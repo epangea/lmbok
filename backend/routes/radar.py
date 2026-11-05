@@ -1,4 +1,4 @@
-# FreqLearn — routes/radar.py
+# FreqLearn, routes/radar.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -15,7 +15,7 @@ async def get_current_radar(
     learner: Learner = Depends(get_current_learner),
     db: AsyncSession = Depends(get_db)
 ):
-    """Live radar — recomputed from current progress."""
+    """Live radar, recomputed from current progress."""
     return await eng.compute_radar(learner.id, db)
 
 @router.get("/snapshots")

@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<!-- Redirect logged-in users straight to the app — runs before any render.
+<!-- Redirect logged-in users straight to the app, runs before any render.
      Skipped when arriving via an explicit in-app "Home" link (?src=nav), and
      stays skipped for the rest of this tab's session (sessionStorage) so a
      refresh of the homepage doesn't bounce a logged-in learner straight back
-     to /app.html — only a genuinely fresh visit to "/" auto-redirects. -->
+     to /app.html, only a genuinely fresh visit to "/" auto-redirects. -->
 <script>(function(){
   try {
     if (location.search.indexOf('src=nav') !== -1) { sessionStorage.setItem('lmbok_home_visit','1'); }
@@ -17,16 +17,16 @@
     if (localStorage.getItem('fl_learner') && location.search.indexOf('src=nav')===-1) { location.replace('/app.html'); }
   }
 })();</script>
-<meta name="description" content="LMBoK — Life Management Body of Knowledge. A forever-free, human-centered lifelong learning platform for everyone, everywhere, always."/>
-<meta property="og:title" content="LMBoK — Life Management Body of Knowledge"/>
-<meta property="og:description" content="Surf the frequencies of your own learning — free, forever, for every human on Earth."/>
+<meta name="description" content="LMBoK, Life Management Body of Knowledge. A forever-free, human-centered lifelong learning platform for everyone, everywhere, always."/>
+<meta property="og:title" content="LMBoK, Life Management Body of Knowledge"/>
+<meta property="og:description" content="Surf the frequencies of your own learning, free, forever, for every human on Earth."/>
 <meta property="og:image" content="charb.jpg"/>
-<title>LMBoK — Life Management Body of Knowledge</title>
+<title>LMBoK, Life Management Body of Knowledge</title>
 
-<!-- Favicon — inline SVG wave, matches app.html/org.html/etc. -->
+<!-- Favicon, inline SVG wave, matches app.html/org.html/etc. -->
 <link rel="icon" type="image/png" href="/icons/icon-192.png"/>
 
-<!-- PWA — installable app shell (added 2026-08-19). Root is the primary
+<!-- PWA, installable app shell (added 2026-08-19). Root is the primary
      install entry point: browsers evaluate installability here, and the
      existing auto-redirect above (localStorage fl_learner check) already
      sends a returning logged-in learner straight to /app.html, so an
@@ -799,7 +799,7 @@ footer a:hover { color: var(--amber); }
   <h1 class="fade" data-i18n="hero_title">Life Management<br/><em>Body of Knowledge</em></h1>
   <p class="hero-abbr fade" data-i18n="hero_abbr">LMBoK</p>
   <p class="hero-tagline fade" data-i18n="hero_tagline">
-    Surf the frequencies of your own learning —<br/>free, forever, for every human on Earth.
+    Surf the frequencies of your own learning, <br/>free, forever, for every human on Earth.
   </p>
   <div class="hero-cta fade" id="heroCta">
     <a href="/app.html#register" class="btn btn-amber" data-i18n="hero_cta1">Start Your Journey</a>
@@ -823,29 +823,29 @@ footer a:hover { color: var(--amber); }
     <p class="section-eyebrow" data-i18n="platform_eyebrow">What is LMBoK?</p>
     <h2 class="section-title" data-i18n="platform_title">Learning that <em>belongs to you</em></h2>
     <p class="section-body" data-i18n="platform_intro">
-      The Life Management Body of Knowledge (LMBoK/ePangea), is a forever-free lifelong learning platform rooted in a simple conviction: Every human being deserves access to the tools that help them know themselves, connect with others, and thrive in the world — on their own terms, in their own language, at their own pace. Such a tool can empower everyone to be the change they wish to see. Direct consequence: A world that we <strong>all</strong> wish to see.
+      The Life Management Body of Knowledge (LMBoK/ePangea), is a forever-free lifelong learning platform rooted in a simple conviction: Every human being deserves access to the tools that help them know themselves, connect with others, and thrive in the world, on their own terms, in their own language, at their own pace. Such a tool can empower everyone to be the change they wish to see. Direct consequence: A world that we <strong>all</strong> wish to see.
     </p>
 
     <div class="platform-grid">
       <div class="platform-card fade">
         <span class="card-icon">🌱</span>
         <h3 data-i18n="card1_title">15 Human Arts</h3>
-        <p data-i18n="card1_body">Organised across three domains — Being, Becoming, and Connecting — these arts cover every dimension of human life, from physical wellness to civic participation, from personal expression to community stewardship.</p>
+        <p data-i18n="card1_body">Organised across three domains, Being, Becoming, and Connecting, these arts cover every dimension of human life, from physical wellness to civic participation, from personal expression to community stewardship.</p>
       </div>
       <div class="platform-card fade">
         <span class="card-icon">🗺️</span>
         <h3 data-i18n="card2_title">Rooted in Your Bioregion</h3>
-        <p data-i18n="card2_body">Your learning is anchored in where you actually live — your ecosystem, your culture, your real community challenges. This is not a one-size-fits-all curriculum. It grows with your place and your people.</p>
+        <p data-i18n="card2_body">Your learning is anchored in where you actually live, your ecosystem, your culture, your real community challenges. This is not a one-size-fits-all curriculum. It grows with your place and your people.</p>
       </div>
       <div class="platform-card fade">
         <span class="card-icon">🤖</span>
         <h3 data-i18n="card3_title">A Socratic AI Companion</h3>
-        <p data-i18n="card3_body">An AI guide that asks rather than tells — walking you through Warmup, Explore, Challenge, Reflect, and Assess — drawing out what you already know and helping you go further. Your growth, amplified.</p>
+        <p data-i18n="card3_body">An AI guide that asks rather than tells, walking you through Warmup, Explore, Challenge, Reflect, and Assess, drawing out what you already know and helping you go further. Your growth, amplified.</p>
       </div>
       <div class="platform-card fade">
         <span class="card-icon">🏛️</span>
         <h3 data-i18n="card4_title">Civic Voice &amp; Community Action</h3>
-        <p data-i18n="card4_body">As you grow, so does your civic power. Connect your learning to real local challenges. At the Grove stage, join Polis — a civic space where your voice shapes proposals, referenda, and collective decisions. No one speaks for you unless you choose that.</p>
+        <p data-i18n="card4_body">As you grow, so does your civic power. Connect your learning to real local challenges. At the Grove stage, join Polis, a civic space where your voice shapes proposals, referenda, and collective decisions. No one speaks for you unless you choose that.</p>
       </div>
     </div>
   </div>
@@ -859,7 +859,7 @@ footer a:hover { color: var(--amber); }
      ============================================================ -->
 <div class="quote-band fade">
   <blockquote data-i18n="quote_text">&ldquo;Winning <strong>alone</strong> makes <strong>everyone</strong> a loser.&rdquo;</blockquote>
-  <p class="quote-attr" data-i18n="quote_attr">— The Arts to Be Human · LMBoK</p>
+  <p class="quote-attr" data-i18n="quote_attr">The Arts to Be Human · LMBoK</p>
 </div>
 
 <!-- ============================================================
@@ -871,7 +871,7 @@ footer a:hover { color: var(--amber); }
       <p class="section-eyebrow" data-i18n="arts_eyebrow">The 3 Arts of Being Human</p>
       <h2 class="section-title" data-i18n="arts_title">Three roots. <em>One tree.</em></h2>
       <p class="section-body" data-i18n="arts_intro">
-        At the heart of LMBoK is a simple map of what it means to be fully human — drawn from permaculture, developmental psychology, and community wisdom from around the world.
+        At the heart of LMBoK is a simple map of what it means to be fully human, drawn from permaculture, developmental psychology, and community wisdom from around the world.
       </p>
     </div>
 
@@ -880,7 +880,7 @@ footer a:hover { color: var(--amber); }
         <span class="art-icon">🌿</span>
         <h3 data-i18n="being_title">The Art of Being</h3>
         <p class="art-sub" data-i18n="being_sub">Inward Awareness</p>
-        <p data-i18n="being_body">Know yourself — deeply and honestly. Moving, eating, feeling, noticing, expressing. These are the five arts of being alive in your own skin. Personal strength begins here.</p>
+        <p data-i18n="being_body">Know yourself, deeply and honestly. Moving, eating, feeling, noticing, expressing. These are the five arts of being alive in your own skin. Personal strength begins here.</p>
         <div class="art-chips">
           <span class="chip" data-i18n="chip_moving">Moving</span>
           <span class="chip" data-i18n="chip_eating">Eating</span>
@@ -894,7 +894,7 @@ footer a:hover { color: var(--amber); }
         <span class="art-icon">🤝</span>
         <h3 data-i18n="becoming_title">The Art of Becoming</h3>
         <p class="art-sub" data-i18n="becoming_sub">Outward Awareness</p>
-        <p data-i18n="becoming_body">Grow through others — with empathy, generosity, and courage. Listening, giving, receiving, collaborating, living responsibly. Your identity is shaped by every meaningful encounter.</p>
+        <p data-i18n="becoming_body">Grow through others, with empathy, generosity, and courage. Listening, giving, receiving, collaborating, living responsibly. Your identity is shaped by every meaningful encounter.</p>
         <div class="art-chips">
           <span class="chip" data-i18n="chip_listening">Listening</span>
           <span class="chip" data-i18n="chip_giving">Giving</span>
@@ -908,7 +908,7 @@ footer a:hover { color: var(--amber); }
         <span class="art-icon">🌍</span>
         <h3 data-i18n="connecting_title">The Art of Connecting</h3>
         <p class="art-sub" data-i18n="connecting_sub">Symbiosis &amp; Synergy</p>
-        <p data-i18n="connecting_body">Thrive within the living world. Understanding, respecting, growing, building, consuming. We are not above nature — we are part of it. Collective prosperity begins with this truth.</p>
+        <p data-i18n="connecting_body">Thrive within the living world. Understanding, respecting, growing, building, consuming. We are not above nature, we are part of it. Collective prosperity begins with this truth.</p>
         <div class="art-chips">
           <span class="chip" data-i18n="chip_understanding">Understanding</span>
           <span class="chip" data-i18n="chip_respecting">Respecting</span>
@@ -923,7 +923,7 @@ footer a:hover { color: var(--amber); }
     <div class="fade" style="margin-top: 64px;">
       <p class="section-eyebrow" data-i18n="avatar_eyebrow">Your Learning Journey</p>
       <h2 class="section-title" style="font-size: 1.8rem;" data-i18n="avatar_title">From <em>Seed</em> to <em>Ecosystem</em></h2>
-      <p class="section-body" data-i18n="avatar_body">No leaderboards. No streaks. No competition. Just your own growth, at your own pace — reflected in your avatar's journey through nature's own stages.</p>
+      <p class="section-body" data-i18n="avatar_body">No leaderboards. No streaks. No competition. Just your own growth, at your own pace, reflected in your avatar's journey through nature's own stages.</p>
     </div>
 
     <div class="avatar-row fade">
@@ -971,7 +971,7 @@ footer a:hover { color: var(--amber); }
      ============================================================ -->
 <!--
   ================================================================
-  VIDEO PLACEHOLDERS — Action required before publishing!
+  VIDEO PLACEHOLDERS, Action required before publishing!
 
   For each video below, replace the text YOUTUBE_VIDEO_ID_X
   with your actual YouTube video ID.
@@ -986,9 +986,9 @@ footer a:hover { color: var(--amber); }
     AFTER:  src="https://www.youtube.com/embed/dQw4w9WgXcQ"
 
   The three videos expected:
-    VIDEO 1 — Call to Action: why LMBoK exists, the invitation
-    VIDEO 2 — The 3 Arts: Being, Becoming, Connecting explained
-    VIDEO 3 — Status Quo vs. Vision: the paradigm shift
+    VIDEO 1, Call to Action: why LMBoK exists, the invitation
+    VIDEO 2, The 3 Arts: Being, Becoming, Connecting explained
+    VIDEO 3, Status Quo vs. Vision: the paradigm shift
   ================================================================
 -->
 <section id="videos">
@@ -996,18 +996,18 @@ footer a:hover { color: var(--amber); }
     <div class="fade">
       <p class="section-eyebrow" data-i18n="videos_eyebrow">Video Explanations</p>
       <h2 class="section-title" data-i18n="videos_title">See the <em>vision</em> come alive</h2>
-      <p class="section-body" data-i18n="videos_intro">Three short animations that capture what LMBoK is, why it matters, and where it's taking us — told through the philosophy of The Arts to Be Human.</p>
+      <p class="section-body" data-i18n="videos_intro">Three short animations that capture what LMBoK is, why it matters, and where it's taking us, told through the philosophy of The Arts to Be Human.</p>
     </div>
 
     <div class="videos-grid">
 
-      <!-- VIDEO 1 — CALL TO ACTION -->
+      <!-- VIDEO 1, CALL TO ACTION -->
       <div class="video-card fade">
         <div class="video-wrap">
           <!--
             === ACTION REQUIRED ===
             Replace YOUTUBE_VIDEO_ID_1 with your actual YouTube video ID for:
-            "The Call to Action — Why LMBoK?"
+            "The Call to Action, Why LMBoK?"
           -->
 		  <!--
           <div class="video-placeholder" id="vp1" data-videoid="YOUTUBE_VIDEO_ID_1" onclick="loadVideo(this)">
@@ -1029,17 +1029,17 @@ footer a:hover { color: var(--amber); }
         <div class="video-info">
           <p class="num" data-i18n="vid1_num">Video 01</p>
           <h3 data-i18n="vid1_title">The Call to Action</h3>
-          <p data-i18n="vid1_body">Why does LMBoK exist? What are we trying to change — and for whom? An invitation to surf the frequencies of your own life.</p>
+          <p data-i18n="vid1_body">Why does LMBoK exist? What are we trying to change, and for whom? An invitation to surf the frequencies of your own life.</p>
         </div>
       </div>
 
-      <!-- VIDEO 2 — THE 3 ARTS -->
+      <!-- VIDEO 2, THE 3 ARTS -->
       <div class="video-card fade">
         <div class="video-wrap">
           <!--
             === ACTION REQUIRED ===
             Replace YOUTUBE_VIDEO_ID_2 with your actual YouTube video ID for:
-            "The 3 Arts — Being, Becoming, Connecting"
+            "The 3 Arts, Being, Becoming, Connecting"
           -->
 		  
 		  <!--
@@ -1056,17 +1056,17 @@ footer a:hover { color: var(--amber); }
         <div class="video-info">
           <p class="num" data-i18n="vid2_num">Video 02</p>
           <h3 data-i18n="vid2_title">Being · Becoming · Connecting</h3>
-          <p data-i18n="vid2_body">The three arts of human development — inward awareness, social identity, and living in harmony with our environment.</p>
+          <p data-i18n="vid2_body">The three arts of human development, inward awareness, social identity, and living in harmony with our environment.</p>
         </div>
       </div>
 
-      <!-- VIDEO 3 — STATUS QUO VS VISION -->
+      <!-- VIDEO 3, STATUS QUO VS VISION -->
       <div class="video-card fade">
         <div class="video-wrap">
           <!--
             === ACTION REQUIRED ===
             Replace YOUTUBE_VIDEO_ID_3 with your actual YouTube video ID for:
-            "The Paradigm Shift — Status Quo vs. The Vision"
+            "The Paradigm Shift, Status Quo vs. The Vision"
           -->
 		  <!--
           <div class="video-placeholder" id="vp3" data-videoid="YOUTUBE_VIDEO_ID_3" onclick="loadVideo(this)">
@@ -1091,7 +1091,7 @@ footer a:hover { color: var(--amber); }
 </section>
 
 <!-- ============================================================
-     MUSIC — SOUNDCLOUD EMBED
+     MUSIC, SOUNDCLOUD EMBED
      ============================================================
      The SoundCloud playlist is embedded below.
      To start at "Chapter 3" specifically, change the start_track parameter:
@@ -1128,7 +1128,7 @@ footer a:hover { color: var(--amber); }
         frameborder="no"
         allow="autoplay; encrypted-media"
         src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/playlists/soundcloud%253Aplaylists%253A2261835815&color=%232D5A27&auto_play=false&hide_related=false&show_comments=false&show_user=true&show_reposts=false&show_teaser=true&visual=true&start_track=4"
-        title="A Guide to Your Own Personal Dimension — One 'Ouse"
+        title="A Guide to Your Own Personal Dimension, One 'Ouse"
       ></iframe>
       -->
       <iframe	
@@ -1138,7 +1138,7 @@ footer a:hover { color: var(--amber); }
         frameborder="no"
         allow="autoplay; encrypted-media"
         src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/playlists/soundcloud%253Aplaylists%253A2261835815&color=%232D5A27&auto_play=true&hide_related=false&show_comments=false&show_user=true&show_reposts=false&show_teaser=true&visual=true"
-        title="A Guide to Your Own Personal Dimension — One 'Ouse"
+        title="A Guide to Your Own Personal Dimension, One 'Ouse"
       ></iframe>
     </div>
     <p style="font-size:.8rem; color:#333F38; margin-top:8px; text-align:center;">
@@ -1164,7 +1164,7 @@ footer a:hover { color: var(--amber); }
       <div class="author-photo-wrap">
         <img
           src="charb.jpg"
-          alt="Charbel Haddad — One 'Ouse"
+          alt="Charbel Haddad, One 'Ouse"
           class="author-photo"
           loading="lazy"
         />
@@ -1183,13 +1183,13 @@ footer a:hover { color: var(--amber); }
 
         <div class="author-bio">
           <p data-i18n="author_bio1">
-            Twenty-five years across enterprise technology, international education, and community life — migrating from Lebanon to Canada, building IT infrastructure across West Africa, teaching in China, Taiwan, and Vietnam — and through all of it, one question has driven every decision. How do we make a quality life genuinely accessible to everyone?
+            Twenty-five years across enterprise technology, international education, and community life, migrating from Lebanon to Canada, building IT infrastructure across West Africa, teaching in China, Taiwan, and Vietnam, and through all of it, one question has driven every decision. How do we make a quality life genuinely accessible to everyone?
           </p>
           <p data-i18n="author_bio2">
-            Root cause analyses keep landing on the same answer: we need genuine learning experiences, freely accessible to everyone, everywhere — experiences that nurture intrinsic motivation, autonomous thinking, and real civic agency. Not credentials. Not rankings. Not fear. LMBoK is that answer, built one art at a time.
+            Root cause analyses keep landing on the same answer: we need genuine learning experiences, freely accessible to everyone, everywhere, experiences that nurture intrinsic motivation, autonomous thinking, and real civic agency. Not credentials. Not rankings. Not fear. LMBoK is that answer, built one art at a time.
           </p>
           <p data-i18n="author_bio3">
-            Charbel is a convinced believer that the only future worth building is one where universal diversity is our greatest collective asset (idiosyncrasy=good) — where winning alone makes everyone else a loser, while growing together makes everyone else a winner.
+            Charbel is a convinced believer that the only future worth building is one where universal diversity is our greatest collective asset (idiosyncrasy=good), where winning alone makes everyone else a loser, while growing together makes everyone else a winner.
           </p>
         </div>
 
@@ -1240,7 +1240,7 @@ footer a:hover { color: var(--amber); }
 </footer>
 
 <!-- ============================================================
-     JAVASCRIPT — Multilingual + Interactions
+     JAVASCRIPT, Multilingual + Interactions
      ============================================================ -->
 <script>
 /* ====================================================
@@ -1259,41 +1259,41 @@ const T = {
     hero_eyebrow: "Forever Free · For Everyone",
     hero_title: "Life Management<br/><em>Body of Knowledge</em>",
     hero_abbr: "LMBoK",
-    hero_tagline: "Surf the frequencies of your own learning —<br/>free, forever, for every human on Earth.",
+    hero_tagline: "Surf the frequencies of your own learning, <br/>free, forever, for every human on Earth.",
     hero_cta1: "Start Your Journey",
     hero_cta2: "Already a learner? Sign in",
     hero_scroll: "Scroll to explore ↓",
     platform_eyebrow: "What is LMBoK?",
     platform_title: "Learning that <em>belongs to you</em>",
-    platform_intro: "The Life Management Body of Knowledge (LMBoK/ePangea), is a forever-free lifelong learning platform rooted in a simple conviction: Every human being deserves access to the tools that help them know themselves, connect with others, and thrive in the world — on their own terms, in their own language, at their own pace. Such a tool can empower everyone to be the change they wish to see. Direct consequence: A world that we <strong>all</strong> wish to see.",
+    platform_intro: "The Life Management Body of Knowledge (LMBoK/ePangea), is a forever-free lifelong learning platform rooted in a simple conviction: Every human being deserves access to the tools that help them know themselves, connect with others, and thrive in the world, on their own terms, in their own language, at their own pace. Such a tool can empower everyone to be the change they wish to see. Direct consequence: A world that we <strong>all</strong> wish to see.",
     card1_title: "15 Human Arts",
-    card1_body: "Organised across three domains — Being, Becoming, and Connecting — these arts cover every dimension of human life, from physical wellness to civic participation, from personal expression to community stewardship.",
+    card1_body: "Organised across three domains, Being, Becoming, and Connecting, these arts cover every dimension of human life, from physical wellness to civic participation, from personal expression to community stewardship.",
     card2_title: "Rooted in Your Bioregion",
-    card2_body: "Your learning is anchored in where you actually live — your ecosystem, your culture, your real community challenges. This is not a one-size-fits-all curriculum. It grows with your place and your people.",
+    card2_body: "Your learning is anchored in where you actually live, your ecosystem, your culture, your real community challenges. This is not a one-size-fits-all curriculum. It grows with your place and your people.",
     card3_title: "A Socratic AI Companion",
-    card3_body: "An AI guide that asks rather than tells — walking you through Warmup, Explore, Challenge, Reflect, and Assess — drawing out what you already know and helping you go further. Your growth, amplified.",
+    card3_body: "An AI guide that asks rather than tells, walking you through Warmup, Explore, Challenge, Reflect, and Assess, drawing out what you already know and helping you go further. Your growth, amplified.",
     card4_title: "Civic Voice & Community Action",
-    card4_body: "As you grow, so does your civic power. Connect your learning to real local challenges. At the Grove stage, join Polis — a civic space where your voice shapes proposals and collective decisions. No one speaks for you unless you choose that.",
+    card4_body: "As you grow, so does your civic power. Connect your learning to real local challenges. At the Grove stage, join Polis, a civic space where your voice shapes proposals and collective decisions. No one speaks for you unless you choose that.",
     quote_text: "\u201cWinning <strong>alone</strong> makes <strong>everyone</strong> a loser.\u201d",
-    quote_attr: "— The Arts to Be Human · LMBoK",
+    quote_attr: "The Arts to Be Human · LMBoK",
     arts_eyebrow: "The 3 Arts of Being Human",
     arts_title: "Three roots. <em>One tree.</em>",
-    arts_intro: "At the heart of LMBoK is a simple map of what it means to be fully human — drawn from permaculture, developmental psychology, and community wisdom from around the world.",
+    arts_intro: "At the heart of LMBoK is a simple map of what it means to be fully human, drawn from permaculture, developmental psychology, and community wisdom from around the world.",
     being_title: "The Art of Being",
     being_sub: "Inward Awareness",
-    being_body: "Know yourself — deeply and honestly. Moving, eating, feeling, noticing, expressing. These are the five arts of being alive in your own skin. Personal strength begins here.",
+    being_body: "Know yourself, deeply and honestly. Moving, eating, feeling, noticing, expressing. These are the five arts of being alive in your own skin. Personal strength begins here.",
     becoming_title: "The Art of Becoming",
     becoming_sub: "Outward Awareness",
-    becoming_body: "Grow through others — with empathy, generosity, and courage. Listening, giving, receiving, collaborating, living responsibly. Your identity is shaped by every meaningful encounter.",
+    becoming_body: "Grow through others, with empathy, generosity, and courage. Listening, giving, receiving, collaborating, living responsibly. Your identity is shaped by every meaningful encounter.",
     connecting_title: "The Art of Connecting",
     connecting_sub: "Symbiosis & Synergy",
-    connecting_body: "Thrive within the living world. Understanding, respecting, growing, building, consuming. We are not above nature — we are part of it. Collective prosperity begins with this truth.",
+    connecting_body: "Thrive within the living world. Understanding, respecting, growing, building, consuming. We are not above nature, we are part of it. Collective prosperity begins with this truth.",
     chip_moving: "Moving", chip_eating: "Eating", chip_feeling: "Feeling", chip_noticing: "Noticing", chip_expressing: "Expressing",
     chip_listening: "Listening", chip_giving: "Giving", chip_receiving: "Receiving", chip_collaborating: "Collaborating", chip_living: "Living Responsibly",
     chip_understanding: "Understanding", chip_respecting: "Respecting", chip_growing: "Growing", chip_building: "Building", chip_consuming: "Consuming",
     avatar_eyebrow: "Your Learning Journey",
     avatar_title: "From <em>Seed</em> to <em>Ecosystem</em>",
-    avatar_body: "No leaderboards. No streaks. No competition. Just your own growth, at your own pace — reflected in your avatar's journey through nature's own stages.",
+    avatar_body: "No leaderboards. No streaks. No competition. Just your own growth, at your own pace, reflected in your avatar's journey through nature's own stages.",
     avatar_seed: "Seed", avatar_seed_sub: "Just beginning",
     avatar_sprout: "Sprout", avatar_sprout_sub: "First roots",
     avatar_sapling: "Sapling", avatar_sapling_sub: "Growing strong",
@@ -1302,10 +1302,10 @@ const T = {
     avatar_ecosystem: "Ecosystem", avatar_ecosystem_sub: "Full flourishing",
     videos_eyebrow: "Video Explanations",
     videos_title: "See the <em>vision</em> come alive",
-    videos_intro: "Three short animations that capture what LMBoK is, why it matters, and where it's taking us — told through the philosophy of The Arts to Be Human.",
+    videos_intro: "Three short animations that capture what LMBoK is, why it matters, and where it's taking us, told through the philosophy of The Arts to Be Human.",
     video_coming: "Video coming soon",
-    vid1_num: "Video 01", vid1_title: "The Call to Action", vid1_body: "Why does LMBoK exist? What are we trying to change — and for whom? An invitation to surf the frequencies of your own life.",
-    vid2_num: "Video 02", vid2_title: "Being · Becoming · Connecting", vid2_body: "The three arts of human development — inward awareness, social identity, and living in harmony with our environment.",
+    vid1_num: "Video 01", vid1_title: "The Call to Action", vid1_body: "Why does LMBoK exist? What are we trying to change, and for whom? An invitation to surf the frequencies of your own life.",
+    vid2_num: "Video 02", vid2_title: "Being · Becoming · Connecting", vid2_body: "The three arts of human development, inward awareness, social identity, and living in harmony with our environment.",
     vid3_num: "Video 03", vid3_title: "From Factories to Open Fields", vid3_body: "The status quo versus the vision. From obedience and standardised testing to collaborative, nature-based, freely accessible learning for all.",
     music_eyebrow: "Surf the Frequencies",
     music_title: "A soundtrack for your journey",
@@ -1314,9 +1314,9 @@ const T = {
     author_title: "Charbel Haddad",
     dq_label: "Guiding Question:",
     dq_text: '"How do we make a quality life accessible to everyone, free of misery, aggression, manipulation, envy and greed?"',
-    author_bio1: "Twenty-five years across enterprise technology, international education, and community life — migrating from Lebanon to Canada, building IT infrastructure across West Africa, teaching in China, Taiwan, and Vietnam — and through all of it, one question has driven every decision.",
-    author_bio2: "Root cause analyses keep landing on the same answer: we need genuine learning experiences, freely accessible to everyone, everywhere — experiences that nurture intrinsic motivation, autonomous thinking, and real civic agency. Not credentials. Not rankings. Not fear. LMBoK is that answer, built one art at a time.",
-    author_bio3: "Charbel is a convinced believer that the only future worth building is one where universal diversity is our greatest collective asset (idiosyncrasy=good) — where winning alone makes everyone else a loser, while growing together makes everyone else a winner.",
+    author_bio1: "Twenty-five years across enterprise technology, international education, and community life, migrating from Lebanon to Canada, building IT infrastructure across West Africa, teaching in China, Taiwan, and Vietnam, and through all of it, one question has driven every decision.",
+    author_bio2: "Root cause analyses keep landing on the same answer: we need genuine learning experiences, freely accessible to everyone, everywhere, experiences that nurture intrinsic motivation, autonomous thinking, and real civic agency. Not credentials. Not rankings. Not fear. LMBoK is that answer, built one art at a time.",
+    author_bio3: "Charbel is a convinced believer that the only future worth building is one where universal diversity is our greatest collective asset (idiosyncrasy=good), where winning alone makes everyone else a loser, while growing together makes everyone else a winner.",
     author_portfolio: "Visit Portfolio →",
     cta_eyebrow: "Forever Free · Forever Open",
     cta_title: "Ready to <em>surf your frequencies?</em>",
@@ -1339,37 +1339,37 @@ const T = {
     nav_signin: "Se connecter",
     nav_join: "Rejoindre gratuitement",
     hero_eyebrow: "Toujours gratuit · Pour tous · Partout",
-    hero_title: "La Gestion de Vie —<br/><em>Corps de Connaissances</em>",
+    hero_title: "La Gestion de Vie<br/><em>Corps de Connaissances</em>",
     hero_abbr: "LMBoK",
-    hero_tagline: "Surfez sur les fréquences de votre propre apprentissage —<br/>libre, pour toujours, pour chaque être humain.",
+    hero_tagline: "Surfez sur les fréquences de votre propre apprentissage, <br/>libre, pour toujours, pour chaque être humain.",
     hero_cta1: "Commencer votre voyage",
     hero_cta2: "Déjà membre ? Se connecter",
     hero_scroll: "Défiler pour explorer ↓",
     platform_eyebrow: "Qu'est-ce que LMBoK ?",
     platform_title: "Un apprentissage qui <em>vous appartient</em>",
-    platform_intro: "La plupart des systèmes éducatifs ont été conçus pour trier les gens — pas pour les aider à grandir. LMBoK est différent. C'est une plateforme d'apprentissage tout au long de la vie, gratuite pour toujours, fondée sur une conviction simple : chaque être humain mérite d'avoir accès aux outils qui l'aident à se connaître, à se connecter aux autres et à s'épanouir dans le monde.",
+    platform_intro: "La plupart des systèmes éducatifs ont été conçus pour trier les gens, pas pour les aider à grandir. LMBoK est différent. C'est une plateforme d'apprentissage tout au long de la vie, gratuite pour toujours, fondée sur une conviction simple : chaque être humain mérite d'avoir accès aux outils qui l'aident à se connaître, à se connecter aux autres et à s'épanouir dans le monde.",
     card1_title: "15 Arts Humains",
-    card1_body: "Organisés en trois domaines — Être, Devenir et Connecter — ces arts couvrent chaque dimension de la vie humaine, du bien-être physique à la participation civique.",
+    card1_body: "Organisés en trois domaines, Être, Devenir et Connecter, ces arts couvrent chaque dimension de la vie humaine, du bien-être physique à la participation civique.",
     card2_title: "Ancré dans votre Biorégion",
-    card2_body: "Votre apprentissage est ancré là où vous vivez réellement — votre écosystème, votre culture, vos défis communautaires réels.",
+    card2_body: "Votre apprentissage est ancré là où vous vivez réellement, votre écosystème, votre culture, vos défis communautaires réels.",
     card3_title: "Un Compagnon IA Socratique",
-    card3_body: "Un guide IA qui interroge plutôt qu'il n'affirme — vous guidant à travers Échauffement, Exploration, Défi, Réflexion et Évaluation.",
+    card3_body: "Un guide IA qui interroge plutôt qu'il n'affirme, vous guidant à travers Échauffement, Exploration, Défi, Réflexion et Évaluation.",
     card4_title: "Voix Civique & Action Communautaire",
-    card4_body: "Au stade Grove, rejoignez Polis — un espace civique où votre voix façonne des propositions et des décisions collectives.",
+    card4_body: "Au stade Grove, rejoignez Polis, un espace civique où votre voix façonne des propositions et des décisions collectives.",
     quote_text: "\u201cGagner <strong>seul</strong> fait de <strong>tout le monde</strong> un perdant.\u201d",
-    quote_attr: "— Les Arts d'Être Humain · LMBoK",
+    quote_attr: "Les Arts d'Être Humain · LMBoK",
     arts_eyebrow: "Les 3 Arts d'Être Humain",
     arts_title: "Trois racines. <em>Un arbre.</em>",
     arts_intro: "Au cœur de LMBoK se trouve une carte simple de ce que signifie être pleinement humain.",
     being_title: "L'Art d'Être",
     being_sub: "Conscience Intérieure",
-    being_body: "Se connaître — profondément et honnêtement. Bouger, manger, ressentir, remarquer, s'exprimer.",
+    being_body: "Se connaître, profondément et honnêtement. Bouger, manger, ressentir, remarquer, s'exprimer.",
     becoming_title: "L'Art de Devenir",
     becoming_sub: "Conscience Extérieure",
-    becoming_body: "Grandir grâce aux autres — avec empathie, générosité et courage.",
+    becoming_body: "Grandir grâce aux autres, avec empathie, générosité et courage.",
     connecting_title: "L'Art de Connecter",
     connecting_sub: "Symbiose & Synergie",
-    connecting_body: "Prospérer au sein du monde vivant. Nous ne sommes pas au-dessus de la nature — nous en faisons partie.",
+    connecting_body: "Prospérer au sein du monde vivant. Nous ne sommes pas au-dessus de la nature, nous en faisons partie.",
     chip_moving:"Bouger",chip_eating:"Manger",chip_feeling:"Ressentir",chip_noticing:"Remarquer",chip_expressing:"S'exprimer",
     chip_listening:"Écouter",chip_giving:"Donner",chip_receiving:"Recevoir",chip_collaborating:"Collaborer",chip_living:"Vivre Responsablement",
     chip_understanding:"Comprendre",chip_respecting:"Respecter",chip_growing:"Cultiver",chip_building:"Construire",chip_consuming:"Consommer",
@@ -1381,21 +1381,21 @@ const T = {
     avatar_forest:"Forêt",avatar_forest_sub:"Profondément enraciné",avatar_ecosystem:"Écosystème",avatar_ecosystem_sub:"Plein épanouissement",
     videos_eyebrow:"Explications Vidéo",videos_title:"Voir la <em>vision</em> prendre vie",
     videos_intro:"Trois courtes animations qui capturent ce qu'est LMBoK, pourquoi cela compte, et où cela nous mène.",
-    video_coming:"Vidéo à venir",vid1_num:"Vidéo 01",vid1_title:"L'Appel à l'Action",vid1_body:"Pourquoi LMBoK existe-t-il ? Que cherchons-nous à changer — et pour qui ?",
-    vid2_num:"Vidéo 02",vid2_title:"Être · Devenir · Connecter",vid2_body:"Les trois arts du développement humain — conscience intérieure, identité sociale, et harmonie avec l'environnement.",
+    video_coming:"Vidéo à venir",vid1_num:"Vidéo 01",vid1_title:"L'Appel à l'Action",vid1_body:"Pourquoi LMBoK existe-t-il ? Que cherchons-nous à changer, et pour qui ?",
+    vid2_num:"Vidéo 02",vid2_title:"Être · Devenir · Connecter",vid2_body:"Les trois arts du développement humain, conscience intérieure, identité sociale, et harmonie avec l'environnement.",
     vid3_num:"Vidéo 03",vid3_title:"Des Usines aux Champs Ouverts",vid3_body:"Le statu quo versus la vision. De l'obéissance et des tests standardisés à un apprentissage collaboratif et libre.",
     music_eyebrow:"Surfez les Fréquences",music_title:"Une bande son pour votre voyage",
-    music_intro:"Musique composée pour la philosophie LMBoK — une courte histoire de poésie slam : \"Un guide vers votre propre dimension personnelle.\"",
+    music_intro:"Musique composée pour la philosophie LMBoK, une courte histoire de poésie slam : \"Un guide vers votre propre dimension personnelle.\"",
     author_eyebrow:"Auteur & Philosophie",author_title:"Charbel Haddad",
     dq_label:"Question directrice :",dq_text:"\"Comment rendre une vie de qualité accessible à tous, sans misère, agression, manipulation, envie ni avidité ?\"",
-    author_bio1:"Vingt-cinq ans entre technologie d'entreprise, éducation internationale et vie communautaire — du Liban au Canada, d'Afrique de l'Ouest à l'Asie.",
+    author_bio1:"Vingt-cinq ans entre technologie d'entreprise, éducation internationale et vie communautaire, du Liban au Canada, d'Afrique de l'Ouest à l'Asie.",
     author_bio2:"Les analyses des causes profondes mènent toujours à la même réponse : nous avons besoin d'expériences d'apprentissage authentiques, librement accessibles à tous.",
     author_bio3:"Explorateur multilingue, enthousiaste de la permaculture, bâtisseur de communautés.",
     author_portfolio:"Visiter le Portfolio →",
     cta_eyebrow:"Toujours gratuit · Toujours ouvert",cta_title:"Prêt à <em>surfer vos fréquences ?</em>",
     cta_body:"Créez votre compte gratuit. Sans frais, jamais. Sans conditions.",
     cta_btn1:"Créer Mon Compte Gratuit",cta_btn2:"Se Connecter",
-    footer_tagline:"Gestion de Vie — Corps de Connaissances · Toujours gratuit · Pour tous · Toujours",
+    footer_tagline:"Gestion de Vie, Corps de Connaissances · Toujours gratuit · Pour tous · Toujours",
     footer_platform:"Plateforme",footer_ekklesia:"Pour les organisations",footer_author:"Auteur",footer_contact:"Contact",
     footer_license:"Open source sous AGPL-3.0",
   },
@@ -1404,24 +1404,24 @@ const T = {
     nav_platform:"Plataforma",nav_arts:"Las 3 Artes",nav_videos:"Vídeos",nav_author:"Autor",
     nav_signin:"Iniciar sesión",nav_join:"Unirse gratis",
     hero_eyebrow:"Siempre gratis · Para todos · Siempre",
-    hero_title:"Gestión de Vida —<br/><em>Cuerpo de Conocimiento</em>",
+    hero_title:"Gestión de Vida<br/><em>Cuerpo de Conocimiento</em>",
     hero_abbr:"LMBoK",
-    hero_tagline:"Surfea las frecuencias de tu propio aprendizaje —<br/>libre, para siempre, para cada ser humano en la Tierra.",
+    hero_tagline:"Surfea las frecuencias de tu propio aprendizaje, <br/>libre, para siempre, para cada ser humano en la Tierra.",
     hero_cta1:"Comienza tu viaje",hero_cta2:"¿Ya eres aprendiz? Inicia sesión",
     hero_scroll:"Desplázate para explorar ↓",
     platform_eyebrow:"¿Qué es LMBoK?",platform_title:"Un aprendizaje que <em>te pertenece</em>",
-    platform_intro:"La mayoría de los sistemas educativos fueron creados para clasificar personas — no para ayudarlas a crecer. LMBoK es diferente. Es una plataforma de aprendizaje permanente, gratis para siempre, basada en una convicción simple.",
-    card1_title:"15 Artes Humanas",card1_body:"Organizadas en tres dominios — Ser, Devenir y Conectar — estas artes cubren cada dimensión de la vida humana.",
-    card2_title:"Arraigado en tu Biorregión",card2_body:"Tu aprendizaje está anclado en donde realmente vives — tu ecosistema, tu cultura, tus desafíos comunitarios reales.",
-    card3_title:"Un Compañero IA Socrático",card3_body:"Una guía de IA que pregunta en lugar de decir — guiándote por Calentamiento, Exploración, Desafío, Reflexión y Evaluación.",
-    card4_title:"Voz Cívica y Acción Comunitaria",card4_body:"En la etapa Grove, únete a Polis — un espacio cívico donde tu voz moldea propuestas y decisiones colectivas.",
+    platform_intro:"La mayoría de los sistemas educativos fueron creados para clasificar personas, no para ayudarlas a crecer. LMBoK es diferente. Es una plataforma de aprendizaje permanente, gratis para siempre, basada en una convicción simple.",
+    card1_title:"15 Artes Humanas",card1_body:"Organizadas en tres dominios, Ser, Devenir y Conectar, estas artes cubren cada dimensión de la vida humana.",
+    card2_title:"Arraigado en tu Biorregión",card2_body:"Tu aprendizaje está anclado en donde realmente vives, tu ecosistema, tu cultura, tus desafíos comunitarios reales.",
+    card3_title:"Un Compañero IA Socrático",card3_body:"Una guía de IA que pregunta en lugar de decir, guiándote por Calentamiento, Exploración, Desafío, Reflexión y Evaluación.",
+    card4_title:"Voz Cívica y Acción Comunitaria",card4_body:"En la etapa Grove, únete a Polis, un espacio cívico donde tu voz moldea propuestas y decisiones colectivas.",
     quote_text:"\u201cGanar <strong>solo</strong> hace de <strong>todos</strong> un perdedor.\u201d",
-    quote_attr:"— Las Artes de Ser Humano · LMBoK",
+    quote_attr:"Las Artes de Ser Humano · LMBoK",
     arts_eyebrow:"Las 3 Artes de Ser Humano",arts_title:"Tres raíces. <em>Un árbol.</em>",
     arts_intro:"En el corazón de LMBoK hay un mapa simple de lo que significa ser plenamente humano.",
-    being_title:"El Arte de Ser",being_sub:"Conciencia Interior",being_body:"Conócete a ti mismo — profunda y honestamente. Moverse, comer, sentir, notar, expresar.",
-    becoming_title:"El Arte de Convertirse",becoming_sub:"Conciencia Exterior",becoming_body:"Crecer a través de los demás — con empatía, generosidad y valentía.",
-    connecting_title:"El Arte de Conectar",connecting_sub:"Simbiosis y Sinergia",connecting_body:"Prosperar dentro del mundo vivo. No estamos por encima de la naturaleza — somos parte de ella.",
+    being_title:"El Arte de Ser",being_sub:"Conciencia Interior",being_body:"Conócete a ti mismo, profunda y honestamente. Moverse, comer, sentir, notar, expresar.",
+    becoming_title:"El Arte de Convertirse",becoming_sub:"Conciencia Exterior",becoming_body:"Crecer a través de los demás, con empatía, generosidad y valentía.",
+    connecting_title:"El Arte de Conectar",connecting_sub:"Simbiosis y Sinergia",connecting_body:"Prosperar dentro del mundo vivo. No estamos por encima de la naturaleza, somos parte de ella.",
     chip_moving:"Moverse",chip_eating:"Comer",chip_feeling:"Sentir",chip_noticing:"Notar",chip_expressing:"Expresarse",
     chip_listening:"Escuchar",chip_giving:"Dar",chip_receiving:"Recibir",chip_collaborating:"Colaborar",chip_living:"Vivir Responsablemente",
     chip_understanding:"Comprender",chip_respecting:"Respetar",chip_growing:"Cultivar",chip_building:"Construir",chip_consuming:"Consumir",
@@ -1432,21 +1432,21 @@ const T = {
     avatar_forest:"Bosque",avatar_forest_sub:"Profundamente arraigado",avatar_ecosystem:"Ecosistema",avatar_ecosystem_sub:"Pleno florecimiento",
     videos_eyebrow:"Explicaciones en Vídeo",videos_title:"Ver la <em>visión</em> cobrar vida",
     videos_intro:"Tres animaciones cortas que capturan qué es LMBoK, por qué importa y hacia dónde nos lleva.",
-    video_coming:"Vídeo próximamente",vid1_num:"Vídeo 01",vid1_title:"La Llamada a la Acción",vid1_body:"¿Por qué existe LMBoK? ¿Qué intentamos cambiar — y para quién?",
-    vid2_num:"Vídeo 02",vid2_title:"Ser · Devenir · Conectar",vid2_body:"Las tres artes del desarrollo humano — conciencia interior, identidad social, y armonía con el medio ambiente.",
+    video_coming:"Vídeo próximamente",vid1_num:"Vídeo 01",vid1_title:"La Llamada a la Acción",vid1_body:"¿Por qué existe LMBoK? ¿Qué intentamos cambiar, y para quién?",
+    vid2_num:"Vídeo 02",vid2_title:"Ser · Devenir · Conectar",vid2_body:"Las tres artes del desarrollo humano, conciencia interior, identidad social, y armonía con el medio ambiente.",
     vid3_num:"Vídeo 03",vid3_title:"De Fábricas a Campos Abiertos",vid3_body:"El statu quo versus la visión. Del modelo de obediencia al aprendizaje colaborativo y libre.",
     music_eyebrow:"Surfea las Frecuencias",music_title:"Una banda sonora para tu viaje",
-    music_intro:"Música compuesta para la filosofía LMBoK — una historia corta de poesía slam.",
+    music_intro:"Música compuesta para la filosofía LMBoK, una historia corta de poesía slam.",
     author_eyebrow:"Autor y Filosofía",author_title:"Charbel Haddad",
     dq_label:"Pregunta guía:",dq_text:"\"¿Cómo hacer que una vida de calidad sea accesible para todos, libre de miseria, agresión, manipulación, envidia y codicia?\"",
-    author_bio1:"Veinticinco años en tecnología empresarial, educación internacional y vida comunitaria — del Líbano a Canadá, a través de África Occidental y Asia.",
+    author_bio1:"Veinticinco años en tecnología empresarial, educación internacional y vida comunitaria, del Líbano a Canadá, a través de África Occidental y Asia.",
     author_bio2:"Los análisis de causa raíz siempre llegan a la misma respuesta: necesitamos experiencias de aprendizaje genuinas, libremente accesibles para todos.",
     author_bio3:"Explorador multilingüe, entusiasta de la permacultura, constructor de comunidades.",
     author_portfolio:"Visitar Portfolio →",
     cta_eyebrow:"Siempre gratis · Siempre abierto",cta_title:"¿Listo para <em>surfear tus frecuencias?</em>",
     cta_body:"Crea tu cuenta gratuita. Sin costo, nunca. Sin condiciones.",
     cta_btn1:"Crear Mi Cuenta Gratuita",cta_btn2:"Iniciar sesión",
-    footer_tagline:"Gestión de Vida — Cuerpo de Conocimiento · Siempre gratis · Para todos · Siempre",
+    footer_tagline:"Gestión de Vida, Cuerpo de Conocimiento · Siempre gratis · Para todos · Siempre",
     footer_platform:"Plataforma",footer_ekklesia:"Para organizaciones",footer_author:"Autor",footer_contact:"Contacto",
     footer_license:"Código abierto bajo AGPL-3.0",
   },
@@ -1455,24 +1455,24 @@ const T = {
     nav_platform:"Plattform",nav_arts:"Die 3 Künste",nav_videos:"Videos",nav_author:"Autor",
     nav_signin:"Anmelden",nav_join:"Kostenlos beitreten",
     hero_eyebrow:"Für immer kostenlos · Für alle · Immer",
-    hero_title:"Lebensmanagement —<br/><em>Wissenskorpus</em>",
+    hero_title:"Lebensmanagement<br/><em>Wissenskorpus</em>",
     hero_abbr:"LMBoK",
-    hero_tagline:"Surfe auf den Frequenzen deines eigenen Lernens —<br/>kostenlos, für immer, für jeden Menschen auf der Erde.",
+    hero_tagline:"Surfe auf den Frequenzen deines eigenen Lernens, <br/>kostenlos, für immer, für jeden Menschen auf der Erde.",
     hero_cta1:"Starte deine Reise",hero_cta2:"Schon Lernender? Anmelden",
     hero_scroll:"Scrollen um zu erkunden ↓",
     platform_eyebrow:"Was ist LMBoK?",platform_title:"Lernen, das <em>dir gehört</em>",
-    platform_intro:"Die meisten Bildungssysteme wurden entwickelt, um Menschen zu sortieren — nicht um ihnen zu helfen zu wachsen. LMBoK ist anders. Es ist eine kostenlose, lebenslange Lernplattform.",
-    card1_title:"15 Menschliche Künste",card1_body:"In drei Bereichen organisiert — Sein, Werden und Verbinden — decken diese Künste jede Dimension des menschlichen Lebens ab.",
-    card2_title:"In deiner Bioregion verwurzelt",card2_body:"Dein Lernen ist dort verankert, wo du wirklich lebst — dein Ökosystem, deine Kultur, deine echten Gemeinschaftsherausforderungen.",
-    card3_title:"Ein sokratischer KI-Begleiter",card3_body:"Ein KI-Führer, der fragt statt zu sagen — durch Aufwärmen, Erkunden, Herausforderung, Reflektieren und Bewerten.",
-    card4_title:"Bürgerliche Stimme & Gemeinschaftshandeln",card4_body:"Auf der Grove-Stufe tritt Polis bei — ein bürgerlicher Raum, wo deine Stimme Vorschläge und kollektive Entscheidungen gestaltet.",
+    platform_intro:"Die meisten Bildungssysteme wurden entwickelt, um Menschen zu sortieren, nicht um ihnen zu helfen zu wachsen. LMBoK ist anders. Es ist eine kostenlose, lebenslange Lernplattform.",
+    card1_title:"15 Menschliche Künste",card1_body:"In drei Bereichen organisiert, Sein, Werden und Verbinden, decken diese Künste jede Dimension des menschlichen Lebens ab.",
+    card2_title:"In deiner Bioregion verwurzelt",card2_body:"Dein Lernen ist dort verankert, wo du wirklich lebst, dein Ökosystem, deine Kultur, deine echten Gemeinschaftsherausforderungen.",
+    card3_title:"Ein sokratischer KI-Begleiter",card3_body:"Ein KI-Führer, der fragt statt zu sagen, durch Aufwärmen, Erkunden, Herausforderung, Reflektieren und Bewerten.",
+    card4_title:"Bürgerliche Stimme & Gemeinschaftshandeln",card4_body:"Auf der Grove-Stufe tritt Polis bei, ein bürgerlicher Raum, wo deine Stimme Vorschläge und kollektive Entscheidungen gestaltet.",
     quote_text:"\u201cAlleine zu gewinnen macht <strong>alle</strong> zu Verlierern.\u201d",
-    quote_attr:"— Die Künste des Menschseins · LMBoK",
+    quote_attr:"Die Künste des Menschseins · LMBoK",
     arts_eyebrow:"Die 3 Künste des Menschseins",arts_title:"Drei Wurzeln. <em>Ein Baum.</em>",
     arts_intro:"Im Herzen von LMBoK liegt eine einfache Karte dessen, was es bedeutet, vollständig menschlich zu sein.",
-    being_title:"Die Kunst des Seins",being_sub:"Inneres Bewusstsein",being_body:"Sich selbst kennen — tief und ehrlich. Bewegen, essen, fühlen, bemerken, ausdrücken.",
-    becoming_title:"Die Kunst des Werdens",becoming_sub:"Äußeres Bewusstsein",becoming_body:"Durch andere wachsen — mit Empathie, Großzügigkeit und Mut.",
-    connecting_title:"Die Kunst des Verbindens",connecting_sub:"Symbiose & Synergie",connecting_body:"In der lebendigen Welt gedeihen. Wir sind nicht über der Natur — wir sind Teil von ihr.",
+    being_title:"Die Kunst des Seins",being_sub:"Inneres Bewusstsein",being_body:"Sich selbst kennen, tief und ehrlich. Bewegen, essen, fühlen, bemerken, ausdrücken.",
+    becoming_title:"Die Kunst des Werdens",becoming_sub:"Äußeres Bewusstsein",becoming_body:"Durch andere wachsen, mit Empathie, Großzügigkeit und Mut.",
+    connecting_title:"Die Kunst des Verbindens",connecting_sub:"Symbiose & Synergie",connecting_body:"In der lebendigen Welt gedeihen. Wir sind nicht über der Natur, wir sind Teil von ihr.",
     chip_moving:"Bewegen",chip_eating:"Essen",chip_feeling:"Fühlen",chip_noticing:"Bemerken",chip_expressing:"Ausdrücken",
     chip_listening:"Zuhören",chip_giving:"Geben",chip_receiving:"Empfangen",chip_collaborating:"Zusammenarbeiten",chip_living:"Verantwortlich leben",
     chip_understanding:"Verstehen",chip_respecting:"Respektieren",chip_growing:"Anbauen",chip_building:"Bauen",chip_consuming:"Verbrauchen",
@@ -1483,21 +1483,21 @@ const T = {
     avatar_forest:"Wald",avatar_forest_sub:"Tief verwurzelt",avatar_ecosystem:"Ökosystem",avatar_ecosystem_sub:"Volle Entfaltung",
     videos_eyebrow:"Video-Erklärungen",videos_title:"Die <em>Vision</em> lebendig sehen",
     videos_intro:"Drei kurze Animationen, die zeigen, was LMBoK ist, warum es wichtig ist und wohin es uns führt.",
-    video_coming:"Video demnächst",vid1_num:"Video 01",vid1_title:"Der Aufruf zum Handeln",vid1_body:"Warum existiert LMBoK? Was versuchen wir zu ändern — und für wen?",
-    vid2_num:"Video 02",vid2_title:"Sein · Werden · Verbinden",vid2_body:"Die drei Künste der menschlichen Entwicklung — inneres Bewusstsein, soziale Identität und Harmonie mit der Umwelt.",
+    video_coming:"Video demnächst",vid1_num:"Video 01",vid1_title:"Der Aufruf zum Handeln",vid1_body:"Warum existiert LMBoK? Was versuchen wir zu ändern, und für wen?",
+    vid2_num:"Video 02",vid2_title:"Sein · Werden · Verbinden",vid2_body:"Die drei Künste der menschlichen Entwicklung, inneres Bewusstsein, soziale Identität und Harmonie mit der Umwelt.",
     vid3_num:"Video 03",vid3_title:"Von Fabriken zu offenen Feldern",vid3_body:"Der Status quo versus die Vision. Vom Gehorsamkeitsmodell zum kollaborativen, freien Lernen.",
     music_eyebrow:"Surfe die Frequenzen",music_title:"Ein Soundtrack für deine Reise",
-    music_intro:"Musik für die LMBoK-Philosophie komponiert — eine kurze Slam-Poetry-Geschichte.",
+    music_intro:"Musik für die LMBoK-Philosophie komponiert, eine kurze Slam-Poetry-Geschichte.",
     author_eyebrow:"Autor & Philosophie",author_title:"Charbel Haddad",
     dq_label:"Leitfrage:",dq_text:"\"Wie machen wir ein qualitatives Leben für alle zugänglich, frei von Elend, Aggression, Manipulation, Neid und Gier?\"",
-    author_bio1:"Fünfundzwanzig Jahre in Unternehmenstechnologie, internationaler Bildung und Gemeinschaftsleben — vom Libanon nach Kanada, durch Westafrika und Asien.",
+    author_bio1:"Fünfundzwanzig Jahre in Unternehmenstechnologie, internationaler Bildung und Gemeinschaftsleben, vom Libanon nach Kanada, durch Westafrika und Asien.",
     author_bio2:"Ursachenanalysen führen immer zur gleichen Antwort: Wir brauchen echte Lernerfahrungen, die für alle frei zugänglich sind.",
     author_bio3:"Mehrsprachiger Entdecker, Permakultur-Enthusiast, Gemeinschaftsaufbauer.",
     author_portfolio:"Portfolio besuchen →",
     cta_eyebrow:"Für immer kostenlos · Für immer offen",cta_title:"Bereit, deine <em>Frequenzen zu surfen?</em>",
     cta_body:"Erstelle dein kostenloses Konto. Kostenlos, für immer. Ohne Bedingungen.",
     cta_btn1:"Mein kostenloses Konto erstellen",cta_btn2:"Anmelden",
-    footer_tagline:"Lebensmanagement — Wissenskorpus · Für immer kostenlos · Für alle · Immer",
+    footer_tagline:"Lebensmanagement, Wissenskorpus · Für immer kostenlos · Für alle · Immer",
     footer_platform:"Plattform",footer_ekklesia:"Für Organisationen",footer_author:"Autor",footer_contact:"Kontakt",
     footer_license:"Open source unter AGPL-3.0",
   },
@@ -1506,24 +1506,24 @@ const T = {
     nav_platform:"Платформа",nav_arts:"3 Искусства",nav_videos:"Видео",nav_author:"Автор",
     nav_signin:"Войти",nav_join:"Присоединиться бесплатно",
     hero_eyebrow:"Навсегда бесплатно · Для всех · Везде",
-    hero_title:"Управление Жизнью —<br/><em>База Знаний</em>",
+    hero_title:"Управление Жизнью<br/><em>База Знаний</em>",
     hero_abbr:"LMBoK",
-    hero_tagline:"Сёрфите на частотах собственного обучения —<br/>бесплатно, навсегда, для каждого человека на Земле.",
+    hero_tagline:"Сёрфите на частотах собственного обучения, <br/>бесплатно, навсегда, для каждого человека на Земле.",
     hero_cta1:"Начать путешествие",hero_cta2:"Уже участник? Войти",
     hero_scroll:"Прокрутите для изучения ↓",
     platform_eyebrow:"Что такое LMBoK?",platform_title:"Обучение, которое <em>принадлежит вам</em>",
-    platform_intro:"Большинство образовательных систем были созданы для сортировки людей — а не для того, чтобы помочь им расти. LMBoK — другой. Это вечно бесплатная платформа обучения на протяжении всей жизни.",
-    card1_title:"15 Человеческих Искусств",card1_body:"Организованные в три области — Бытие, Становление и Связь — эти искусства охватывают каждое измерение человеческой жизни.",
-    card2_title:"Укоренённость в Биорегионе",card2_body:"Ваше обучение основано там, где вы действительно живёте — вашей экосистеме, культуре, реальных вызовах сообщества.",
-    card3_title:"Сократический ИИ-компаньон",card3_body:"ИИ-руководитель, который спрашивает, а не говорит — проводя вас через Разминку, Исследование, Вызов, Размышление и Оценку.",
-    card4_title:"Гражданский Голос и Действие",card4_body:"На стадии Рощи присоединяйтесь к Полису — гражданскому пространству, где ваш голос формирует предложения и коллективные решения.",
+    platform_intro:"Большинство образовательных систем были созданы для сортировки людей, а не для того, чтобы помочь им расти. LMBoK, другой. Это вечно бесплатная платформа обучения на протяжении всей жизни.",
+    card1_title:"15 Человеческих Искусств",card1_body:"Организованные в три области, Бытие, Становление и Связь, эти искусства охватывают каждое измерение человеческой жизни.",
+    card2_title:"Укоренённость в Биорегионе",card2_body:"Ваше обучение основано там, где вы действительно живёте, вашей экосистеме, культуре, реальных вызовах сообщества.",
+    card3_title:"Сократический ИИ-компаньон",card3_body:"ИИ-руководитель, который спрашивает, а не говорит, проводя вас через Разминку, Исследование, Вызов, Размышление и Оценку.",
+    card4_title:"Гражданский Голос и Действие",card4_body:"На стадии Рощи присоединяйтесь к Полису, гражданскому пространству, где ваш голос формирует предложения и коллективные решения.",
     quote_text:"\u201cПобеждать в одиночку значит превращать <strong>всех</strong> в проигравших.\u201d",
-    quote_attr:"— Искусства Быть Человеком · LMBoK",
+    quote_attr:"Искусства Быть Человеком · LMBoK",
     arts_eyebrow:"3 Искусства Быть Человеком",arts_title:"Три корня. <em>Одно дерево.</em>",
     arts_intro:"В основе LMBoK лежит простая карта того, что значит быть по-настоящему человеком.",
-    being_title:"Искусство Бытия",being_sub:"Внутреннее Осознание",being_body:"Познать себя — глубоко и честно. Движение, питание, чувство, замечание, выражение.",
-    becoming_title:"Искусство Становления",becoming_sub:"Внешнее Осознание",becoming_body:"Расти через других — с эмпатией, щедростью и смелостью.",
-    connecting_title:"Искусство Связи",connecting_sub:"Симбиоз и Синергия",connecting_body:"Процветать внутри живого мира. Мы не над природой — мы её часть.",
+    being_title:"Искусство Бытия",being_sub:"Внутреннее Осознание",being_body:"Познать себя, глубоко и честно. Движение, питание, чувство, замечание, выражение.",
+    becoming_title:"Искусство Становления",becoming_sub:"Внешнее Осознание",becoming_body:"Расти через других, с эмпатией, щедростью и смелостью.",
+    connecting_title:"Искусство Связи",connecting_sub:"Симбиоз и Синергия",connecting_body:"Процветать внутри живого мира. Мы не над природой, мы её часть.",
     chip_moving:"Движение",chip_eating:"Питание",chip_feeling:"Чувство",chip_noticing:"Замечание",chip_expressing:"Выражение",
     chip_listening:"Слушание",chip_giving:"Отдача",chip_receiving:"Получение",chip_collaborating:"Сотрудничество",chip_living:"Ответственная жизнь",
     chip_understanding:"Понимание",chip_respecting:"Уважение",chip_growing:"Выращивание",chip_building:"Строительство",chip_consuming:"Потребление",
@@ -1534,21 +1534,21 @@ const T = {
     avatar_forest:"Лес",avatar_forest_sub:"Глубоко укоренившийся",avatar_ecosystem:"Экосистема",avatar_ecosystem_sub:"Полный расцвет",
     videos_eyebrow:"Видео-объяснения",videos_title:"Увидеть <em>видение</em> воплощённым",
     videos_intro:"Три короткие анимации, раскрывающие суть LMBoK, его важность и направление.",
-    video_coming:"Видео скоро",vid1_num:"Видео 01",vid1_title:"Призыв к действию",vid1_body:"Почему существует LMBoK? Что мы пытаемся изменить — и для кого?",
-    vid2_num:"Видео 02",vid2_title:"Бытие · Становление · Связь",vid2_body:"Три искусства человеческого развития — внутреннее осознание, социальная идентичность и гармония с окружающей средой.",
+    video_coming:"Видео скоро",vid1_num:"Видео 01",vid1_title:"Призыв к действию",vid1_body:"Почему существует LMBoK? Что мы пытаемся изменить, и для кого?",
+    vid2_num:"Видео 02",vid2_title:"Бытие · Становление · Связь",vid2_body:"Три искусства человеческого развития, внутреннее осознание, социальная идентичность и гармония с окружающей средой.",
     vid3_num:"Видео 03",vid3_title:"От Фабрик к Открытым Полям",vid3_body:"Статус-кво против видения. От послушания и стандартизированных тестов к совместному, свободному обучению.",
     music_eyebrow:"Сёрфите Частоты",music_title:"Саундтрек для вашего путешествия",
-    music_intro:"Музыка, созданная для философии LMBoK — короткая история поэзии слэм.",
+    music_intro:"Музыка, созданная для философии LMBoK, короткая история поэзии слэм.",
     author_eyebrow:"Автор и Философия",author_title:"Шарбель Хаддад",
     dq_label:"Направляющий вопрос:",dq_text:"«Как сделать качественную жизнь доступной для всех, свободной от нищеты, агрессии, манипуляций, зависти и жадности?»",
-    author_bio1:"Двадцать пять лет в корпоративных технологиях, международном образовании и жизни сообщества — из Ливана в Канаду, через Западную Африку и Азию.",
+    author_bio1:"Двадцать пять лет в корпоративных технологиях, международном образовании и жизни сообщества, из Ливана в Канаду, через Западную Африку и Азию.",
     author_bio2:"Анализ первопричин всегда приводит к одному ответу: нам нужен подлинный опыт обучения, свободно доступный для всех.",
     author_bio3:"Многоязычный исследователь, энтузиаст пермакультуры, строитель сообществ.",
     author_portfolio:"Посетить портфолио →",
     cta_eyebrow:"Навсегда бесплатно · Навсегда открыто",cta_title:"Готовы <em>сёрфить свои частоты?</em>",
     cta_body:"Создайте свой бесплатный аккаунт. Бесплатно, навсегда. Без условий.",
     cta_btn1:"Создать Бесплатный Аккаунт",cta_btn2:"Войти",
-    footer_tagline:"Управление Жизнью — База Знаний · Навсегда бесплатно · Для всех · Всегда",
+    footer_tagline:"Управление Жизнью, База Знаний · Навсегда бесплатно · Для всех · Всегда",
     footer_platform:"Платформа",footer_ekklesia:"Для организаций",footer_author:"Автор",footer_contact:"Контакт",
     footer_license:"Открытый код под лицензией AGPL-3.0",
   },
@@ -1557,24 +1557,24 @@ const T = {
     nav_platform:"Nền tảng",nav_arts:"3 Nghệ thuật",nav_videos:"Video",nav_author:"Tác giả",
     nav_signin:"Đăng nhập",nav_join:"Tham gia miễn phí",
     hero_eyebrow:"Miễn phí mãi mãi · Cho tất cả mọi người · Luôn luôn",
-    hero_title:"Quản Lý Cuộc Sống —<br/><em>Cơ Sở Kiến Thức</em>",
+    hero_title:"Quản Lý Cuộc Sống<br/><em>Cơ Sở Kiến Thức</em>",
     hero_abbr:"LMBoK",
-    hero_tagline:"Lướt sóng trên tần số học tập của chính bạn —<br/>miễn phí, mãi mãi, cho mọi người trên Trái Đất.",
+    hero_tagline:"Lướt sóng trên tần số học tập của chính bạn, <br/>miễn phí, mãi mãi, cho mọi người trên Trái Đất.",
     hero_cta1:"Bắt đầu hành trình",hero_cta2:"Đã là học viên? Đăng nhập",
     hero_scroll:"Cuộn xuống để khám phá ↓",
     platform_eyebrow:"LMBoK là gì?",platform_title:"Học tập <em>thuộc về bạn</em>",
-    platform_intro:"Hầu hết các hệ thống giáo dục được xây dựng để phân loại con người — không phải để giúp họ phát triển. LMBoK thì khác. Đây là nền tảng học tập suốt đời, miễn phí mãi mãi.",
-    card1_title:"15 Nghệ Thuật Nhân Văn",card1_body:"Được tổ chức thành ba lĩnh vực — Tồn Tại, Trở Thành và Kết Nối — bao gồm mọi chiều kích của cuộc sống con người.",
-    card2_title:"Bén Rễ Trong Vùng Sinh Thái",card2_body:"Việc học của bạn được neo đậu ở nơi bạn thực sự sống — hệ sinh thái, văn hóa và thách thức cộng đồng thực sự của bạn.",
-    card3_title:"Người Bạn Đồng Hành AI Socrates",card3_body:"Một hướng dẫn AI đặt câu hỏi thay vì nói — dẫn dắt bạn qua Khởi Động, Khám Phá, Thách Thức, Suy Ngẫm và Đánh Giá.",
-    card4_title:"Tiếng Nói Công Dân & Hành Động Cộng Đồng",card4_body:"Ở giai đoạn Grove, tham gia Polis — không gian dân sự nơi tiếng nói của bạn định hình các đề xuất và quyết định tập thể.",
+    platform_intro:"Hầu hết các hệ thống giáo dục được xây dựng để phân loại con người, không phải để giúp họ phát triển. LMBoK thì khác. Đây là nền tảng học tập suốt đời, miễn phí mãi mãi.",
+    card1_title:"15 Nghệ Thuật Nhân Văn",card1_body:"Được tổ chức thành ba lĩnh vực, Tồn Tại, Trở Thành và Kết Nối, bao gồm mọi chiều kích của cuộc sống con người.",
+    card2_title:"Bén Rễ Trong Vùng Sinh Thái",card2_body:"Việc học của bạn được neo đậu ở nơi bạn thực sự sống, hệ sinh thái, văn hóa và thách thức cộng đồng thực sự của bạn.",
+    card3_title:"Người Bạn Đồng Hành AI Socrates",card3_body:"Một hướng dẫn AI đặt câu hỏi thay vì nói, dẫn dắt bạn qua Khởi Động, Khám Phá, Thách Thức, Suy Ngẫm và Đánh Giá.",
+    card4_title:"Tiếng Nói Công Dân & Hành Động Cộng Đồng",card4_body:"Ở giai đoạn Grove, tham gia Polis, không gian dân sự nơi tiếng nói của bạn định hình các đề xuất và quyết định tập thể.",
     quote_text:"\u201cChiến thắng một mình làm cho <strong>tất cả mọi người</strong> đều thua.\u201d",
-    quote_attr:"— Nghệ Thuật Làm Người · LMBoK",
+    quote_attr:"Nghệ Thuật Làm Người · LMBoK",
     arts_eyebrow:"3 Nghệ Thuật Làm Người",arts_title:"Ba rễ cây. <em>Một cây.</em>",
     arts_intro:"Trái tim của LMBoK là bản đồ đơn giản về ý nghĩa của việc trở thành con người đầy đủ.",
-    being_title:"Nghệ Thuật Tồn Tại",being_sub:"Nhận Thức Hướng Nội",being_body:"Hiểu bản thân — sâu sắc và thành thật. Di chuyển, ăn uống, cảm nhận, chú ý, bày tỏ.",
-    becoming_title:"Nghệ Thuật Trở Thành",becoming_sub:"Nhận Thức Hướng Ngoại",becoming_body:"Trưởng thành qua người khác — với sự đồng cảm, hào phóng và dũng cảm.",
-    connecting_title:"Nghệ Thuật Kết Nối",connecting_sub:"Cộng Sinh & Hiệp Lực",connecting_body:"Phát triển trong thế giới sống động. Chúng ta không đứng trên thiên nhiên — chúng ta là một phần của nó.",
+    being_title:"Nghệ Thuật Tồn Tại",being_sub:"Nhận Thức Hướng Nội",being_body:"Hiểu bản thân, sâu sắc và thành thật. Di chuyển, ăn uống, cảm nhận, chú ý, bày tỏ.",
+    becoming_title:"Nghệ Thuật Trở Thành",becoming_sub:"Nhận Thức Hướng Ngoại",becoming_body:"Trưởng thành qua người khác, với sự đồng cảm, hào phóng và dũng cảm.",
+    connecting_title:"Nghệ Thuật Kết Nối",connecting_sub:"Cộng Sinh & Hiệp Lực",connecting_body:"Phát triển trong thế giới sống động. Chúng ta không đứng trên thiên nhiên, chúng ta là một phần của nó.",
     chip_moving:"Di chuyển",chip_eating:"Ăn uống",chip_feeling:"Cảm nhận",chip_noticing:"Chú ý",chip_expressing:"Bày tỏ",
     chip_listening:"Lắng nghe",chip_giving:"Cho đi",chip_receiving:"Tiếp nhận",chip_collaborating:"Hợp tác",chip_living:"Sống có trách nhiệm",
     chip_understanding:"Hiểu biết",chip_respecting:"Tôn trọng",chip_growing:"Phát triển",chip_building:"Xây dựng",chip_consuming:"Tiêu thụ",
@@ -1585,21 +1585,21 @@ const T = {
     avatar_forest:"Rừng",avatar_forest_sub:"Bén rễ sâu",avatar_ecosystem:"Hệ Sinh Thái",avatar_ecosystem_sub:"Phát triển trọn vẹn",
     videos_eyebrow:"Giải Thích Qua Video",videos_title:"Xem <em>tầm nhìn</em> trở thành hiện thực",
     videos_intro:"Ba hoạt hình ngắn nắm bắt LMBoK là gì, tại sao nó quan trọng và nó đang dẫn chúng ta đến đâu.",
-    video_coming:"Video sắp ra mắt",vid1_num:"Video 01",vid1_title:"Lời Kêu Gọi Hành Động",vid1_body:"Tại sao LMBoK tồn tại? Chúng ta đang cố gắng thay đổi điều gì — và cho ai?",
-    vid2_num:"Video 02",vid2_title:"Tồn Tại · Trở Thành · Kết Nối",vid2_body:"Ba nghệ thuật phát triển con người — nhận thức hướng nội, bản sắc xã hội và hòa hợp với môi trường.",
+    video_coming:"Video sắp ra mắt",vid1_num:"Video 01",vid1_title:"Lời Kêu Gọi Hành Động",vid1_body:"Tại sao LMBoK tồn tại? Chúng ta đang cố gắng thay đổi điều gì, và cho ai?",
+    vid2_num:"Video 02",vid2_title:"Tồn Tại · Trở Thành · Kết Nối",vid2_body:"Ba nghệ thuật phát triển con người, nhận thức hướng nội, bản sắc xã hội và hòa hợp với môi trường.",
     vid3_num:"Video 03",vid3_title:"Từ Nhà Máy Đến Cánh Đồng Mở",vid3_body:"Hiện trạng so với tầm nhìn. Từ mô hình tuân thủ đến học tập hợp tác, tự do cho tất cả.",
     music_eyebrow:"Lướt Sóng Tần Số",music_title:"Nhạc nền cho hành trình của bạn",
-    music_intro:"Âm nhạc được sáng tác cho triết lý LMBoK — một câu chuyện thơ slam ngắn.",
+    music_intro:"Âm nhạc được sáng tác cho triết lý LMBoK, một câu chuyện thơ slam ngắn.",
     author_eyebrow:"Tác Giả & Triết Học",author_title:"Charbel Haddad",
     dq_label:"Câu hỏi định hướng:",dq_text:"\"Làm thế nào để làm cho cuộc sống chất lượng trở nên dễ tiếp cận với tất cả mọi người, thoát khỏi đau khổ, xâm lược, thao túng, ghen tị và tham lam?\"",
-    author_bio1:"Hai mươi lăm năm trong công nghệ doanh nghiệp, giáo dục quốc tế và cuộc sống cộng đồng — từ Lebanon đến Canada, qua Tây Phi và châu Á.",
+    author_bio1:"Hai mươi lăm năm trong công nghệ doanh nghiệp, giáo dục quốc tế và cuộc sống cộng đồng, từ Lebanon đến Canada, qua Tây Phi và châu Á.",
     author_bio2:"Phân tích nguyên nhân gốc rễ luôn dẫn đến cùng một câu trả lời: chúng ta cần những trải nghiệm học tập chân thực, tự do tiếp cận cho tất cả mọi người.",
     author_bio3:"Nhà thám hiểm đa ngôn ngữ, người đam mê nông nghiệp trường tồn, người xây dựng cộng đồng.",
     author_portfolio:"Xem Portfolio →",
     cta_eyebrow:"Miễn phí mãi mãi · Luôn mở cửa",cta_title:"Sẵn sàng <em>lướt sóng tần số của bạn?</em>",
     cta_body:"Tạo tài khoản miễn phí của bạn. Không tốn phí, không ràng buộc.",
     cta_btn1:"Tạo Tài Khoản Miễn Phí",cta_btn2:"Đăng nhập",
-    footer_tagline:"Quản Lý Cuộc Sống — Cơ Sở Kiến Thức · Miễn phí mãi mãi · Cho tất cả · Luôn luôn",
+    footer_tagline:"Quản Lý Cuộc Sống, Cơ Sở Kiến Thức · Miễn phí mãi mãi · Cho tất cả · Luôn luôn",
     footer_platform:"Nền tảng",footer_ekklesia:"Dành cho tổ chức",footer_author:"Tác giả",footer_contact:"Liên hệ",
     footer_license:"Mã nguồn mở theo giấy phép AGPL-3.0",
   },
@@ -1610,22 +1610,22 @@ const T = {
     hero_eyebrow:"永久免费 · 面向所有人 · 始终如此",
     hero_title:"生命管理<br/><em>知识体系</em>",
     hero_abbr:"LMBoK",
-    hero_tagline:"冲浪在你自己学习的频率上 —<br/>免费，永远，为地球上每一个人。",
+    hero_tagline:"冲浪在你自己学习的频率上，<br/>免费，永远，为地球上每一个人。",
     hero_cta1:"开始你的旅程",hero_cta2:"已是学习者？登录",
     hero_scroll:"向下滚动探索 ↓",
     platform_eyebrow:"LMBoK 是什么？",platform_title:"属于<em>你的</em>学习",
-    platform_intro:"大多数教育系统是为了分类人而建立的——而不是为了帮助他们成长。LMBoK不同。这是一个永久免费的终身学习平台，基于一个简单的信念：每个人都值得获得帮助他们了解自己、与他人连接、在世界上繁荣发展的工具。",
-    card1_title:"15种人类艺术",card1_body:"跨越三个领域组织——存在、成为和连接——这些艺术涵盖了人类生活的每个维度。",
-    card2_title:"植根于你的生物区域",card2_body:"你的学习扎根于你真实居住的地方——你的生态系统、你的文化、你真正的社区挑战。",
-    card3_title:"苏格拉底式AI伴侣",card3_body:"一个问而不说的AI导师——引导你经历热身、探索、挑战、反思和评估。",
-    card4_title:"公民声音与社区行动",card4_body:"在树丛阶段，加入波利斯——一个公民空间，你的声音塑造提案和集体决策。",
+    platform_intro:"大多数教育系统是为了分类人而建立的，而不是为了帮助他们成长。LMBoK不同。这是一个永久免费的终身学习平台，基于一个简单的信念：每个人都值得获得帮助他们了解自己、与他人连接、在世界上繁荣发展的工具。",
+    card1_title:"15种人类艺术",card1_body:"跨越三个领域组织，存在、成为和连接，这些艺术涵盖了人类生活的每个维度。",
+    card2_title:"植根于你的生物区域",card2_body:"你的学习扎根于你真实居住的地方，你的生态系统、你的文化、你真正的社区挑战。",
+    card3_title:"苏格拉底式AI伴侣",card3_body:"一个问而不说的AI导师，引导你经历热身、探索、挑战、反思和评估。",
+    card4_title:"公民声音与社区行动",card4_body:"在树丛阶段，加入波利斯，一个公民空间，你的声音塑造提案和集体决策。",
     quote_text:"\u201c独自获胜让<strong>所有人</strong>都成为输家。\u201d",
-    quote_attr:"— 成为人类的艺术 · LMBoK",
+    quote_attr:"成为人类的艺术 · LMBoK",
     arts_eyebrow:"成为人类的3种艺术",arts_title:"三根。<em>一棵树。</em>",
     arts_intro:"LMBoK的核心是一张简单的地图，描绘了作为完整人类意味着什么。",
-    being_title:"存在的艺术",being_sub:"内在意识",being_body:"了解自己——深刻而诚实。运动、饮食、感受、注意、表达。",
-    becoming_title:"成为的艺术",becoming_sub:"外在意识",becoming_body:"通过他人成长——以同情心、慷慨和勇气。",
-    connecting_title:"连接的艺术",connecting_sub:"共生与协同",connecting_body:"在生机勃勃的世界中繁荣。我们不在自然之上——我们是自然的一部分。",
+    being_title:"存在的艺术",being_sub:"内在意识",being_body:"了解自己，深刻而诚实。运动、饮食、感受、注意、表达。",
+    becoming_title:"成为的艺术",becoming_sub:"外在意识",becoming_body:"通过他人成长，以同情心、慷慨和勇气。",
+    connecting_title:"连接的艺术",connecting_sub:"共生与协同",connecting_body:"在生机勃勃的世界中繁荣。我们不在自然之上，我们是自然的一部分。",
     chip_moving:"运动",chip_eating:"饮食",chip_feeling:"感受",chip_noticing:"注意",chip_expressing:"表达",
     chip_listening:"倾听",chip_giving:"给予",chip_receiving:"接受",chip_collaborating:"协作",chip_living:"负责任地生活",
     chip_understanding:"理解",chip_respecting:"尊重",chip_growing:"培育",chip_building:"建设",chip_consuming:"消费",
@@ -1636,14 +1636,14 @@ const T = {
     avatar_forest:"森林",avatar_forest_sub:"深深扎根",avatar_ecosystem:"生态系统",avatar_ecosystem_sub:"完全繁荣",
     videos_eyebrow:"视频说明",videos_title:"看<em>愿景</em>变为现实",
     videos_intro:"三个短动画，捕捉LMBoK是什么、为什么重要以及它带我们走向何处。",
-    video_coming:"视频即将推出",vid1_num:"视频 01",vid1_title:"行动呼吁",vid1_body:"LMBoK为什么存在？我们试图改变什么——为了谁？",
-    vid2_num:"视频 02",vid2_title:"存在 · 成为 · 连接",vid2_body:"人类发展的三种艺术——内在意识、社会认同和与环境的和谐。",
+    video_coming:"视频即将推出",vid1_num:"视频 01",vid1_title:"行动呼吁",vid1_body:"LMBoK为什么存在？我们试图改变什么，为了谁？",
+    vid2_num:"视频 02",vid2_title:"存在 · 成为 · 连接",vid2_body:"人类发展的三种艺术，内在意识、社会认同和与环境的和谐。",
     vid3_num:"视频 03",vid3_title:"从工厂到开阔的田野",vid3_body:"现状与愿景。从服从和标准化测试到协作、自然、自由学习。",
     music_eyebrow:"冲浪频率",music_title:"你旅程的配乐",
-    music_intro:"为LMBoK哲学创作的音乐——一首短暂的说唱诗歌故事。",
+    music_intro:"为LMBoK哲学创作的音乐，一首短暂的说唱诗歌故事。",
     author_eyebrow:"作者与哲学",author_title:"沙贝尔·哈达德",
     dq_label:"指导问题：",dq_text:"「我们如何让高质量的生活对所有人都可及，不受苦难、侵略、操纵、嫉妒和贪婪的束缚？」",
-    author_bio1:"二十五年跨越企业技术、国际教育和社区生活——从黎巴嫩到加拿大，穿越西非和亚洲。",
+    author_bio1:"二十五年跨越企业技术、国际教育和社区生活，从黎巴嫩到加拿大，穿越西非和亚洲。",
     author_bio2:"根本原因分析总是得出同样的答案：我们需要真正的学习体验，对所有人自由开放。",
     author_bio3:"多语言探险家、朴门农艺爱好者、社区建设者。",
     author_portfolio:"访问作品集 →",
@@ -1659,24 +1659,24 @@ const T = {
     nav_platform:"المنصة",nav_arts:"الفنون الـ 3",nav_videos:"مقاطع الفيديو",nav_author:"المؤلف",
     nav_signin:"تسجيل الدخول",nav_join:"انضم مجانًا",
     hero_eyebrow:"مجاني للأبد · للجميع · دائمًا",
-    hero_title:"إدارة الحياة —<br/><em>قاعدة المعرفة</em>",
+    hero_title:"إدارة الحياة<br/><em>قاعدة المعرفة</em>",
     hero_abbr:"LMBoK",
-    hero_tagline:"تصفّح على ترددات تعلّمك الخاص —<br/>مجاني، للأبد، لكل إنسان على الأرض.",
+    hero_tagline:"تصفّح على ترددات تعلّمك الخاص، <br/>مجاني، للأبد، لكل إنسان على الأرض.",
     hero_cta1:"ابدأ رحلتك",hero_cta2:"متعلم بالفعل؟ سجل الدخول",
     hero_scroll:"انتقل للأسفل للاستكشاف ↓",
     platform_eyebrow:"ما هو LMBoK؟",platform_title:"تعلّم <em>يخصك</em>",
-    platform_intro:"بُنيت معظم الأنظمة التعليمية لتصنيف الناس — لا لمساعدتهم على النمو. LMBoK مختلف. إنه منصة تعلّم مدى الحياة، مجانية للأبد، تقوم على قناعة بسيطة: كل إنسان يستحق أدوات تساعده على معرفة نفسه والتواصل مع الآخرين والازدهار في العالم.",
-    card1_title:"15 فنًا إنسانيًا",card1_body:"منظمة عبر ثلاثة مجالات — الكينونة، التحول، والتواصل — تغطي هذه الفنون كل جانب من جوانب الحياة الإنسانية.",
-    card2_title:"متجذر في منطقتك الحيوية",card2_body:"تعلّمك مرتبط بالمكان الذي تعيش فيه فعلًا — نظامك البيئي، ثقافتك، تحديات مجتمعك الحقيقية.",
-    card3_title:"رفيق ذكاء اصطناعي سقراطي",card3_body:"مرشد ذكاء اصطناعي يسأل بدلًا من أن يخبر — يرشدك عبر الإحماء والاستكشاف والتحدي والتأمل والتقييم.",
-    card4_title:"الصوت المدني والعمل المجتمعي",card4_body:"في مرحلة Grove، انضم إلى Polis — فضاء مدني حيث يصنع صوتك المقترحات والقرارات الجماعية.",
+    platform_intro:"بُنيت معظم الأنظمة التعليمية لتصنيف الناس، لا لمساعدتهم على النمو. LMBoK مختلف. إنه منصة تعلّم مدى الحياة، مجانية للأبد، تقوم على قناعة بسيطة: كل إنسان يستحق أدوات تساعده على معرفة نفسه والتواصل مع الآخرين والازدهار في العالم.",
+    card1_title:"15 فنًا إنسانيًا",card1_body:"منظمة عبر ثلاثة مجالات، الكينونة، التحول، والتواصل، تغطي هذه الفنون كل جانب من جوانب الحياة الإنسانية.",
+    card2_title:"متجذر في منطقتك الحيوية",card2_body:"تعلّمك مرتبط بالمكان الذي تعيش فيه فعلًا، نظامك البيئي، ثقافتك، تحديات مجتمعك الحقيقية.",
+    card3_title:"رفيق ذكاء اصطناعي سقراطي",card3_body:"مرشد ذكاء اصطناعي يسأل بدلًا من أن يخبر، يرشدك عبر الإحماء والاستكشاف والتحدي والتأمل والتقييم.",
+    card4_title:"الصوت المدني والعمل المجتمعي",card4_body:"في مرحلة Grove، انضم إلى Polis، فضاء مدني حيث يصنع صوتك المقترحات والقرارات الجماعية.",
     quote_text:"\u201cالفوز وحيدًا يجعل <strong>الجميع</strong> خاسرين.\u201d",
-    quote_attr:"— فنون أن تكون إنسانًا · LMBoK",
+    quote_attr:"فنون أن تكون إنسانًا · LMBoK",
     arts_eyebrow:"الفنون الـ 3 لأن تكون إنسانًا",arts_title:"ثلاثة جذور. <em>شجرة واحدة.</em>",
     arts_intro:"في قلب LMBoK خريطة بسيطة لما يعنيه أن تكون إنسانًا كاملًا.",
-    being_title:"فن الكينونة",being_sub:"الوعي الداخلي",being_body:"اعرف نفسك — بعمق وصدق. الحركة، الأكل، الشعور، الملاحظة، التعبير.",
-    becoming_title:"فن التحول",becoming_sub:"الوعي الخارجي",becoming_body:"النمو من خلال الآخرين — بالتعاطف والكرم والشجاعة.",
-    connecting_title:"فن التواصل",connecting_sub:"التكافل والتآزر",connecting_body:"الازدهار داخل العالم الحي. نحن لسنا فوق الطبيعة — نحن جزء منها.",
+    being_title:"فن الكينونة",being_sub:"الوعي الداخلي",being_body:"اعرف نفسك، بعمق وصدق. الحركة، الأكل، الشعور، الملاحظة، التعبير.",
+    becoming_title:"فن التحول",becoming_sub:"الوعي الخارجي",becoming_body:"النمو من خلال الآخرين، بالتعاطف والكرم والشجاعة.",
+    connecting_title:"فن التواصل",connecting_sub:"التكافل والتآزر",connecting_body:"الازدهار داخل العالم الحي. نحن لسنا فوق الطبيعة، نحن جزء منها.",
     chip_moving:"الحركة",chip_eating:"التغذية",chip_feeling:"الشعور",chip_noticing:"الملاحظة",chip_expressing:"التعبير",
     chip_listening:"الإصغاء",chip_giving:"العطاء",chip_receiving:"التلقي",chip_collaborating:"التعاون",chip_living:"العيش بمسؤولية",
     chip_understanding:"الفهم",chip_respecting:"الاحترام",chip_growing:"الزراعة",chip_building:"البناء",chip_consuming:"الاستهلاك",
@@ -1687,21 +1687,21 @@ const T = {
     avatar_forest:"الغابة",avatar_forest_sub:"متجذر عميقًا",avatar_ecosystem:"النظام البيئي",avatar_ecosystem_sub:"الازدهار الكامل",
     videos_eyebrow:"شروحات بالفيديو",videos_title:"مشاهدة <em>الرؤية</em> تتجسد",
     videos_intro:"ثلاثة رسوم متحركة قصيرة تلتقط ما هو LMBoK، ولماذا يهم، وإلى أين يأخذنا.",
-    video_coming:"الفيديو قريبًا",vid1_num:"فيديو 01",vid1_title:"دعوة للعمل",vid1_body:"لماذا يوجد LMBoK؟ ماذا نحاول أن نغير — ولمن؟",
-    vid2_num:"فيديو 02",vid2_title:"الكينونة · التحول · التواصل",vid2_body:"فنون التطور الإنساني الثلاثة — الوعي الداخلي، الهوية الاجتماعية، والانسجام مع البيئة.",
+    video_coming:"الفيديو قريبًا",vid1_num:"فيديو 01",vid1_title:"دعوة للعمل",vid1_body:"لماذا يوجد LMBoK؟ ماذا نحاول أن نغير، ولمن؟",
+    vid2_num:"فيديو 02",vid2_title:"الكينونة · التحول · التواصل",vid2_body:"فنون التطور الإنساني الثلاثة، الوعي الداخلي، الهوية الاجتماعية، والانسجام مع البيئة.",
     vid3_num:"فيديو 03",vid3_title:"من المصانع إلى الحقول المفتوحة",vid3_body:"الوضع الراهن مقابل الرؤية. من الطاعة والاختبارات المعيارية إلى التعلم التشاركي الحر.",
     music_eyebrow:"تصفّح الترددات",music_title:"موسيقى تصويرية لرحلتك",
-    music_intro:"موسيقى ملحّنة لفلسفة LMBoK — قصة شعر slam قصيرة.",
+    music_intro:"موسيقى ملحّنة لفلسفة LMBoK، قصة شعر slam قصيرة.",
     author_eyebrow:"المؤلف والفلسفة",author_title:"شربل حداد",
     dq_label:"السؤال الموجِّه:",dq_text:"«كيف نجعل حياة ذات جودة متاحة للجميع، بعيدًا عن البؤس والعدوان والتلاعب والحسد والجشع؟»",
-    author_bio1:"خمسة وعشرون عامًا عبر تكنولوجيا المؤسسات والتعليم الدولي والحياة المجتمعية — من لبنان إلى كندا، عبر غرب أفريقيا وآسيا.",
+    author_bio1:"خمسة وعشرون عامًا عبر تكنولوجيا المؤسسات والتعليم الدولي والحياة المجتمعية، من لبنان إلى كندا، عبر غرب أفريقيا وآسيا.",
     author_bio2:"تحليلات الأسباب الجذرية تصل دائمًا إلى نفس الإجابة: نحتاج إلى تجارب تعلّم حقيقية، متاحة بحرية للجميع في كل مكان.",
     author_bio3:"مستكشف متعدد اللغات، متحمس للبيرماكالتشر، بانٍ للمجتمعات.",
     author_portfolio:"زيارة المحفظة ←",
     cta_eyebrow:"مجاني للأبد · مفتوح دائمًا",cta_title:"مستعد <em>للتصفح على ترددات</em> خاصتك؟",
     cta_body:"أنشئ حسابك المجاني. بدون تكلفة، أبدًا. بدون قيود.",
     cta_btn1:"إنشاء حسابي المجاني",cta_btn2:"تسجيل الدخول",
-    footer_tagline:"إدارة الحياة — قاعدة المعرفة · مجاني للأبد · للجميع · دائمًا",
+    footer_tagline:"إدارة الحياة، قاعدة المعرفة · مجاني للأبد · للجميع · دائمًا",
     footer_platform:"المنصة",footer_ekklesia:"للمؤسسات",footer_author:"المؤلف",footer_contact:"اتصل بنا",
     footer_license:"مفتوح المصدر تحت AGPL-3.0",
   },
@@ -1768,12 +1768,12 @@ document.addEventListener('click', e => {
 });
 
 /* ====================================================
-   VIDEO LOADER — click placeholder to load YouTube
+   VIDEO LOADER, click placeholder to load YouTube
    ==================================================== */
 function loadVideo(el) {
   const id = el.getAttribute('data-videoid');
   if (!id || id.startsWith('YOUTUBE_VIDEO_ID')) {
-    // Video not yet uploaded — gentle feedback
+    // Video not yet uploaded, gentle feedback
     el.querySelector('.soon').textContent = '📤 Upload to YouTube first, then update the video ID in the HTML';
     return;
   }
@@ -1816,7 +1816,7 @@ document.querySelectorAll('.nav-links a').forEach(a => {
 });
 
 /* ====================================================
-   INIT — restore saved language
+   INIT, restore saved language
    ==================================================== */
 try {
   const saved = JSON.parse(localStorage.getItem('lmbok_lang') || 'null');
@@ -1840,7 +1840,7 @@ if (location.search.indexOf('src=nav') !== -1) {
 
 /* ====================================================
    If a logged-in learner deliberately landed here (Home
-   link), "Sign In" / "Join Free" don't apply to them —
+   link), "Sign In" / "Join Free" don't apply to them,
    swap each CTA pair for a single link back into the app.
    ==================================================== */
 try {
@@ -1858,7 +1858,7 @@ try {
 } catch(e) {}
 </script>
 
-<!-- Service worker registration — see frontend/sw.js header comment for
+<!-- Service worker registration, see frontend/sw.js header comment for
      strategy. Same registration snippet as app.html/org.html/admin.html/
      polis.html/contribute.html/privacy.html; registering from every page
      (not just here) means a learner who deep-links straight into /app.html

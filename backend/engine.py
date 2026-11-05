@@ -1,6 +1,6 @@
 # ============================================================
-# FreqLearn Backend — engine.py
-# Recommendation engine — matches schema v2 (15 arts)
+# FreqLearn Backend, engine.py
+# Recommendation engine, matches schema v2 (15 arts)
 # Weights: ZPD 35% · Interest 25% · Radar balance 20%
 #          Spaced repetition 12% · Energy/context 8%
 # ============================================================
@@ -44,13 +44,13 @@ class RecommendationEngine:
         scored.sort(key=lambda x: x[0], reverse=True)
 
         if not scored:
-            # No active skills in DB — should never happen but guard anyway
+            # No active skills in DB, should never happen but guard anyway
             return {
                 "skill_id": None, "skill_name": "Curiosity", "subcategory": "Meta-Learning",
                 "art_slug": "notice", "art_id": None, "art_name": "Noticing",
                 "current_level": 0, "target_level": 1, "title": "Discover: Curiosity",
                 "duration_min": 15,
-                "reasoning": "Start here — curiosity is the root of all learning.",
+                "reasoning": "Start here, curiosity is the root of all learning.",
                 "signals": {}, "score": 0.0,
             }
 
@@ -79,7 +79,7 @@ class RecommendationEngine:
             )
             arts_skill = art_q.scalar_one_or_none()
 
-        # If still no mapping, this skill is an orphan — walk through scored in
+        # If still no mapping, this skill is an orphan, walk through scored in
         # order and pick the highest-scoring skill that does have a mapping.
         # This is the core fix: prevents unmapped skills from producing the
         # "Art of Growing" fallback on every fresh page load.
@@ -133,7 +133,7 @@ class RecommendationEngine:
 
         FIX: previously used positional skill slicing (skills[i*n:(i+1)*n])
         which produced garbage scores unrelated to actual art-skill mappings.
-        Now queries arts_skills directly — 191 seeded rows.
+        Now queries the arts_skills mapping directly.
         """
         groups_q = await db.execute(
             select(ArtsGroup).order_by(ArtsGroup.sort_order)
@@ -218,7 +218,7 @@ class RecommendationEngine:
                      art_id=None, recent_art_ids=None) -> tuple[float, dict]:
         signals = {}
 
-        # Daily recency penalty — if this specific skill was practiced today,
+        # Daily recency penalty, if this specific skill was practiced today,
         # score it near zero so the engine is forced to recommend something different.
         now = datetime.now(timezone.utc)
         if prog and prog.last_practiced_at:
@@ -230,7 +230,7 @@ class RecommendationEngine:
                 return 0.05, signals
         signals["rested"] = True
 
-        # Art-level cooldown — if the learner completed sessions in this art
+        # Art-level cooldown, if the learner completed sessions in this art
         # in the last 24h, apply a suppression multiplier so the engine steers
         # toward variety across arts rather than looping within one domain.
         # 0.35 is strong suppression but still beatable by very high ZPD/interest,
@@ -264,7 +264,7 @@ class RecommendationEngine:
             sr = 0.3
         signals["spaced_repetition"] = round(sr, 3)
 
-        # 3. Radar balance (20%) — favour lagging arts
+        # 3. Radar balance (20%), favour lagging arts
         art_scores = radar.get("art_scores", {})
         mean      = sum(art_scores.values()) / max(len(art_scores), 1) if art_scores else 0.0
         min_score = min(art_scores.values()) if art_scores else 0.0

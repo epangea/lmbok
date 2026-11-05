@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — routes/groq_generate.py
+# FreqLearn, routes/groq_generate.py
 # Groq status endpoint only. Actual generation calls all go through
 # ai_client.ai_complete() now (P41, 2026-07-29) -- this file used to
 # also hold a generate_with_groq() helper that routes/generate.py
@@ -7,7 +7,7 @@
 # ai_provider setting entirely. That's gone; see ai_client.py's
 # module docstring for the full story.
 #
-# Sign up: console.groq.com — free tier, no card needed.
+# Sign up: console.groq.com, free tier, no card needed.
 # Add to .env: GROQ_API_KEY=gsk_...
 # Model names live in platform_settings (ai_model_groq_large /
 # ai_model_groq_small), editable in Admin > Settings > AI generation.

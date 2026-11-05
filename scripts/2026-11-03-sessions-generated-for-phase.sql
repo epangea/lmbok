@@ -1,5 +1,5 @@
 -- ============================================================
--- 2026-11-03 — sessions.generated_for_phase_id
+-- 2026-11-03, sessions.generated_for_phase_id
 --
 -- Live AI-generated and per-learner library-served session rows deliberately
 -- have dev_phase_id = NULL (generate.py): a non-NULL dev_phase_id makes a row
@@ -20,7 +20,7 @@
 -- blank phase; new ones fill in.
 --
 -- Rollback: ALTER TABLE sessions DROP COLUMN generated_for_phase_id;
--- (after reverting the code). Idempotent — safe to re-run.
+-- (after reverting the code). Idempotent, safe to re-run.
 -- ============================================================
 
 ALTER TABLE sessions

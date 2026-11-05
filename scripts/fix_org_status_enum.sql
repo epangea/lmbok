@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — fix_org_status_enum.sql
+-- FreqLearn, fix_org_status_enum.sql
 -- Adds 'reviewing' to the opportunity_matches.org_status ENUM.
 --
 -- Why: routes/orgs.py cycles org_status through

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-FreqLearn — seed_listings.py
+FreqLearn, seed_listings.py
 Seeds 15 organizations and 30 opportunity listings across all 15 Arts.
 
 Run from anywhere as the freqlearn user:
   /var/www/freqlearn/venv/bin/python3 /var/www/freqlearn/scripts/seed_listings.py
 
-Uses aiomysql (already in the venv — no extra installs needed).
+Uses aiomysql (already in the venv, no extra installs needed).
 Reads DB credentials from backend/.env, same as all other seed scripts.
 Safe to re-run: skips orgs/listings that already exist.
 """
@@ -40,7 +40,7 @@ ORGS = [
     {"name": "Mindful Cities Lab",            "slug": "mindful-cities-lab",            "description": "A social enterprise researching and prototyping urban design interventions that reduce chronic stress.",                                                           "website": "https://mindfulcities.example.org",        "contact_email": "lab@mindfulcities.example.org",          "org_type": "social_enterprise"},
     {"name": "Open Commons Institute",        "slug": "open-commons-institute",        "description": "Building digital and civic commons: open knowledge, open governance, and open infrastructure that communities anywhere can own, fork, and adapt.",                "website": "https://opencommons.example.org",          "contact_email": "collaborate@opencommons.example.org",    "org_type": "cooperative"},
     {"name": "Watershed Restoration Trust",   "slug": "watershed-restoration-trust",   "description": "Restoring river systems and the cultural knowledge that once kept them alive.",                                                                                   "website": "https://watershed.example.org",            "contact_email": "rivers@watershed.example.org",           "org_type": "ngo"},
-    {"name": "Living Arts Collective",        "slug": "living-arts-collective",        "description": "Making art with — not for — communities. Participatory theatre, oral history, mural projects.",                                                                   "website": "https://livingarts.example.org",           "contact_email": "create@livingarts.example.org",          "org_type": "community"},
+    {"name": "Living Arts Collective",        "slug": "living-arts-collective",        "description": "Making art with, not for, communities. Participatory theatre, oral history, mural projects.",                                                                   "website": "https://livingarts.example.org",           "contact_email": "create@livingarts.example.org",          "org_type": "community"},
     {"name": "Listening Circles Network",     "slug": "listening-circles-network",     "description": "Training facilitators in deep listening and non-violent communication to run circles in post-conflict communities.",                                               "website": "https://listeningcircles.example.org",     "contact_email": "circles@listeningcircles.example.org",   "org_type": "ngo"},
     {"name": "Youth Climate Growers",         "slug": "youth-climate-growers",         "description": "A cooperative of young farmers practicing regenerative agriculture and food sovereignty across 12 countries.",                                                     "website": "https://youthgrowers.example.org",         "contact_email": "grow@youthgrowers.example.org",          "org_type": "cooperative"},
     {"name": "Peace Facilitation Centre",     "slug": "peace-facilitation-centre",     "description": "Bringing restorative justice and dialogue facilitation to communities navigating conflict.",                                                                       "website": "https://peacefacilitation.example.org",    "contact_email": "peace@peacefacilitation.example.org",    "org_type": "ngo"},
@@ -48,7 +48,7 @@ ORGS = [
     {"name": "Community Health Weavers",      "slug": "community-health-weavers",      "description": "Trauma-informed community health workers stitching together peer support and preventive care in underserved neighbourhoods.",                                     "website": "https://healthweavers.example.org",        "contact_email": "care@healthweavers.example.org",         "org_type": "ngo"},
     {"name": "Global Storytellers Guild",     "slug": "global-storytellers-guild",     "description": "Preserving and amplifying oral traditions across 40 languages via community radio, podcasts, and storytelling residencies.",                                      "website": "https://storytellersguild.example.org",    "contact_email": "stories@storytellersguild.example.org",  "org_type": "cooperative"},
     {"name": "Bioregional Mapping Project",   "slug": "bioregional-mapping-project",   "description": "Combining citizen science, Indigenous ecological knowledge, and open cartography to map living landscapes.",                                                       "website": "https://bioregionalmapping.example.org",   "contact_email": "map@bioregionalmapping.example.org",     "org_type": "ngo"},
-    {"name": "Movement & Somatic Arts Studio","slug": "movement-somatic-arts-studio",  "description": "Somatic movement, dance, and embodied wellness for schools, care homes, and refugee communities — free where possible.",                                          "website": "https://somaticarts.example.org",          "contact_email": "move@somaticarts.example.org",           "org_type": "social_enterprise"},
+    {"name": "Movement & Somatic Arts Studio","slug": "movement-somatic-arts-studio",  "description": "Somatic movement, dance, and embodied wellness for schools, care homes, and refugee communities, free where possible.",                                          "website": "https://somaticarts.example.org",          "contact_email": "move@somaticarts.example.org",           "org_type": "social_enterprise"},
 ]
 
 # ── Listings (2 per org = 30 total) ───────────────────────
@@ -59,7 +59,7 @@ LISTINGS = [
     {"org_slug": "forest-school-alliance",       "title": "Forest School Curriculum Developer",           "description": "Design a modular outdoor learning curriculum adaptable to different biomes, languages, and developmental phases.",            "listing_type": "job",         "required_arts": ["notice", "understand", "grow"]},
     {"org_slug": "community-kitchen-network",    "title": "Food Sovereignty Educator",                    "description": "Run weekly cooking workshops rooted in traditional food knowledge with urban communities.",                                   "listing_type": "volunteer",   "required_arts": ["eat", "give", "express"]},
     {"org_slug": "community-kitchen-network",    "title": "Fermentation & Food Systems Intern",           "description": "Support our fermentation research programme: documenting regional traditions and maintaining our living culture library.",    "listing_type": "internship",  "required_arts": ["eat", "understand", "grow"]},
-    {"org_slug": "mindful-cities-lab",           "title": "Community Well-being Facilitator",             "description": "Co-design and run neighbourhood stress-reduction programmes — breathing circles, quiet walks, and listening sessions.",       "listing_type": "project",     "required_arts": ["feel", "live", "listen"]},
+    {"org_slug": "mindful-cities-lab",           "title": "Community Well-being Facilitator",             "description": "Co-design and run neighbourhood stress-reduction programmes, breathing circles, quiet walks, and listening sessions.",       "listing_type": "project",     "required_arts": ["feel", "live", "listen"]},
     {"org_slug": "mindful-cities-lab",           "title": "Urban Mindfulness Researcher",                 "description": "Mixed-methods research studying the impact of urban design on emotional regulation. Field observation and interviews.",       "listing_type": "job",         "required_arts": ["feel", "understand", "notice"]},
     {"org_slug": "open-commons-institute",       "title": "Open Knowledge Contributor",                   "description": "Write, translate, or illustrate for our open-access knowledge commons covering civic education and ecological literacy.",     "listing_type": "volunteer",   "required_arts": ["understand", "collaborate", "express"]},
     {"org_slug": "open-commons-institute",       "title": "Digital Commons Coordinator",                  "description": "Manage our federated network of open-source tools and run onboarding calls for new cooperative members.",                    "listing_type": "job",         "required_arts": ["collaborate", "understand", "live"]},
@@ -77,7 +77,7 @@ LISTINGS = [
     {"org_slug": "regenerative-design-school",   "title": "Green Building Research Fellow",               "description": "6-month fellowship developing open-source construction guides for low-tech, high-performance buildings across climates.",     "listing_type": "project",     "required_arts": ["build", "grow", "consume"]},
     {"org_slug": "community-health-weavers",     "title": "Trauma-Informed Care Volunteer",               "description": "Accompany community health workers on home visits, providing emotional support and peer-listening to isolated residents.",    "listing_type": "volunteer",   "required_arts": ["feel", "give", "receive"]},
     {"org_slug": "community-health-weavers",     "title": "Community Health Navigator",                   "description": "Help community members navigate health systems and run health-literacy workshops in their home language.",                    "listing_type": "job",         "required_arts": ["give", "live", "listen"]},
-    {"org_slug": "global-storytellers-guild",    "title": "Community Radio Host",                         "description": "Host a weekly community radio programme in your language — interviews, music, and stories centering rarely-heard voices.",   "listing_type": "volunteer",   "required_arts": ["express", "listen", "collaborate"]},
+    {"org_slug": "global-storytellers-guild",    "title": "Community Radio Host",                         "description": "Host a weekly community radio programme in your language, interviews, music, and stories centering rarely-heard voices.",   "listing_type": "volunteer",   "required_arts": ["express", "listen", "collaborate"]},
     {"org_slug": "global-storytellers-guild",    "title": "Multilingual Storytelling Facilitator",        "description": "Facilitate intergenerational storytelling workshops in 2+ languages, documenting traditional narratives.",                   "listing_type": "project",     "required_arts": ["express", "receive", "understand"]},
     {"org_slug": "bioregional-mapping-project",  "title": "Environmental Data Volunteer",                 "description": "Contribute to open ecological datasets: species observations, land-use surveys, and local ecological knowledge capture.",    "listing_type": "volunteer",   "required_arts": ["notice", "respect", "understand"]},
     {"org_slug": "bioregional-mapping-project",  "title": "Ecological Literacy Educator",                 "description": "Design and run ecological literacy programmes for schools, integrating bioregional mapping tools and Indigenous land knowledge.","listing_type": "job",       "required_arts": ["notice", "respect", "consume"]},
@@ -144,7 +144,7 @@ async def seed_listings(conn, org_id_map: dict):
 
 
 async def main():
-    print("\nFreqLearn — seeding organizations and listings")
+    print("\nFreqLearn, seeding organizations and listings")
     print(f"DB: {DB['user']}@{DB['host']}/{DB['db']}\n")
 
     conn = await aiomysql.connect(**DB)

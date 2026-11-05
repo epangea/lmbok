@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — Domain Taxonomy Migration P25b
+-- FreqLearn, Domain Taxonomy Migration P25b
 -- Date: 2026-06-14b  |  Final: 8 domains × 6 skills = 48
 -- Run against: freqlearn DB on build.onehouse.top
 -- Safe to re-run (id-based UPDATEs are idempotent)
@@ -24,7 +24,7 @@ UPDATE skills SET name = 'Vision, Mission and Purpose',  slug = 'vision-mission-
 UPDATE skills SET name = 'Curiosity and Exploration',    slug = 'curiosity-and-exploration'  WHERE id = 78;
 
 -- ── STEP 2: DOMAIN UPDATES for the 45 existing 8×6 skills ───
--- (3 new skills — Personal Values, Philosophy & Ethics, Permaculture — handled in Step 4)
+-- (3 new skills, Personal Values, Philosophy & Ethics, Permaculture, handled in Step 4)
 
 -- Cognitive & Intellectual (6 existing)
 UPDATE skills SET learning_domain = 'Cognitive & Intellectual' WHERE id IN (1, 2, 3, 5, 10, 62);
@@ -56,12 +56,12 @@ UPDATE skills SET learning_domain = 'Emotional & Psychological' WHERE id IN (21,
 -- 21=Self-Awareness  22=Emotional Regulation  23=Empathy and Compassion
 -- 24=Self-Efficacy  27=Contemplative Practice  69=Gratitude & Appreciation
 
--- Meta-Learning (5 existing — Personal Values inserted in Step 4)
+-- Meta-Learning (5 existing, Personal Values inserted in Step 4)
 UPDATE skills SET learning_domain = 'Meta-Learning' WHERE id IN (72, 73, 43, 78, 77);
 -- 72=Learning How to Learn  73=Self-Regulation  43=Mentorship & Teaching
 -- 78=Curiosity and Exploration  77=Vision, Mission and Purpose
 
--- Tools & Systems (4 existing — Philosophy & Ethics + Permaculture inserted in Step 4)
+-- Tools & Systems (4 existing, Philosophy & Ethics + Permaculture inserted in Step 4)
 UPDATE skills SET learning_domain = 'Tools & Systems' WHERE id IN (52, 54, 48, 59);
 -- 52=Digital Literacy  54=Data Analysis & Statistics
 -- 48=Design Thinking  59=Cooking & Nutrition

@@ -1,14 +1,14 @@
 -- ============================================================
--- P8 — Org validation system (task line-item completions +
+-- P8, Org validation system (task line-item completions +
 -- org-verified skill demonstrations). Additive only.
 --
 -- Read PART 22 in PROJECT_MASTER for the full spec.
 --
--- ⚠ PREFLIGHT — run these first and eyeball signedness before the
+-- ⚠ PREFLIGHT, run these first and eyeball signedness before the
 -- CREATE TABLEs below. This codebase has hit FK errno 150 twice
 -- already from guessing a parent PK's signedness wrong (learners.id
 -- was declared int(10) unsigned even though models.py just said
--- Integer) — same risk here for opportunity_matches.id / skills.id.
+-- Integer), same risk here for opportunity_matches.id / skills.id.
 -- If DESCRIBE disagrees with the INT UNSIGNED / SMALLINT UNSIGNED
 -- used below, fix the CREATE TABLE statements before running them.
 -- ============================================================
@@ -28,7 +28,7 @@ ALTER TABLE opportunity_listings
 
 -- ── (2) task_completions: per-match tracking of each needs_tasks line item ──
 -- One row per (match_id, task_index) once a learner submits or an org rep
--- checks it off — no row at all means "open"/untouched, so this table only
+-- checks it off, no row at all means "open"/untouched, so this table only
 -- ever grows additively as work actually happens on a match.
 CREATE TABLE IF NOT EXISTS task_completions (
     id              INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS task_completions (
 
 -- ── (3) verified_skills: org-confirmed skill demonstrations per match ──
 -- Deliberately NOT written into learner_skill_progress.current_level (see
--- PART 22 open-questions resolution — org validation is a citable, visible
+-- PART 22 open-questions resolution, org validation is a citable, visible
 -- credential tied to the Need it was earned on, not an automatic write to
 -- the learner's global, self-paced skill level).
 CREATE TABLE IF NOT EXISTS verified_skills (

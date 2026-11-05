@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — routes/bioregions.py
+# FreqLearn, routes/bioregions.py
 # Learner-contributed bioregion profiles + AI collective portraits
 # ============================================================
 
@@ -28,7 +28,7 @@ async def _call_ai(db: AsyncSession, purpose: str, prompt: str,
                     response_format: str = "json_object",
                     max_tokens: int = 900, temperature: float = 0.7) -> ai_client.AIResponse:
     """Thin wrapper over ai_client.ai_complete() with this file's usual
-    tier — bioregion portraits use the "small"/fast model, matching the
+    tier, bioregion portraits use the "small"/fast model, matching the
     original llama-3.1-8b-instant default; bump ai_model_groq_small /
     ai_model_ollama_small in Admin > Settings if richer prose is wanted.
     """
@@ -44,7 +44,7 @@ async def _call_ai(db: AsyncSession, purpose: str, prompt: str,
 
 # ── Auth helpers ──────────────────────────────────────────────
 
-# require_admin imported from routes.admin (P-SEC2, 2026-07-17) — this file
+# require_admin imported from routes.admin (P-SEC2, 2026-07-17), this file
 # used to define its own local duplicate here, checking the raw X-Admin-Key
 # header directly. That's exactly the class of drift P-SEC2 exists to close,
 # so this now shares the single cookie-session-based dependency instead.
@@ -254,7 +254,7 @@ async def draft_portrait(
         if parts:
             context_block = (
                 "\n\nRegional ecological context (use this to ground your response in "
-                "real specifics — name actual species, rivers, materials, and trades):\n"
+                "real specifics, name actual species, rivers, materials, and trades):\n"
                 + "\n".join(f"- {p}" for p in parts)
                 + "\n"
             )
@@ -262,16 +262,16 @@ async def draft_portrait(
     prompt = f"""You are an ecologist writing a bioregion portrait to help a learner describe their home place.
 
 Location: "{body.place_name}" ({body.lat:.4f}°N, {body.lng:.4f}°E){context_block}
-Return ONLY a valid JSON object — no preamble, no markdown fences. Each value must be 1–2 vivid, specific sentences grounded in real ecology and the material life of this place.
+Return ONLY a valid JSON object, no preamble, no markdown fences. Each value must be 1–2 vivid, specific sentences grounded in real ecology and the material life of this place.
 
 {{
   "summary":          "3–4 sentence evocative portrait of this region as a living place",
   "watershed":        "primary river systems, their sources and destinations",
   "climate":          "climate type, key seasonal rhythms, notable weather phenomena",
   "species":          "2–4 significant, endemic or ecologically important species with brief context",
-  "vitality":         "current ecological health — key pressures and any signs of recovery",
-  "economy":          "traditional and current livelihoods rooted in this land — how people have made a living from its specific resources, minerals, fisheries, or forests",
-  "material_culture": "tools, crafts, foods, medicines, or building traditions tied to local species and materials — what this place has given to human hands"
+  "vitality":         "current ecological health, key pressures and any signs of recovery",
+  "economy":          "traditional and current livelihoods rooted in this land, how people have made a living from its specific resources, minerals, fisheries, or forests",
+  "material_culture": "tools, crafts, foods, medicines, or building traditions tied to local species and materials, what this place has given to human hands"
 }}"""
 
     ai_resp = await _call_ai(db, "bioregion_draft", prompt, response_format="json_object",
@@ -298,7 +298,7 @@ async def list_portraits(
     lat: Optional[float] = Query(default=None),
     lng: Optional[float] = Query(default=None),
 ):
-    """Public — list all portraits that have at least one approved contribution.
+    """Public, list all portraits that have at least one approved contribution.
     If lat/lng provided: sorted by haversine distance (nearest first), distance_km included.
     Otherwise: sorted by contributor_count descending.
     """
@@ -341,7 +341,7 @@ async def list_portraits(
 
 @router.get("/seed-profiles")
 async def get_seed_profiles(db: AsyncSession = Depends(get_db)):
-    """Public — return all seed bioregion profiles for frontend use.
+    """Public, return all seed bioregion profiles for frontend use.
     Powers the 'Where I Stand' bioregion card on the dashboard.
     No auth required; data is static reference information.
     """
@@ -357,7 +357,7 @@ async def get_seed_profiles(db: AsyncSession = Depends(get_db)):
 
 @router.get("/{portrait_id}")
 async def get_portrait(portrait_id: int, db: AsyncSession = Depends(get_db)):
-    """Public — single portrait with approved contributor voices."""
+    """Public, single portrait with approved contributor voices."""
     result = await db.execute(
         select(BioregionPortrait).where(BioregionPortrait.id == portrait_id)
     )
@@ -640,7 +640,7 @@ async def admin_get_portrait_version(
 
 @router.get("/admin/pending", dependencies=[Depends(require_admin)])
 async def admin_pending(db: AsyncSession = Depends(get_db)):
-    """Admin — list pending contributions for moderation."""
+    """Admin, list pending contributions for moderation."""
     result = await db.execute(
         select(BioregionContribution, Learner.display_name, Learner.username)
         .join(Learner, Learner.id == BioregionContribution.learner_id)
@@ -669,7 +669,7 @@ async def admin_moderate(
     body: dict,
     db: AsyncSession = Depends(get_db),
 ):
-    """Admin — approve or reject a pending contribution."""
+    """Admin, approve or reject a pending contribution."""
     action = body.get("action")
     if action not in ("approve", "reject"):
         raise HTTPException(status_code=400, detail="action must be 'approve' or 'reject'")
@@ -697,7 +697,7 @@ async def admin_moderate(
 
 @router.get("/admin/portraits", dependencies=[Depends(require_admin)])
 async def admin_portraits(db: AsyncSession = Depends(get_db)):
-    """Admin — list all portraits (including those with 0 contributors)."""
+    """Admin, list all portraits (including those with 0 contributors)."""
     result = await db.execute(
         select(BioregionPortrait).order_by(BioregionPortrait.contributor_count.desc())
     )
@@ -717,7 +717,7 @@ async def admin_portraits(db: AsyncSession = Depends(get_db)):
 
 @router.post("/admin/portraits/{portrait_id}/generate", dependencies=[Depends(require_admin)])
 async def admin_generate_portrait(portrait_id: int, db: AsyncSession = Depends(get_db)):
-    """Admin — trigger AI synthesis of approved contributions for a portrait cluster.
+    """Admin, trigger AI synthesis of approved contributions for a portrait cluster.
     Archives current version before overwriting, increments version_number.
     Accepts optional X-Admin-Key header. Admin key env var still required.
     """
@@ -771,7 +771,7 @@ async def admin_generate_portrait(portrait_id: int, db: AsyncSession = Depends(g
 
     prompt = f"""You are a poetic-but-grounded writer helping build a living portrait of a bioregion called "{portrait.cluster_label}".
 
-Below are personal statements from learners who live in or near this region. Each voice describes their direct experience of this place — its ecology, rhythms, textures, and meaning.
+Below are personal statements from learners who live in or near this region. Each voice describes their direct experience of this place, its ecology, rhythms, textures, and meaning.
 
 {voices_text}
 
@@ -816,164 +816,164 @@ _SEED_PROFILES = [
          colonial='Hanoi / Northern Vietnam',
          archaic='Thăng Long · Đại Việt heartland',
          min_lat=20.0, max_lat=22.5, min_lng=103.0, max_lng=107.0,
-         climate='Humid subtropical monsoon — hot wet summers, cool dry winters',
-         watershed='Sông Hồng (Red River) — sourced in Yunnan, empties into Gulf of Tonkin',
-         tectonic='Indochina Plate — relatively stable, bounded by the Ailao Shan–Red River shear zone',
+         climate='Humid subtropical monsoon, hot wet summers, cool dry winters',
+         watershed='Sông Hồng (Red River), sourced in Yunnan, empties into Gulf of Tonkin',
+         tectonic='Indochina Plate, relatively stable, bounded by the Ailao Shan–Red River shear zone',
          species='Asian elephant corridors (highland margins), Irrawaddy dolphin (coastal), red junglefowl, golden leaf monkey',
-         soil='Deep alluvial silt — among the most fertile rice-cultivation soils on earth',
-         vitality='Stressed — delta subsiding from groundwater extraction; upstream dams reducing sediment; rapid urbanisation',
+         soil='Deep alluvial silt, among the most fertile rice-cultivation soils on earth',
+         vitality='Stressed, delta subsiding from groundwater extraction; upstream dams reducing sediment; rapid urbanisation',
          connections='Watershed connects to Yunnan plateau (north) and Gulf of Tonkin marine system (south-east)',
-         resources='Anthracite coal (Quảng Ninh — among Asia\'s highest-grade deposits), titanium ilmenite (coastal dunes), natural gas (offshore Gulf of Tonkin), chromite (highland margins), kaolin and silica sand'),
+         resources='Anthracite coal (Quảng Ninh, among Asia\'s highest-grade deposits), titanium ilmenite (coastal dunes), natural gas (offshore Gulf of Tonkin), chromite (highland margins), kaolin and silica sand'),
     dict(slug='mekong-delta', name='Mekong Delta',
          colonial='Ho Chi Minh City / Southern Vietnam',
          archaic='Prey Nokor · Khmer delta lands',
          min_lat=9.0, max_lat=12.0, min_lng=104.0, max_lng=107.0,
-         climate='Tropical monsoon — distinct wet and dry seasons; flood pulse ecology',
-         watershed='Mekong River — 4,900km from Tibetan Plateau through six nations',
-         tectonic='Indochina Plate — low-lying, subsidence risk',
+         climate='Tropical monsoon, distinct wet and dry seasons; flood pulse ecology',
+         watershed='Mekong River, 4,900km from Tibetan Plateau through six nations',
+         tectonic='Indochina Plate, low-lying, subsidence risk',
          species='Mekong giant catfish (critically endangered), Irrawaddy dolphin, painted stork, mangrove ecosystems',
-         soil='Annually replenished alluvial plain — rice bowl of Southeast Asia, now sediment-starved by upstream dams',
-         vitality='At risk — saltwater intrusion, subsidence, reduced Mekong flow from Chinese dams',
+         soil='Annually replenished alluvial plain, rice bowl of Southeast Asia, now sediment-starved by upstream dams',
+         vitality='At risk, saltwater intrusion, subsidence, reduced Mekong flow from Chinese dams',
          connections='Connects Tibetan water towers to South China Sea; shared with Cambodia, Laos, Thailand, Myanmar, China',
          resources='Offshore natural gas (Nam Con Son and Cửu Long basins), river sand (intensively dredged despite subsidence risk), tin and cassiterite (upstream Laos and Cambodia), richest freshwater fishery in Southeast Asia'),
     dict(slug='niger-delta', name='Niger Delta Mangrove Basin',
          colonial='Port Harcourt / Niger Delta, Nigeria',
          archaic='Ijawland · Ogoniland · Urhoboland',
          min_lat=4.0, max_lat=6.5, min_lng=5.0, max_lng=9.0,
-         climate='Equatorial — high rainfall year-round, distinct flooding seasons',
-         watershed="Niger River — 4,180km, third longest in Africa; delta one of world\'s largest",
-         tectonic='African Plate — passive continental margin, subsiding delta',
+         climate='Equatorial, high rainfall year-round, distinct flooding seasons',
+         watershed="Niger River, 4,180km, third longest in Africa; delta one of world\'s largest",
+         tectonic='African Plate, passive continental margin, subsiding delta',
          species='African manatee, forest elephant corridors, Niger Delta red colobus, diverse mangrove fish nurseries',
-         soil='Waterlogged peat and clay — one of world\'s most biodiverse wetland systems, severely degraded by oil extraction',
-         vitality='Critical — 50+ years of oil spills, gas flaring, and mangrove destruction',
+         soil='Waterlogged peat and clay, one of world\'s most biodiverse wetland systems, severely degraded by oil extraction',
+         vitality='Critical, 50+ years of oil spills, gas flaring, and mangrove destruction',
          connections='Connects Sahel rainfall systems to Atlantic; shared fisheries with Cameroon and Benin coasts',
-         resources='>35 billion barrels crude oil reserves — one of Africa\'s richest hydrocarbon basins; world\'s 9th largest natural gas reserves (largely flared); bitumen seeps; artisanal alluvial gold (northern delta margins)'),
+         resources='>35 billion barrels crude oil reserves, one of Africa\'s richest hydrocarbon basins; world\'s 9th largest natural gas reserves (largely flared); bitumen seeps; artisanal alluvial gold (northern delta margins)'),
     dict(slug='thames-basin', name='Thames Chalk & Clay Basin',
          colonial='London / South-East England',
          archaic='Londinium · Tamesas · Trinovantes territory',
          min_lat=51.0, max_lat=52.0, min_lng=-1.0, max_lng=1.0,
-         climate='Temperate oceanic — mild, wet, rarely extreme; warming measurably since 1990s',
-         watershed='River Thames — 346km through chalk aquifer and London clay',
-         tectonic='Eurasian Plate — geologically stable; isostatic tilting (south-east England slowly sinking)',
+         climate='Temperate oceanic, mild, wet, rarely extreme; warming measurably since 1990s',
+         watershed='River Thames, 346km through chalk aquifer and London clay',
+         tectonic='Eurasian Plate, geologically stable; isostatic tilting (south-east England slowly sinking)',
          species='European eel (critically endangered), peregrine falcon (urban resurgence), water vole, black-headed gull',
-         soil='London clay over chalk — heavy, poorly draining; chalk aquifer supplies much of regional water',
-         vitality='Recovering — Thames declared biologically dead in 1950s, now hosts 115 fish species after clean-up',
+         soil='London clay over chalk, heavy, poorly draining; chalk aquifer supplies much of regional water',
+         vitality='Recovering, Thames declared biologically dead in 1950s, now hosts 115 fish species after clean-up',
          connections='North Sea marine system; Atlantic weather patterns; chalk aquifer connects to Chilterns and Downs',
-         resources='Thames Gravel (structural aggregate — underpins London\'s built fabric), chalk aquifer (primary drinking water for 7 million people), historically iron and tin from Cornish-Welsh margins; North Sea oil and gas via coastal pipeline network'),
+         resources='Thames Gravel (structural aggregate, underpins London\'s built fabric), chalk aquifer (primary drinking water for 7 million people), historically iron and tin from Cornish-Welsh margins; North Sea oil and gas via coastal pipeline network'),
     dict(slug='ganges-plain', name='Indo-Gangetic Plain',
          colonial='Delhi / Uttar Pradesh / Bihar, India',
          archaic='Āryāvarta · Gangetic heartland · Magadha',
          min_lat=24.0, max_lat=28.0, min_lng=78.0, max_lng=88.0,
-         climate='Subtropical semi-arid to humid — monsoon-dependent; increasingly erratic',
-         watershed='Ganges-Yamuna-Brahmaputra system — Himalayan glacial melt + monsoon fed',
-         tectonic='Indian Plate colliding with Eurasian — Himalayan uplift continuing; plain is foredeep basin',
+         climate='Subtropical semi-arid to humid, monsoon-dependent; increasingly erratic',
+         watershed='Ganges-Yamuna-Brahmaputra system, Himalayan glacial melt + monsoon fed',
+         tectonic='Indian Plate colliding with Eurasian, Himalayan uplift continuing; plain is foredeep basin',
          species='Ganges river dolphin (national aquatic animal of India), gharial, Bengal florican, one-horned rhinoceros (east)',
-         soil="Deep alluvial — among earth\'s most intensively farmed; groundwater being extracted faster than recharged",
-         vitality='Stressed — groundwater crisis, river pollution, glacier retreat threatening dry-season flows',
+         soil="Deep alluvial, among earth\'s most intensively farmed; groundwater being extracted faster than recharged",
+         vitality='Stressed, groundwater crisis, river pollution, glacier retreat threatening dry-season flows',
          connections='Himalayan water towers (Tibet); Bay of Bengal monsoon circulation; connects to Brahmaputra delta (Bangladesh)',
-         resources='Coal (Jharkhand — Jharia coalfield, largest in Asia), iron ore (Singhbhum belt), uranium (Jharkhand — India\'s primary uranium source), natural gas (Upper Assam basin), monazite sands with rare earth elements (Bihar/Odisha coast)'),
+         resources='Coal (Jharkhand, Jharia coalfield, largest in Asia), iron ore (Singhbhum belt), uranium (Jharkhand, India\'s primary uranium source), natural gas (Upper Assam basin), monazite sands with rare earth elements (Bihar/Odisha coast)'),
     dict(slug='great-lakes', name='Laurentian Great Lakes Basin',
          colonial='Chicago / Detroit / Toronto area',
          archaic='Anishinaabe homelands · Haudenosaunee territory · Odawa',
          min_lat=41.0, max_lat=47.0, min_lng=-88.0, max_lng=-76.0,
-         climate='Continental humid — cold winters, warm summers; lake-effect snow; warming 2× global average',
+         climate='Continental humid, cold winters, warm summers; lake-effect snow; warming 2× global average',
          watershed="Great Lakes hold 21% of world\'s surface freshwater; drain via St. Lawrence to Atlantic",
-         tectonic='Laurentian Shield — ancient Precambrian bedrock; lakes carved by Pleistocene glaciation',
+         tectonic='Laurentian Shield, ancient Precambrian bedrock; lakes carved by Pleistocene glaciation',
          species='Lake sturgeon, lake whitefish, grey wolf (northern margins), bald eagle, massasauga rattlesnake',
-         soil="Thin glacial till over bedrock north; deep prairie loam south — one of world\'s great agricultural zones",
-         vitality='Mixed — invasive species (zebra mussel, sea lamprey) and algal blooms stress system; water quality slowly improving',
+         soil="Thin glacial till over bedrock north; deep prairie loam south, one of world\'s great agricultural zones",
+         vitality='Mixed, invasive species (zebra mussel, sea lamprey) and algal blooms stress system; water quality slowly improving',
          connections='St. Lawrence Seaway to Atlantic; Mississippi watershed to Gulf of Mexico immediately to south',
-         resources='Iron ore (Mesabi Range, Minnesota — largest US deposit, foundation of American steel industry), copper and nickel (Sudbury, Ontario — world\'s largest nickel deposit), uranium (Athabasca Basin, northern Canada), freshwater (21% of global surface freshwater — most contested resource)'),
+         resources='Iron ore (Mesabi Range, Minnesota, largest US deposit, foundation of American steel industry), copper and nickel (Sudbury, Ontario, world\'s largest nickel deposit), uranium (Athabasca Basin, northern Canada), freshwater (21% of global surface freshwater, most contested resource)'),
     dict(slug='amazon-basin', name='Amazon Basin Rainforest',
          colonial='Manaus / Belém / Amazonia, Brazil',
          archaic='Tupinambá · Yanomami · Kayapó territories · Pre-Columbian Amazonia',
          min_lat=-10.0, max_lat=2.0, min_lng=-75.0, max_lng=-50.0,
-         climate='Equatorial — year-round heat and humidity; self-generates 50%+ of own rainfall via biotic pump',
-         watershed="Amazon River — largest by discharge on earth; 20% of all freshwater entering world\'s oceans",
-         tectonic='South American Plate — stable craton; river flows east since Andes uplift reversed drainage 10Ma',
+         climate='Equatorial, year-round heat and humidity; self-generates 50%+ of own rainfall via biotic pump',
+         watershed="Amazon River, largest by discharge on earth; 20% of all freshwater entering world\'s oceans",
+         tectonic='South American Plate, stable craton; river flows east since Andes uplift reversed drainage 10Ma',
          species='Jaguar, giant river otter, Amazon river dolphin (boto), harpy eagle, ~40,000 plant species',
-         soil='Oxisol — ancient, nutrient-poor; fertility held in biomass not soil; forest IS the soil system',
-         vitality='Critical — 17% deforested; approaching tipping point where degraded areas can no longer generate rainfall',
+         soil='Oxisol, ancient, nutrient-poor; fertility held in biomass not soil; forest IS the soil system',
+         vitality='Critical, 17% deforested; approaching tipping point where degraded areas can no longer generate rainfall',
          connections='Andes snowmelt (west); Atlantic moisture recycling; Cerrado savanna transition (south)',
-         resources='Iron ore (Carajás, Pará — world\'s largest known iron ore deposit), bauxite/aluminium (Trombetas River), gold (Serra Pelada and dispersed artisanal mining), copper and manganese (Carajás complex), cassiterite/tin; freshwater biodiversity itself a critical and irreplaceable resource'),
+         resources='Iron ore (Carajás, Pará, world\'s largest known iron ore deposit), bauxite/aluminium (Trombetas River), gold (Serra Pelada and dispersed artisanal mining), copper and manganese (Carajás complex), cassiterite/tin; freshwater biodiversity itself a critical and irreplaceable resource'),
     dict(slug='sahel', name='Sahel Transition Zone',
          colonial="Dakar / Bamako / Niamey / N\'Djamena corridor",
          archaic='Mali Empire · Songhai · Kanem-Bornu · Fulani pastoral lands',
          min_lat=12.0, max_lat=17.0, min_lng=-15.0, max_lng=25.0,
-         climate='Semi-arid — 200–600mm rainfall, highly variable; 3-month growing window; expanding aridity',
-         watershed='Senegal, Niger and Lake Chad basin — all shrinking under climate pressure and extraction',
-         tectonic='African Plate — stable craton; Sahel is a transition between Sahara and humid tropics',
+         climate='Semi-arid, 200–600mm rainfall, highly variable; 3-month growing window; expanding aridity',
+         watershed='Senegal, Niger and Lake Chad basin, all shrinking under climate pressure and extraction',
+         tectonic='African Plate, stable craton; Sahel is a transition between Sahara and humid tropics',
          species='Dama gazelle, addax, African wild dog, Sudan cheetah, migratory locust, quelea bird',
-         soil='Sandy and laterite — low organic matter; wind erosion severe; traditional zaï pits and half-moon earthworks restore fertility',
-         vitality='Stressed but actively regenerating — Farmer-Managed Natural Regeneration (FMNR) restoring millions of hectares',
+         soil='Sandy and laterite, low organic matter; wind erosion severe; traditional zaï pits and half-moon earthworks restore fertility',
+         vitality='Stressed but actively regenerating, Farmer-Managed Natural Regeneration (FMNR) restoring millions of hectares',
          connections='Saharan dust fertilises Amazon basin; ITCZ rainfall belt shifts north/south annually; connects to Central African rainforest',
-         resources='Gold (Mali\'s Syama, Burkina Faso — West Africa holds 30%+ of continental reserves), uranium (Agadez, Niger — world\'s 7th largest producer), phosphates (Taiba, Senegal), iron ore (Mauritania — major national export), crude oil (Chad basin, Niger\'s Agadem block), emerging lithium prospecting (Mali)'),
+         resources='Gold (Mali\'s Syama, Burkina Faso, West Africa holds 30%+ of continental reserves), uranium (Agadez, Niger, world\'s 7th largest producer), phosphates (Taiba, Senegal), iron ore (Mauritania, major national export), crude oil (Chad basin, Niger\'s Agadem block), emerging lithium prospecting (Mali)'),
     dict(slug='pacific-northwest', name='Pacific Northwest Temperate Rainforest',
          colonial='Portland / Seattle / Vancouver',
          archaic='Coast Salish · Chinook · Tillamook · Lummi territories',
          min_lat=45.0, max_lat=51.0, min_lng=-125.0, max_lng=-120.0,
-         climate='Oceanic — mild wet winters, warm dry summers; rain shadow east of Cascades',
-         watershed='Columbia-Snake and Fraser River systems — critical Pacific salmon habitat',
-         tectonic='Juan de Fuca Plate subducting under North American — Cascadia subduction zone; active volcanism',
+         climate='Oceanic, mild wet winters, warm dry summers; rain shadow east of Cascades',
+         watershed='Columbia-Snake and Fraser River systems, critical Pacific salmon habitat',
+         tectonic='Juan de Fuca Plate subducting under North American, Cascadia subduction zone; active volcanism',
          species='Chinook salmon, orca (Southern Resident population critically endangered), Roosevelt elk, northern spotted owl, Douglas fir (ancient stands)',
-         soil='Volcanic ash and glacial till under deep organic duff — among most productive temperate forest soils',
-         vitality='Mixed — old-growth severely reduced; salmon populations collapsed; rewilding efforts active',
+         soil='Volcanic ash and glacial till under deep organic duff, among most productive temperate forest soils',
+         vitality='Mixed, old-growth severely reduced; salmon populations collapsed; rewilding efforts active',
          connections='Pacific Ocean temperature drives regional climate; salmon link ocean nutrients to forest interior',
-         resources='Copper and molybdenum (porphyry deposits, British Columbia interior), gold and silver (Cascades placer and hard-rock), thermal coal (BC Elk Valley — major Asia-Pacific export), second-growth timber, hydropower (Columbia-Snake system), potential lithium (Basin and Range margins)'),
+         resources='Copper and molybdenum (porphyry deposits, British Columbia interior), gold and silver (Cascades placer and hard-rock), thermal coal (BC Elk Valley, major Asia-Pacific export), second-growth timber, hydropower (Columbia-Snake system), potential lithium (Basin and Range margins)'),
     dict(slug='east-african-rift', name='East African Rift Highlands',
          colonial='Nairobi / Kampala / Kigali',
          archaic='Maasailand · Kikuyu highlands · Luo Nyanza · Buganda',
          min_lat=-3.0, max_lat=5.0, min_lng=34.0, max_lng=42.0,
-         climate='Highland equatorial — altitude moderates heat; two rainy seasons; highly variable by elevation',
+         climate='Highland equatorial, altitude moderates heat; two rainy seasons; highly variable by elevation',
          watershed='Victoria basin (source of White Nile); Rift Valley lakes (Turkana, Tanganyika, Malawi)',
-         tectonic='African Plate splitting — East African Rift is actively tearing the continent apart; new ocean forming in millions of years',
+         tectonic='African Plate splitting, East African Rift is actively tearing the continent apart; new ocean forming in millions of years',
          species='African elephant, mountain gorilla, wildebeest (Serengeti migration), flamingo (Rift lakes), shoebill stork',
-         soil='Volcanic red clay and highland loam — fertile but subject to erosion on steep slopes',
-         vitality='Mixed — wildlife corridors under pressure from agriculture; Lake Victoria severely eutrophied; active conservation efforts',
+         soil='Volcanic red clay and highland loam, fertile but subject to erosion on steep slopes',
+         vitality='Mixed, wildlife corridors under pressure from agriculture; Lake Victoria severely eutrophied; active conservation efforts',
          connections='Nile system to Mediterranean; Indian Ocean moisture; wildebeest migration crosses Tanzania-Kenya border',
-         resources='Gold (Geita, Tanzania — one of Africa\'s largest mines; South Sudan\'s Nile belt), soda ash (Lake Magadi, Kenya — largest Kenyan mineral export), fluorite (Kerio Valley, Kenya), geothermal energy (Kenya 750+ MW — over 40% of national electricity), coltan/tantalum (eastern DRC fringe), cobalt (Zambia-DRC Copperbelt adjacency)'),
+         resources='Gold (Geita, Tanzania, one of Africa\'s largest mines; South Sudan\'s Nile belt), soda ash (Lake Magadi, Kenya, largest Kenyan mineral export), fluorite (Kerio Valley, Kenya), geothermal energy (Kenya 750+ MW, over 40% of national electricity), coltan/tantalum (eastern DRC fringe), cobalt (Zambia-DRC Copperbelt adjacency)'),
     dict(slug='iberian-mediterranean', name='Iberian Mediterranean Basin',
          colonial='Madrid / Barcelona / Lisbon / Seville',
          archaic='Al-Andalus · Iberia · Celtiberian · Visigoths · Phoenician Gades',
          min_lat=36.0, max_lat=44.0, min_lng=-9.0, max_lng=5.0,
-         climate='Mediterranean — hot dry summers, mild wet winters; increasingly drought-prone',
-         watershed='Tagus, Ebro, Guadalquivir — all heavily dammed; Doñana wetlands shrinking',
-         tectonic='Eurasian/African plate boundary — Atlas uplift; Gibraltar Strait where two plates nearly touch',
+         climate='Mediterranean, hot dry summers, mild wet winters; increasingly drought-prone',
+         watershed='Tagus, Ebro, Guadalquivir, all heavily dammed; Doñana wetlands shrinking',
+         tectonic='Eurasian/African plate boundary, Atlas uplift; Gibraltar Strait where two plates nearly touch',
          species='Iberian lynx (recovering), Spanish imperial eagle, Eurasian black vulture, Atlantic bluefin tuna, Posidonia seagrass',
-         soil='Thin Mediterranean terra rossa and clay — millennia of erosion from deforestation; cork oak savannas (dehesa) exceptional biodiversity',
-         vitality='Stressed — severe drought cycles, wildfire, soil erosion, aquifer depletion; Iberian lynx recovery is rare success story',
+         soil='Thin Mediterranean terra rossa and clay, millennia of erosion from deforestation; cork oak savannas (dehesa) exceptional biodiversity',
+         vitality='Stressed, severe drought cycles, wildfire, soil erosion, aquifer depletion; Iberian lynx recovery is rare success story',
          connections='Atlantic and Mediterranean weather systems converge; African Saharan dust inputs; migratory flyway between Europe and Africa',
-         resources='Copper and pyrite (Rio Tinto, Huelva — one of the oldest continuously mined sites on Earth, 5,000+ years), lithium (Barroso, Portugal — largest hard-rock lithium reserve in Europe), tungsten (Portugal — 2nd largest global producer), mercury (Almadén, Spain — historically world\'s largest deposit), iron ore (Bilbao region, historical industrial base)'),
+         resources='Copper and pyrite (Rio Tinto, Huelva, one of the oldest continuously mined sites on Earth, 5,000+ years), lithium (Barroso, Portugal, largest hard-rock lithium reserve in Europe), tungsten (Portugal, 2nd largest global producer), mercury (Almadén, Spain, historically world\'s largest deposit), iron ore (Bilbao region, historical industrial base)'),
     dict(slug='annamite-coast-highlands', name='Annamite Coast & Highlands',
          colonial='Hội An · Huế · Đà Nẵng · Vinh',
          archaic='Champa · Đại Việt · Nguyễn Lords · Lê Dynasty · Pathet Lao',
          min_lat=12.0, max_lat=20.0, min_lng=104.0, max_lng=109.0,
-         climate='Tropical monsoon — reversed timing from rest of Vietnam; northeast monsoon drives heaviest rain Oct–Jan; the Lào foehn wind sweeps hot and dry westward off the mountains in spring–summer',
-         watershed='Hương (Perfume River), Thu Bồn, Mã rivers — short, steep, draining east from the Annamite crest to the South China Sea; flash floods common; watershed divide with the Mekong basin lies just to the west',
-         tectonic='Stable Indochina craton; Annamite Range (Trường Sơn) formed by ancient Indosinian orogeny — old, heavily eroded ridgeline; Pleistocene refugia here produced one of Asia\'s highest vertebrate biodiversity densities per km²',
-         species='Saola (among the rarest mammals on Earth — fewer than 100 individuals confirmed), Annamite striped rabbit, giant muntjac, crested argus pheasant, Indochinese tiger (near-extinct), Sunda pangolin',
-         soil='Laterite and ferralitic soils on highlands — highly leached; fertile alluvial strips along river deltas; pockets of Agent Orange dioxin contamination persist from the American War',
-         vitality='Pressured — saola critically endangered; deforestation from agriculture and logging continues; unexploded ordnance across the highlands; coral reefs of the central coastal shelf declining from warming and runoff',
+         climate='Tropical monsoon, reversed timing from rest of Vietnam; northeast monsoon drives heaviest rain Oct–Jan; the Lào foehn wind sweeps hot and dry westward off the mountains in spring–summer',
+         watershed='Hương (Perfume River), Thu Bồn, Mã rivers, short, steep, draining east from the Annamite crest to the South China Sea; flash floods common; watershed divide with the Mekong basin lies just to the west',
+         tectonic='Stable Indochina craton; Annamite Range (Trường Sơn) formed by ancient Indosinian orogeny, old, heavily eroded ridgeline; Pleistocene refugia here produced one of Asia\'s highest vertebrate biodiversity densities per km²',
+         species='Saola (among the rarest mammals on Earth, fewer than 100 individuals confirmed), Annamite striped rabbit, giant muntjac, crested argus pheasant, Indochinese tiger (near-extinct), Sunda pangolin',
+         soil='Laterite and ferralitic soils on highlands, highly leached; fertile alluvial strips along river deltas; pockets of Agent Orange dioxin contamination persist from the American War',
+         vitality='Pressured, saola critically endangered; deforestation from agriculture and logging continues; unexploded ordnance across the highlands; coral reefs of the central coastal shelf declining from warming and runoff',
          connections='South China Sea to the east (typhoon exposure, fishing); Mekong basin to the west; one of the world\'s most critical bird migration corridors; Ho Chi Minh Trail left a unique war-shaped ecology across the range',
-         resources='Titanium ilmenite (coastal sand from Bình Định to Quảng Trị — Vietnam holds world\'s 2nd largest TiO₂ reserves), bauxite (Central Highlands — 5.4 billion tonnes, 3rd globally), iron ore (Thạch Khê — one of Southeast Asia\'s largest deposits), coal (Quảng Bình), gold (Bồng Miêu, Quảng Nam), marble (Ngũ Hành Sơn, Đà Nẵng)'),
+         resources='Titanium ilmenite (coastal sand from Bình Định to Quảng Trị, Vietnam holds world\'s 2nd largest TiO₂ reserves), bauxite (Central Highlands, 5.4 billion tonnes, 3rd globally), iron ore (Thạch Khê, one of Southeast Asia\'s largest deposits), coal (Quảng Bình), gold (Bồng Miêu, Quảng Nam), marble (Ngũ Hành Sơn, Đà Nẵng)'),
     dict(slug='korean-japanese-arc', name='East Asian Volcanic Arc',
          colonial='Seoul / Tokyo / Osaka',
          archaic='Joseon · Yamato · Goryeo · Baekje · Ainu Mosir (Hokkaido)',
          min_lat=33.0, max_lat=38.0, min_lng=126.0, max_lng=141.0,
-         climate='Humid subtropical to temperate — monsoon summers, cold winters; typhoon season',
-         watershed='Han, Nakdong, Kiso rivers — short, steep, flood-prone; no major shared international rivers',
-         tectonic='Pacific Plate subducting under Eurasian — active volcanism (Fuji, Aso), frequent earthquakes, tsunamis',
+         climate='Humid subtropical to temperate, monsoon summers, cold winters; typhoon season',
+         watershed='Han, Nakdong, Kiso rivers, short, steep, flood-prone; no major shared international rivers',
+         tectonic='Pacific Plate subducting under Eurasian, active volcanism (Fuji, Aso), frequent earthquakes, tsunamis',
          species='Amur leopard (critically endangered), red-crowned crane, Japanese macaque, Asian black bear, Pacific salmon runs',
-         soil='Volcanic andisol — highly fertile, excellent water retention; paddy rice cultivation for 3,000+ years',
-         vitality='Mixed — coastal marine systems stressed by overfishing; urban heat island severe; exceptional forest recovery since 1960s reforestation',
+         soil='Volcanic andisol, highly fertile, excellent water retention; paddy rice cultivation for 3,000+ years',
+         vitality='Mixed, coastal marine systems stressed by overfishing; urban heat island severe; exceptional forest recovery since 1960s reforestation',
          connections='Tsushima warm current moderates climate; Yellow Sea shared with China; migratory birds link to Siberian breeding grounds',
-         resources='Rare earth mineral seabed deposits (Japan\'s Pacific EEZ seamounts — potential world-scale reserves under active survey), zinc and lead (Komdok, North Korea), gold (Korea\'s Haean basin), sulfur (Japanese volcanic fields), manganese nodules (Pacific deep-sea basin); South Korea and Japan now import >90% of minerals but hold significant offshore and seabed claims'),
+         resources='Rare earth mineral seabed deposits (Japan\'s Pacific EEZ seamounts, potential world-scale reserves under active survey), zinc and lead (Komdok, North Korea), gold (Korea\'s Haean basin), sulfur (Japanese volcanic fields), manganese nodules (Pacific deep-sea basin); South Korea and Japan now import >90% of minerals but hold significant offshore and seabed claims'),
 ]
 
 
 @router.post("/admin/seed-profiles", dependencies=[Depends(require_admin)])
 async def admin_seed_profiles(db: AsyncSession = Depends(get_db)):
-    """Admin — seed all 13 bioregion profiles into bioregion_seed_profiles table.
+    """Admin, seed all 13 bioregion profiles into bioregion_seed_profiles table.
     Idempotent: uses INSERT ... ON DUPLICATE KEY UPDATE so safe to run multiple times.
     Run once after DB migration to create the bioregion_seed_profiles table.
     """

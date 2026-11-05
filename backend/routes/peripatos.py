@@ -1,4 +1,4 @@
-# peripatos1_01.py — P2: Peripatos learning journal routes
+# peripatos1_01.py, P2: Peripatos learning journal routes
 #
 # Endpoints:
 #   POST   /api/peripatos/           save a Socratic exchange

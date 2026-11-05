@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn Backend — db.py
+# FreqLearn Backend, db.py
 # Async SQLAlchemy + MariaDB (via aiomysql)
 # ============================================================
 
@@ -11,7 +11,7 @@ load_dotenv()
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import DeclarativeBase
 
-# Load from environment — never hardcode credentials
+# Load from environment, never hardcode credentials
 DB_USER     = os.getenv("DB_USER",     "freqlearn")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "changeme")
 DB_HOST     = os.getenv("DB_HOST",     "127.0.0.1")
@@ -49,7 +49,7 @@ AsyncSessionLocal = async_sessionmaker(
 class Base(DeclarativeBase):
     pass
 
-# Dependency — inject into route handlers with FastAPI's Depends()
+# Dependency, inject into route handlers with FastAPI's Depends()
 async def get_db():
     async with AsyncSessionLocal() as session:
         try:

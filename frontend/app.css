@@ -1,5 +1,5 @@
 /* ============================================================
-   Surfing the Frequencies — app.css
+   Surfing the Frequencies, app.css
    Design system: bioluminescent deep ocean meets ancient Greek agora
    Dark-first · responsive · progressive enhancement ready
 
@@ -16,9 +16,9 @@
    10. Onboarding
    11. Dashboard / Agora
    12. Animations
-   13. Responsive — tablet (560–860px)
-   14. Responsive — mobile (<560px)
-   15. Responsive — very small (<400px)
+   13. Responsive, tablet (560–860px)
+   14. Responsive, mobile (<560px)
+   15. Responsive, very small (<400px)
 ============================================================ */
 
 /* ═══════════════════════════════════════════════════
@@ -156,7 +156,7 @@ p{color:var(--text2);line-height:1.65}
 }
 
 /* ══════════════════════════════════════════════════
-   NAV — desktop tab bar (default)
+   NAV, desktop tab bar (default)
    On mobile (<960px) tabs hide; hamburger appears
 ══════════════════════════════════════════════════ */
 .nav{
@@ -169,7 +169,7 @@ p{color:var(--text2);line-height:1.65}
   padding:0 18px;gap:14px;
 }
 
-/* Desktop tab strip — scrollable if needed */
+/* Desktop tab strip, scrollable if needed */
 .nav-tabs{
   display:flex;gap:2px;flex:1;
   overflow-x:auto;
@@ -214,7 +214,7 @@ a.nav-tab{display:inline-flex;align-items:center;}
 }
 .nav-av:hover{box-shadow:var(--glow-wave)}
 
-/* Hamburger button — hidden on desktop */
+/* Hamburger button, hidden on desktop */
 .nav-burger{
   display:none;
   flex-direction:column;justify-content:center;align-items:center;
@@ -333,7 +333,7 @@ a.nav-tab{display:inline-flex;align-items:center;}
 .choice-btn:hover{border-color:var(--deep);background:var(--deep-dim);color:var(--deep)}
 .choice-btn.ok{border-color:var(--wave);background:var(--wave-dim);color:var(--wave)}
 .choice-btn.no{border-color:var(--coral);background:var(--coral-dim);color:var(--coral)}
-/* P40 (2026-07-23): neutral highlight for a "wrong" pick — replaces .no's red/coral flag.
+/* P40 (2026-07-23): neutral highlight for a "wrong" pick, replaces .no's red/coral flag.
    No judgement color, just marks which option was selected while the companion discusses it. */
 .choice-btn.picked{border-color:var(--deep);background:var(--deep-dim);color:var(--deep)}
 
@@ -404,7 +404,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .auth-logo .logo{font-size:clamp(13px,4vw,17px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
 /* ══════════════════════════════════════════════════
-   DASHBOARD — 3-column grid
+   DASHBOARD, 3-column grid
    Col classes: dash-col-1, dash-col-2, dash-col-3
    Card classes for ordering: dash-card-radar,
    dash-card-domains, dash-card-rec, dash-card-journey,
@@ -428,7 +428,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 }
 
 /* ══════════════════════════════════════════════════
-   RESPONSIVE — Tablet 560–960px
+   RESPONSIVE, Tablet 560–960px
    Two-column dashboard; hamburger nav
 ══════════════════════════════════════════════════ */
 @media(max-width:960px){
@@ -451,7 +451,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
   .auth-card{padding:28px 20px}
   .onboard-card{padding:28px 20px}
 
-  /* Onboarding grids stay 2-col and 3-col — fine at tablet */
+  /* Onboarding grids stay 2-col and 3-col, fine at tablet */
   .art-grid{grid-template-columns:repeat(3,1fr)}
   .phase-grid{grid-template-columns:1fr 1fr}
 
@@ -478,7 +478,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 }
 
 /* ══════════════════════════════════════════════════
-   RESPONSIVE — Mobile <560px
+   RESPONSIVE, Mobile <560px
    Single-column dashboard; stat bar stacks
 ══════════════════════════════════════════════════ */
 @media(max-width:559px){
@@ -524,7 +524,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 }
 
 /* ══════════════════════════════════════════════════
-   RESPONSIVE — Very small <400px
+   RESPONSIVE, Very small <400px
 ══════════════════════════════════════════════════ */
 @media(max-width:400px){
   .logo{font-size:11px}
@@ -549,7 +549,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 
 
 /* ══════════════════════════════════════════════════
-   SECTION 16 — BIOREGION MAP, TABLE & VERSION HISTORY (P_MAP)
+   SECTION 16, BIOREGION MAP, TABLE & VERSION HISTORY (P_MAP)
    All selectors prefixed bio- / bio-vt- / bio-tbl-
    Uses existing design tokens: --wave, --text/2/3,
    --bg/bg2/bg3, --border/border2, --r/r-sm, --coral, --gold
@@ -853,10 +853,10 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 
 
 /* ══════════════════════════════════════════════════
-   SECTION 17 — BIOREGION FIELD GUIDE (4th tab)
+   SECTION 17, BIOREGION FIELD GUIDE (4th tab)
    Point-form seed profiles (Layer 1). Rows reuse the
    existing _bioRow() inline-style helper from the
-   "Where I Stand" card — only the grid/card wrapper
+   "Where I Stand" card, only the grid/card wrapper
    and the colonial/archaic mini-boxes need new CSS.
 ══════════════════════════════════════════════════ */
 
@@ -962,7 +962,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .badge-amber{background:var(--gold-dim);color:var(--gold)}
 .badge-red{background:var(--coral-dim);color:var(--coral)}
 .badge-blue{background:var(--deep-dim);color:var(--deep)}
-/* Responsive admin sidebar — hamburger on small screens */
+/* Responsive admin sidebar, hamburger on small screens */
 .admin-burger{
   display:none;flex-direction:column;justify-content:center;align-items:center;
   gap:5px;width:40px;height:40px;
@@ -998,7 +998,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
   .admin-burger{display:flex}
 }
 
-/* --- org.html — Ekklesia / Organization portal (scoped: body.page-org) --- */
+/* --- org.html, Ekklesia / Organization portal (scoped: body.page-org) --- */
 .page-org{--bg:#0d1117;--sf:#161b22;--sf2:#1c2230;--bd:#30363d;--tx:#e6edf3;--mu:#8b949e;--gr:#1D9E75;--gd:rgba(29,158,117,.12);--gh:rgba(29,158,117,.25);--go:#c9a84c;--gol:rgba(201,168,76,.12);--re:#d9534f;--rel:rgba(217,83,79,.1);--ra:12px;--sh:0 4px 24px rgba(0,0,0,.4)}
 .page-org [data-theme=light]{--bg:#f5f2ee;--sf:#fff;--sf2:#f0ede8;--bd:#d6cfc5;--tx:#1a1a1a;--mu:#6b6560;--gd:rgba(29,158,117,.08);--gh:rgba(29,158,117,.16);--gol:rgba(201,168,76,.08);--rel:rgba(217,83,79,.07);--sh:0 4px 16px rgba(0,0,0,.1)}
 .page-org *, .page-org *::before, .page-org *::after{box-sizing:border-box;margin:0;padding:0}
@@ -1007,7 +1007,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .page-org .logo{font-family:"Syne",sans-serif;font-size:1.05rem;font-weight:800;background:linear-gradient(135deg,#00E5C8,#3D7BFF);-webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap;letter-spacing:-0.5px;text-decoration:none;flex-shrink:0}
 .page-org .org-modal{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center}
 .page-org .org-modal-box{background:var(--sf);border:1px solid var(--bd);border-radius:16px;padding:26px 24px;max-width:360px;width:calc(100% - 32px)}
-/* P8 — validation modal: wider variant of .org-modal-box, scrollable body */
+/* P8, validation modal: wider variant of .org-modal-box, scrollable body */
 .page-org .val-modal-box{max-width:560px;max-height:82vh;overflow-y:auto}
 .page-org .val-row{border:1px solid var(--bd);border-radius:10px;padding:12px 14px;margin-bottom:10px}
 .page-org .val-row-head{display:flex;justify-content:space-between;align-items:center;gap:10px}
@@ -1169,7 +1169,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .page-org #toast.err{border-color:var(--re)}
 .page-org hr{border:none;border-top:1px solid var(--bd);margin:24px 0}
 @media (max-width:600px){.page-org main{padding:20px 14px 48px}.page-org header{padding:0 14px}.page-org .tabs{padding:0 14px}.page-org .srow{grid-template-columns:1fr 1fr}.page-org .bname{display:none}}
-/* Mobile header fix (2026-08-11) — org.html's header previously had no
+/* Mobile header fix (2026-08-11), org.html's header previously had no
    mobile handling at all: fixed height:58px, justify-content:space-between,
    no wrap. Unlike app.html/admin.html (both have a hamburger fallback),
    org.html's 3-4 header buttons (theme toggle, Org/org-name, Agora/Home,
@@ -1189,7 +1189,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
   .page-org .ibtn{padding:5px 8px;font-size:13px}
 }
 
-/* --- polis.html — The Polis (scoped: body.page-polis) --- */
+/* --- polis.html, The Polis (scoped: body.page-polis) --- */
 .page-polis{
   --bg:#080C14;--bg2:#0D1220;--bg3:#131929;--bg4:#1A2238;
   --card:#0D1220;--border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.12);
@@ -1331,7 +1331,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
   .page-polis .vbtn{text-align:center;}
 }
 
-/* --- contribute.html — LECKO contribution (scoped: body.page-contribute) --- */
+/* --- contribute.html, LECKO contribution (scoped: body.page-contribute) --- */
 .page-contribute{
   --bg:    #080C14; --bg2: #0D1220; --bg3: #131929; --bg4: #1A2238;
   --card:  #0D1220; --border: rgba(255,255,255,0.07); --border2: rgba(255,255,255,0.12);
@@ -1504,7 +1504,7 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
 .page-contribute .empty{ text-align: center; padding: 48px 24px; color: var(--text3); }
 .page-contribute .empty div{ font-size: 32px; margin-bottom: 12px; }
 
-/* --- privacy.html — Privacy note (scoped: body.page-privacy) --- */
+/* --- privacy.html, Privacy note (scoped: body.page-privacy) --- */
 .page-privacy{
     --bg: #080C14; --bg2: #0D1220; --bg3: #131929; --bg4: #1A2238;
     --text: #E8EDF8; --text2: #8B96B8; --text3: #4A5478;

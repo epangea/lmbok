@@ -1,4 +1,4 @@
--- FreqLearn — diagnostic: are the 157 'vi' rows really Vietnamese?
+-- FreqLearn, diagnostic: are the 157 'vi' rows really Vietnamese?
 -- Run on server:
 --   mysql freqlearn < scripts/diag_vietnamese_overcount.sql
 --

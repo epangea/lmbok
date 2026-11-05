@@ -2,20 +2,20 @@
 --
 -- dev_phases.age_range (and name, for the ParentGuide/GuardianGuide labels)
 -- were never updated when the onboarding phase card was corrected on
--- 2026-08-20 (2026.123, CLOSED) — that fix only touched the hardcoded
+-- 2026-08-20 (2026.123, CLOSED), that fix only touched the hardcoded
 -- PHASES array in frontend/app.js, not this DB table. Nothing read this
 -- table's age_range for display until today's GET /api/phases (added for
 -- contribute.html), which is how the stale values surfaced.
 --
 -- Corrects dev_phases to match the agreed, already-live onboarding values:
---   prenascent: Expecting a child (ParentGuide) — Pregnancy
---   nascent:    Newborn & Infant (GuardianGuide) — Ages 0–2
---   child:      Child (GuardianGuide) — Ages 3–11
---   adolescent: Adolescent — Ages 12–19   (was 12–17)
---   adult:      Adult — Ages 20–59        (was 18–60)
---   elder:      Elder — Ages 60+          (was 61+)
+--   prenascent: Expecting a child (ParentGuide), Pregnancy
+--   nascent:    Newborn & Infant (GuardianGuide), Ages 0–2
+--   child:      Child (GuardianGuide), Ages 3–11
+--   adolescent: Adolescent, Ages 12–19   (was 12–17)
+--   adult:      Adult, Ages 20–59        (was 18–60)
+--   elder:      Elder, Ages 60+          (was 61+)
 --
--- Run the preflight SELECT first — if these are already correct (i.e. this
+-- Run the preflight SELECT first, if these are already correct (i.e. this
 -- was fixed some other way already), the UPDATEs below are harmless no-ops,
 -- but check first rather than assume.
 

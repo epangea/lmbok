@@ -1,4 +1,4 @@
--- FreqLearn — Add platform_settings table for Admin Settings persistence
+-- FreqLearn, Add platform_settings table for Admin Settings persistence
 -- Run on server:
 --   mysql freqlearn < scripts/2026-06-27-platform-settings.sql
 --

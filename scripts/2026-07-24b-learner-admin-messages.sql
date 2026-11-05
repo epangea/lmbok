@@ -1,13 +1,13 @@
 -- ============================================================
--- 2026-07-24b — create learner_admin_messages (P9.2: Learners
+-- 2026-07-24b, create learner_admin_messages (P9.2: Learners
 -- admin messaging)
 --
--- Why: part of finalizing the admin Learners page — lets admins
+-- Why: part of finalizing the admin Learners page, lets admins
 -- send a composed email to a learner (validate/support/congratulate/
 -- notify-of-org-interest/custom) via the existing mail.send_mail(),
 -- and keeps a simple audit trail of what was sent and when.
 --
--- No new send infra — reuses backend/mail.py, same as the Outreach
+-- No new send infra, reuses backend/mail.py, same as the Outreach
 -- table added earlier today (2026-07-24-outreach-drafts.sql).
 -- ============================================================
 

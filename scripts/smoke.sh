@@ -32,7 +32,7 @@ env_or_file() {
   fi
   # "|| true" is load-bearing: grep exits 1 when the key isn't in .env, and
   # under set -e + pipefail that would silently kill the ENTIRE script right
-  # here — before any test output ever prints — since "not found" is a
+  # here, before any test output ever prints, since "not found" is a
   # perfectly normal outcome for an optional var like TEST_ORG_EMAIL, not a
   # real error.
   { grep -E "^${var_name}=" "$ENV_FILE" | head -1 | cut -d'=' -f2- | sed -e 's/^"//' -e 's/"$//'; } || true
@@ -40,11 +40,11 @@ env_or_file() {
 }
 
 # Test accounts for the cookie/CSRF smoke checks below (P-SEC1, 2026-07-16).
-# Add these to backend/.env once — same file ADMIN_KEY already lives in,
-# already gitignored — and smoke.sh just runs unattended from then on:
+# Add these to backend/.env once, same file ADMIN_KEY already lives in,
+# already gitignored, and smoke.sh just runs unattended from then on:
 #   TEST_LEARNER_EMAIL=charbelh@...
 #   TEST_LEARNER_PASSWORD=...
-#   TEST_ORG_EMAIL=...       (optional — org checks skip cleanly without it)
+#   TEST_ORG_EMAIL=...       (optional, org checks skip cleanly without it)
 #   TEST_ORG_PASSWORD=...
 TEST_LEARNER_EMAIL=$(env_or_file TEST_LEARNER_EMAIL)
 TEST_LEARNER_PASSWORD=$(env_or_file TEST_LEARNER_PASSWORD)
@@ -70,7 +70,7 @@ done
 
 echo ""
 echo "-- API checks (public) --"
-# These never needed X-Admin-Key (public/learner-facing endpoints) — the
+# These never needed X-Admin-Key (public/learner-facing endpoints), the
 # header was harmless-but-pointless here even before P-SEC2. Dropped now
 # that the header means nothing to the backend at all.
 for ep in "/api/" "/api/arts" "/api/bioregions?lat=16.5&lng=107.6"; do
@@ -81,11 +81,11 @@ done
 echo ""
 echo "-- Learner API (no credentials, expect 401) --"
 # Was 403 pre-P-SEC1: the old HTTPBearer() dependency auto-raised 403 when no
-# Authorization header was present at all (a known FastAPI quirk — 403
+# Authorization header was present at all (a known FastAPI quirk, 403
 # usually means "authenticated but forbidden," not "no credentials given").
 # get_current_learner now reads the fl_access cookie directly and correctly
 # raises 401 (not authenticated) when it's missing. Confirmed intentional,
-# not a regression — see chat 2026-07-16.
+# not a regression, see chat 2026-07-16.
 for ep in "/api/learners/me" "/api/sessions/today"; do
   code=$(curl -s -o /dev/null -w "%{http_code}" "${API_BASE}${ep}" --max-time 8)
   pass "$ep" "$code" "401"
@@ -93,10 +93,10 @@ done
 
 echo ""
 echo "-- P11 endpoints require org auth (no credentials, expect 401) --"
-# Structural check only — confirms these new routes exist and are gated,
+# Structural check only, confirms these new routes exist and are gated,
 # same as the learner block above. The actual behavior of the flow (parse
 # -> generate -> notify -> accept -> reveal) is covered end-to-end in
-# scripts/e2e_org_polis.sh, not here — smoke.sh stays fast and stateless.
+# scripts/e2e_org_polis.sh, not here, smoke.sh stays fast and stateless.
 for ep in "/api/orgs/listings/1/parse-needs" "/api/orgs/listings/1/generate-matches" "/api/orgs/listings/1/matches/1/notify"; do
   code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}${ep}" -H "Content-Type: application/json" -d '{}' --max-time 8)
   pass "$ep" "$code" "401"
@@ -150,7 +150,7 @@ pass "/api/generate/breaker-status (public diagnostic)" "$code" "200"
 echo ""
 echo "-- Admin cookie/CSRF checks (P-SEC2, 2026-07-17) --"
 # ADMIN_KEY is only ever sent once now, in this login call, over HTTPS, to
-# establish a session — never again as a header on every request. Runs
+# establish a session, never again as a header on every request. Runs
 # unconditionally (unlike the learner/org sections below) since ADMIN_KEY is
 # already required at the top of this script.
 AJAR=$(mktemp)
@@ -185,14 +185,14 @@ ACSRF=$(awk -F'\t' '$6=="fl_admin_csrf"{print $7}' "$AJAR")
 code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/stats" --max-time 8)
 pass "/api/admin/stats (cookie only)" "$code" "200"
 
-# P8 — Validation section read endpoints, same cookie-only pattern
+# P8, Validation section read endpoints, same cookie-only pattern
 code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/verified-skills" --max-time 8)
 pass "/api/admin/verified-skills (cookie only)" "$code" "200"
 code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" "${API_BASE}/api/admin/task-completions" --max-time 8)
 pass "/api/admin/task-completions (cookie only)" "$code" "200"
 
 # State-changing request WITHOUT the CSRF header must be rejected. Body is a
-# genuine no-op (writes ai_provider back to its own current value — see
+# genuine no-op (writes ai_provider back to its own current value, see
 # MAINTENANCE.md schema-state table) so this is safe to run repeatedly.
 code=$(curl -s -o /dev/null -w "%{http_code}" -b "$AJAR" -X PATCH "${API_BASE}/api/admin/settings" \
   -H "Content-Type: application/json" -d '{"settings":{"ai_provider":"groq"}}' --max-time 8)
@@ -217,7 +217,7 @@ rm -f "$AJAR" "$AHDRS"
 echo ""
 echo "-- Learner cookie/CSRF checks (P-SEC1, 2026-07-16) --"
 # Auth tokens moved from a Bearer header to httpOnly cookies + a CSRF
-# double-submit cookie — LTOKEN/Authorization no longer applies. This
+# double-submit cookie, LTOKEN/Authorization no longer applies. This
 # logs in as a real (seed/test) learner and drives the actual cookie flow.
 if [ -n "${TEST_LEARNER_EMAIL:-}" ] && [ -n "${TEST_LEARNER_PASSWORD:-}" ]; then
   JAR=$(mktemp)
@@ -230,7 +230,7 @@ if [ -n "${TEST_LEARNER_EMAIL:-}" ] && [ -n "${TEST_LEARNER_PASSWORD:-}" ]; then
     --max-time 8)
   pass "/api/auth/login" "$code" "200"
 
-  # curl marks httpOnly cookies with a "#HttpOnly_" prefix line in the jar —
+  # curl marks httpOnly cookies with a "#HttpOnly_" prefix line in the jar,
   # fl_access/fl_refresh must have it, fl_csrf must NOT (JS needs to read it)
   for c in fl_access fl_refresh; do
     if grep -q "#HttpOnly_.*${c}" "$JAR"; then
@@ -258,13 +258,13 @@ if [ -n "${TEST_LEARNER_EMAIL:-}" ] && [ -n "${TEST_LEARNER_PASSWORD:-}" ]; then
   code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR" "${API_BASE}/api/learners/me" --max-time 8)
   pass "/api/learners/me (cookie only)" "$code" "200"
 
-  # State-changing request WITHOUT the CSRF header must be rejected —
+  # State-changing request WITHOUT the CSRF header must be rejected,
   # this is the actual point of the whole double-submit pattern
   code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR" -X PATCH "${API_BASE}/api/auth/me" \
     -H "Content-Type: application/json" -d '{}' --max-time 8)
   pass "PATCH /api/auth/me without X-CSRF-Token (must be rejected)" "$code" "403"
 
-  # Same request WITH the correct header must succeed (empty body — every
+  # Same request WITH the correct header must succeed (empty body, every
   # field in PatchMeRequest is optional, so this is a genuine no-op)
   code=$(curl -s -o /dev/null -w "%{http_code}" -b "$JAR" -X PATCH "${API_BASE}/api/auth/me" \
     -H "Content-Type: application/json" -H "X-CSRF-Token: ${CSRF}" -d '{}' --max-time 8)
@@ -281,7 +281,7 @@ if [ -n "${TEST_LEARNER_EMAIL:-}" ] && [ -n "${TEST_LEARNER_PASSWORD:-}" ]; then
 
   rm -f "$JAR" "$HDRS"
 else
-  echo "WARN  No TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD set — cookie/CSRF checks skipped"
+  echo "WARN  No TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD set, cookie/CSRF checks skipped"
   echo "      export TEST_LEARNER_EMAIL=... TEST_LEARNER_PASSWORD=... (use the seed/test learner, e.g. Tony) to enable"
 fi
 
@@ -289,7 +289,7 @@ echo ""
 echo "-- P-SEC3: dual-session CSRF regression check (rewritten 2026-08-11) --"
 # Regression test for the CSRF middleware bug class: ADMIN_ACCESS_COOKIE is
 # scoped to all of /api (see cookie_auth.py), so it rides along on every
-# request whenever the same browser also has an admin session open — a very
+# request whenever the same browser also has an admin session open, a very
 # normal thing for a solo operator testing multiple roles at once in one
 # window (Charbel's actual report, 2026-08-11: "CSRF check failed" on
 # /api/generate/session with both learner and admin logged in). The
@@ -386,7 +386,7 @@ if [ -n "${TEST_LEARNER_EMAIL:-}" ] && [ -n "${TEST_LEARNER_PASSWORD:-}" ]; then
   curl -s -o /dev/null -b "$DJAR" -X POST "${API_BASE}/api/admin/logout" -H "X-CSRF-Token: ${ACSRF_D}" --max-time 8 || true
   rm -f "$DJAR"
 else
-  echo "WARN  No TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD set — P-SEC3 dual-session check skipped"
+  echo "WARN  No TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD set, P-SEC3 dual-session check skipped"
 fi
 
 echo ""
@@ -440,7 +440,7 @@ if [ -n "${TEST_ORG_EMAIL:-}" ] && [ -n "${TEST_ORG_PASSWORD:-}" ]; then
 
   rm -f "$OJAR" "$OHDRS"
 else
-  echo "WARN  No TEST_ORG_EMAIL/TEST_ORG_PASSWORD set — org cookie/CSRF checks skipped"
+  echo "WARN  No TEST_ORG_EMAIL/TEST_ORG_PASSWORD set, org cookie/CSRF checks skipped"
   echo "      export TEST_ORG_EMAIL=... TEST_ORG_PASSWORD=... (use a dedicated test org account) to enable"
 fi
 
@@ -471,7 +471,7 @@ db_exec() {
 # real send (the register endpoint fires a verification email as a
 # fire-and-forget background task) lands harmlessly in an inbox Charbel
 # already owns, rather than bouncing against a fake domain. Falls back to a
-# clearly-junk address if TEST_LEARNER_EMAIL isn't set — registration itself
+# clearly-junk address if TEST_LEARNER_EMAIL isn't set, registration itself
 # is still tested either way, only the "does the email actually land
 # somewhere sane" nicety is lost.
 if [ -n "$TEST_LEARNER_EMAIL" ] && [[ "$TEST_LEARNER_EMAIL" == *"@"* ]]; then
@@ -487,7 +487,7 @@ reg_code=$(curl -s -o /dev/null -w "%{http_code}" -X POST "${API_BASE}/api/auth/
   --max-time 8)
 pass "POST /api/auth/register (real DB round-trip)" "$reg_code" "200"
 
-# Best-effort cleanup — never blocks or fails the script. FK order matters:
+# Best-effort cleanup, never blocks or fails the script. FK order matters:
 # learner_streaks/learner_preferences reference learners.id.
 if [ "$reg_code" = "200" ]; then
   db_exec "DELETE ls FROM learner_streaks ls JOIN learners l ON l.id=ls.learner_id WHERE l.email='${SMOKE_REG_EMAIL}';"

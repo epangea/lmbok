@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — fix_session_art_names.sql
+-- FreqLearn, fix_session_art_names.sql
 -- Replaces infinitive art name references baked into pre-seeded
 -- session content with the correct gerund form from the paper.
 -- Safe to run multiple times (NOT LIKE guard prevents double-replace).

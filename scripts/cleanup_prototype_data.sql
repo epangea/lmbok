@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — Prototype Seed Data Cleanup
+-- FreqLearn, Prototype Seed Data Cleanup
 -- Generated: 2026-06-03
 -- Run each block carefully. SELECT before DELETE always.
 -- ============================================================
@@ -64,7 +64,7 @@ WHERE  id = 70;
 UPDATE opportunity_listings
 SET    last_verified_at = NOW()
 WHERE  id IN (68, 71, 72);  -- adjust based on script output
--- (skip 69/UNESCO if it returns a warning — verify manually)
+-- (skip 69/UNESCO if it returns a warning, verify manually)
 
 -- ── STEP 8: Verify final state ───────────────────────────────
 SELECT
@@ -84,7 +84,7 @@ ORDER BY source, ol.is_active;
 --   internal   | 1 | 8   (FreqLearn Community listings, still active)
 --   prototype  | 0 | 30  (all deactivated)
 --   scavenged  | 0 | 1   (iyervalli dead link)
---   scavenged  | 1 | 4   (worldvision, unesco, nps, msf — if URLs live)
+--   scavenged  | 1 | 4   (worldvision, unesco, nps, msf, if URLs live)
 
 -- ── STEP 9: Confirm learner matches still intact ─────────────
 SELECT om.id, om.learner_id, om.listing_id, om.learner_status,

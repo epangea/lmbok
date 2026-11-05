@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — utils.py
+# FreqLearn, utils.py
 # Shared utilities imported by multiple route modules.
 # ============================================================
 
@@ -27,7 +27,7 @@ async def get_session_config(key: str, db: AsyncSession, default: str = "") -> s
 
 
 # ── Developmental phase ──────────────────────────────────────
-# 2026-08-24/25: elemental phases redesign. Phase is a DERIVED value —
+# 2026-08-24/25: elemental phases redesign. Phase is a DERIVED value,
 # computed fresh from birth_year/is_expecting_parent rather than trusted
 # from a possibly-stale stored phase_id, so a learner drifts forward to
 # their next phase automatically as they age, with no cron job needed.
@@ -35,7 +35,7 @@ async def get_session_config(key: str, db: AsyncSession, default: str = "") -> s
 # write it back to learner.phase_id themselves after calling this.
 #
 # is_expecting_parent overrides birth_year entirely and always resolves
-# to "light". No birth_year and not expecting means unresolved (None) —
+# to "light". No birth_year and not expecting means unresolved (None),
 # deliberate: the strict phase-matching policy (2026-08-24) means an
 # unresolved phase must never be used to serve a session.
 
@@ -60,7 +60,7 @@ async def compute_current_phase(learner: Learner, db: AsyncSession) -> DevPhase 
 
 # ── Avatar stage ─────────────────────────────────────────────
 # 2026-09-05: replaced the old (xp, arts_touched, domain-breadth) gate
-# with a pure Art-level bottleneck gate, per Charbel's direction — the
+# with a pure Art-level bottleneck gate, per Charbel's direction, the
 # 15 Arts are the operative pedagogical unit (PHILOSOPHY.md); Being/
 # Becoming/Connecting are an organizing scheme over them, not a
 # separate breadth requirement. XP and "touched" counts are gone;
@@ -70,7 +70,7 @@ async def compute_current_phase(learner: Learner, db: AsyncSession) -> DevPhase 
 # Any change here must be reflected there too (and vice versa).
 
 AVATAR_STAGES = [
-    # (min_art_score, key, icon, label) — threshold every one of the
+    # (min_art_score, key, icon, label), threshold every one of the
     # 15 Arts must reach. Front-loaded: cheap early, expensive at mastery.
     (1.00, 'ecosystem', '🌍', 'Ecosystem'),
     (0.65, 'forest',    '🌲', 'Forest'),
@@ -129,9 +129,9 @@ async def get_learner_stage(learner: Learner, db: AsyncSession) -> dict:
     """
     Return the learner's avatar stage. Shared by polis.py and matching.py.
 
-    2026-11-01: reads the SAME per-art scores the avatar badge shows —
+    2026-11-01: reads the SAME per-art scores the avatar badge shows,
     engine.compute_radar()["art_scores"] (skill level + evidence, plus the
-    capped 20% direct-practice bonus) — so the Polis gate and the avatar
+    capped 20% direct-practice bonus), so the Polis gate and the avatar
     are one thing. Since 2026-09-05 this read learner_art_progress.score
     alone, which only skill-click sessions credit (<= 0.05 per session in
     total), so the gate could refuse a stage the badge displayed and

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ============================================================
-# FreqLearn — scripts/e2e_org_polis.sh   (P2, 2026-07-17)
+# FreqLearn, scripts/e2e_org_polis.sh   (P2, 2026-07-17)
 #
-# End-to-end functional test for the Org and Polis business logic —
+# End-to-end functional test for the Org and Polis business logic,
 # NOT just auth/CSRF plumbing (that's smoke.sh's job; this script
 # assumes smoke.sh already passes). Covers:
 #
@@ -33,7 +33,7 @@
 #          whichever applies to TEST_LEARNER's current stage.
 #
 #   P42 (new, 2026-08-01): a REAL end-to-end POST /api/generate/session
-#          AI generation call — the actual gap that let P41's
+#          AI generation call, the actual gap that let P41's
 #          `_bool_setting` NameError ship past both this script and
 #          smoke.sh and 500 every real session generation in the live
 #          app, since nothing in either script called this route with
@@ -43,12 +43,12 @@
 #          already uses) to confirm `model` was actually stamped and
 #          note whether it came from a live AI call or served from the
 #          library (either is legitimate depending on breaker/
-#          inline-reuse state — see Part E's own comments for how it
+#          inline-reuse state, see Part E's own comments for how it
 #          tells the two apart).
 #
 # This is what surfaced the 2026-07-17 bug: org-submitted listings
 # (scavenged=False, is_active=False) never showed up in ANY admin
-# endpoint and could never be approved — see admin.py module
+# endpoint and could never be approved, see admin.py module
 # docstring for the fix. Re-run this after any change to orgs.py,
 # matching.py, polis.py, admin.py's listing endpoints, generate.py,
 # or ai_client.py.
@@ -56,16 +56,16 @@
 # Requires in backend/.env (same file ADMIN_KEY lives in):
 #   TEST_LEARNER_EMAIL / TEST_LEARNER_PASSWORD  (required)
 #   TEST_ORG_EMAIL / TEST_ORG_PASSWORD          (required)
-# TEST_LEARNER can be at any avatar stage — the Polis section
+# TEST_LEARNER can be at any avatar stage, the Polis section
 # branches on whichever stage it finds and tests the checks that
 # apply. Referendum vote/comment/upvote tests only run when
 # E2E_POLIS_WRITE=1 is exported, since (unlike proposals/support,
 # which this script cleans up after itself) there's no delete
-# endpoint for votes or discussion comments — running that branch
+# endpoint for votes or discussion comments, running that branch
 # leaves a real [E2E TEST]-tagged comment and vote sitting in
 # whatever open referendum it picks. Part E's DB lookup uses the same
 # DB_USER/DB_PASSWORD/DB_HOST/DB_PORT/DB_NAME + mysql/mariadb-CLI-
-# optional pattern as Part C — warns-and-skips the DB-level assertion
+# optional pattern as Part C, warns-and-skips the DB-level assertion
 # (not the whole part) if the CLI isn't on the box.
 # ============================================================
 set -euo pipefail
@@ -92,7 +92,7 @@ if [ -z "$ADMIN_KEY" ]; then
   exit 1
 fi
 
-# Same pattern as smoke.sh — see that file for why "|| true" is load-bearing.
+# Same pattern as smoke.sh, see that file for why "|| true" is load-bearing.
 env_or_file() {
   local var_name="$1"
   local current="${!var_name:-}"
@@ -110,18 +110,18 @@ TEST_ORG_EMAIL=$(env_or_file TEST_ORG_EMAIL)
 TEST_ORG_PASSWORD=$(env_or_file TEST_ORG_PASSWORD)
 
 if [ -z "$TEST_LEARNER_EMAIL" ] || [ -z "$TEST_LEARNER_PASSWORD" ]; then
-  echo "SKIP  TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD not set in $ENV_FILE — nothing to test"
+  echo "SKIP  TEST_LEARNER_EMAIL/TEST_LEARNER_PASSWORD not set in $ENV_FILE, nothing to test"
   exit 0
 fi
 if [ -z "$TEST_ORG_EMAIL" ] || [ -z "$TEST_ORG_PASSWORD" ]; then
-  echo "SKIP  TEST_ORG_EMAIL/TEST_ORG_PASSWORD not set in $ENV_FILE — nothing to test"
+  echo "SKIP  TEST_ORG_EMAIL/TEST_ORG_PASSWORD not set in $ENV_FILE, nothing to test"
   exit 0
 fi
 
-# Same source of truth db.py reads from — used ONLY by Part C, to look up
+# Same source of truth db.py reads from, used ONLY by Part C, to look up
 # which learner an anonymized ai_suggested match belongs to. This is
 # legitimate test-infra access (the script already runs as root on the
-# server), not an API consumer bypassing the P11 consent model — the org
+# server), not an API consumer bypassing the P11 consent model, the org
 # and learner sessions above never see this, only the test assertions do.
 DB_USER=$(env_or_file DB_USER); DB_USER="${DB_USER:-freqlearn}"
 DB_PASSWORD=$(env_or_file DB_PASSWORD); DB_PASSWORD="${DB_PASSWORD:-changeme}"
@@ -207,7 +207,7 @@ echo "== P2: Org + Polis end-to-end test =="
 echo ""
 
 # ------------------------------------------------------------
-# PART A — Org listing lifecycle
+# PART A, Org listing lifecycle
 # ------------------------------------------------------------
 echo "-- Org listing lifecycle --"
 
@@ -221,7 +221,7 @@ OCSRF=$(csrf_from_jar "$OJAR" fl_org_csrf)
 TS=$(date +%s)
 LISTING_TITLE="[E2E TEST] Trail volunteer ${TS}"
 call POST "${API_BASE}/api/orgs/listings" "$OJAR" "$OCSRF" \
-  "{\"title\":\"${LISTING_TITLE}\",\"description\":\"Automated e2e test listing — safe to ignore/delete.\",\"listing_type\":\"volunteer\",\"required_arts\":[]}"
+  "{\"title\":\"${LISTING_TITLE}\",\"description\":\"Automated e2e test listing, safe to ignore/delete.\",\"listing_type\":\"volunteer\",\"required_arts\":[]}"
 pass "org creates listing" "$HTTP_CODE" "200"
 LISTING_ID=$(echo "$HTTP_BODY" | json_get "listing.id")
 PENDING=$(echo "$HTTP_BODY" | json_get "listing.pending_approval")
@@ -249,7 +249,7 @@ for r in rows:
 if [ "$FOUND_SOURCE" = "org" ]; then
   echo "OK    org-submitted listing appears in admin review queue, tagged source=org"
 else
-  echo "FAIL  org-submitted listing NOT found in admin review queue (source='$FOUND_SOURCE') — this is the 2026-07-17 bug if it recurs"
+  echo "FAIL  org-submitted listing NOT found in admin review queue (source='$FOUND_SOURCE'), this is the 2026-07-17 bug if it recurs"
   fail=$((fail+1))
 fi
 
@@ -327,7 +327,7 @@ call PATCH "${API_BASE}/api/orgs/listings/${LISTING_ID}/matches/${MATCH_ID}" "$O
   '{"org_status":"reviewing"}'
 pass "org updates match status" "$HTTP_CODE" "200"
 
-# Cleanup — leaves the DB as close to untouched as this flow allows
+# Cleanup, leaves the DB as close to untouched as this flow allows
 call DELETE "${API_BASE}/api/matching/${MATCH_ID}" "$LJAR" "$LCSRF"
 pass "learner withdraws interest (cleanup)" "$HTTP_CODE" "200"
 
@@ -337,7 +337,7 @@ pass "org deactivates test listing (cleanup)" "$HTTP_CODE" "200"
 echo ""
 
 # ------------------------------------------------------------
-# PART C — P11: AI needs-matching (Synergy)
+# PART C, P11: AI needs-matching (Synergy)
 # ------------------------------------------------------------
 # Added 2026-07-24 alongside the P11 build. Covers the whole consent-model
 # flow: org writes needs_text -> AI parses it into skill targets -> org
@@ -349,14 +349,14 @@ echo ""
 #
 # Uses parse-needs' own real skill_id (rather than guessing one) so this
 # stays valid against whatever the skills table actually contains, then
-# overrides min_level to 0 before generate-matches — that makes every
+# overrides min_level to 0 before generate-matches, that makes every
 # active learner trivially "meet" the target, so the test doesn't depend
 # on TEST_LEARNER having practiced any particular skill.
 echo "-- P11: AI needs-matching --"
 
 P11_LISTING_TITLE="[E2E TEST] AI-matched need ${TS}"
 call POST "${API_BASE}/api/orgs/listings" "$OJAR" "$OCSRF" \
-  "{\"title\":\"${P11_LISTING_TITLE}\",\"description\":\"Automated e2e test listing for P11 — safe to ignore/delete.\",\"listing_type\":\"project\",\"required_arts\":[],\"needs_text\":\"Someone comfortable facilitating group discussions and basic first aid.\"}"
+  "{\"title\":\"${P11_LISTING_TITLE}\",\"description\":\"Automated e2e test listing for P11, safe to ignore/delete.\",\"listing_type\":\"project\",\"required_arts\":[],\"needs_text\":\"Someone comfortable facilitating group discussions and basic first aid.\"}"
 pass "org creates P11 test listing" "$HTTP_CODE" "200"
 P11_LISTING_ID=$(echo "$HTTP_BODY" | json_get "listing.id")
 
@@ -373,10 +373,10 @@ if [ "$HTTP_CODE" = "200" ]; then
       "{\"needs_skill_targets\":[{\"skill_id\":${FIRST_SKILL_ID},\"slug\":\"${FIRST_SKILL_SLUG}\",\"name\":\"${FIRST_SKILL_SLUG}\",\"min_level\":0}]}"
     pass "org saves forced (min_level=0) skill target for deterministic test" "$HTTP_CODE" "200"
   else
-    warn "parse-needs returned zero targets against the current skills table — skipping the rest of the P11 flow test"
+    warn "parse-needs returned zero targets against the current skills table, skipping the rest of the P11 flow test"
   fi
 elif [ "$HTTP_CODE" = "503" ]; then
-  warn "parse-needs returned 503 (GROQ_API_KEY likely not configured) — skipping the rest of the P11 flow test"
+  warn "parse-needs returned 503 (GROQ_API_KEY likely not configured), skipping the rest of the P11 flow test"
 else
   pass "parse-needs" "$HTTP_CODE" "200"
 fi
@@ -391,16 +391,16 @@ if [ "$TARGET_COUNT" -gt 0 ]; then
   pass "org sees candidate list" "$HTTP_CODE" "200"
 
   # NOTE: generate-matches ranks ALL active learners, and with min_level=0
-  # everyone ties at the same score — so "top 10" isn't guaranteed to
+  # everyone ties at the same score, so "top 10" isn't guaranteed to
   # include TEST_LEARNER specifically if there are more than 10 active
   # learners on this deployment. The org's own view is anonymized by design
   # (that's the whole point of P11), so we can't identify "which candidate
-  # is TEST_LEARNER" from that endpoint — we look it up directly in the DB
+  # is TEST_LEARNER" from that endpoint, we look it up directly in the DB
   # instead, the same way a human operator debugging this would.
   P11_MATCH_ID=$(db_query "SELECT id FROM opportunity_matches WHERE listing_id=${P11_LISTING_ID} AND learner_id=${TEST_LEARNER_ID};")
 
   if [ -z "$P11_MATCH_ID" ]; then
-    warn "TEST_LEARNER (id ${TEST_LEARNER_ID}) wasn't selected into this run's top 10 — likely more than 10 active learners tied at the forced score. Skipping the rest of the P11 flow test (not a failure, just can't verify this run)."
+    warn "TEST_LEARNER (id ${TEST_LEARNER_ID}) wasn't selected into this run's top 10, likely more than 10 active learners tied at the forced score. Skipping the rest of the P11 flow test (not a failure, just can't verify this run)."
   else
     ANON_NAME=$(echo "$HTTP_BODY" | python3 -c "
 import json, sys
@@ -417,7 +417,7 @@ for r in rows:
   fi
 
   if [ -n "$P11_MATCH_ID" ]; then
-    # Learner must NOT see this match yet — org hasn't notified them.
+    # Learner must NOT see this match yet, org hasn't notified them.
     call GET "${API_BASE}/api/matching/" "$LJAR"
     pass "learner GET my matches (pre-notify)" "$HTTP_CODE" "200"
     PRE_NOTIFY_VISIBLE=$(echo "$HTTP_BODY" | python3 -c "
@@ -434,7 +434,7 @@ print('yes' if any(str(r.get('id')) == '${P11_MATCH_ID}' for r in rows) else 'no
     call POST "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/matches/${P11_MATCH_ID}/notify" "$OJAR" "$OCSRF"
     pass "org notifies the candidate" "$HTTP_CODE" "200"
 
-    # Notifying twice must be rejected — the endpoint requires learner_status=='suggested'.
+    # Notifying twice must be rejected, the endpoint requires learner_status=='suggested'.
     call POST "${API_BASE}/api/orgs/listings/${P11_LISTING_ID}/matches/${P11_MATCH_ID}/notify" "$OJAR" "$OCSRF"
     pass "re-notifying an already-invited candidate is rejected" "$HTTP_CODE" "400"
 
@@ -471,7 +471,7 @@ for r in rows:
       echo "FAIL  org still sees an anonymized/candidate placeholder after acceptance"; fail=$((fail+1))
     fi
 
-    # Cleanup — same pattern as PART A
+    # Cleanup, same pattern as PART A
     call DELETE "${API_BASE}/api/matching/${P11_MATCH_ID}" "$LJAR" "$LCSRF"
     pass "learner withdraws AI match (cleanup)" "$HTTP_CODE" "200"
   fi
@@ -483,7 +483,7 @@ pass "org deactivates P11 test listing (cleanup)" "$HTTP_CODE" "200"
 echo ""
 
 # ------------------------------------------------------------
-# PART D — P8: org validation (task line items + skill demonstrations)
+# PART D, P8: org validation (task line items + skill demonstrations)
 # ------------------------------------------------------------
 # Added 2026-07-25, using PART C above as the template per Charbel's own
 # request. Covers: parse-needs now also returns needs_tasks -> org forces
@@ -502,7 +502,7 @@ echo "-- P8: org validation --"
 
 P8_LISTING_TITLE="[E2E TEST] Validation flow ${TS}"
 call POST "${API_BASE}/api/orgs/listings" "$OJAR" "$OCSRF" \
-  "{\"title\":\"${P8_LISTING_TITLE}\",\"description\":\"Automated e2e test listing for P8 — safe to ignore/delete.\",\"listing_type\":\"project\",\"required_arts\":[],\"needs_text\":\"Someone comfortable facilitating group discussions and basic first aid.\"}"
+  "{\"title\":\"${P8_LISTING_TITLE}\",\"description\":\"Automated e2e test listing for P8, safe to ignore/delete.\",\"listing_type\":\"project\",\"required_arts\":[],\"needs_text\":\"Someone comfortable facilitating group discussions and basic first aid.\"}"
 pass "org creates P8 test listing" "$HTTP_CODE" "200"
 P8_LISTING_ID=$(echo "$HTTP_BODY" | json_get "listing.id")
 
@@ -515,7 +515,7 @@ if [ "$HTTP_CODE" = "200" ]; then
     P8_SKILL_ID=$(echo "$HTTP_BODY" | json_get "needs_skill_targets.0.skill_id")
     P8_SKILL_SLUG=$(echo "$HTTP_BODY" | json_get "needs_skill_targets.0.slug")
     P8_TASK_TEXT="Facilitate one group discussion with a written recap"
-    # Force deterministic needs_skill_targets + needs_tasks — same override
+    # Force deterministic needs_skill_targets + needs_tasks, same override
     # trick PART C uses for min_level, here so the submit/verify steps below
     # reference a known task_index (0) and skill_id regardless of what Groq
     # actually returned for this run.
@@ -523,10 +523,10 @@ if [ "$HTTP_CODE" = "200" ]; then
       "{\"needs_skill_targets\":[{\"skill_id\":${P8_SKILL_ID},\"slug\":\"${P8_SKILL_SLUG}\",\"name\":\"${P8_SKILL_SLUG}\",\"min_level\":0}],\"needs_tasks\":[\"${P8_TASK_TEXT}\"]}"
     pass "org saves forced skill target + task line item for deterministic test" "$HTTP_CODE" "200"
   else
-    warn "parse-needs returned zero targets against the current skills table — skipping the rest of the P8 flow test"
+    warn "parse-needs returned zero targets against the current skills table, skipping the rest of the P8 flow test"
   fi
 elif [ "$HTTP_CODE" = "503" ]; then
-  warn "parse-needs returned 503 (GROQ_API_KEY likely not configured) — skipping the rest of the P8 flow test"
+  warn "parse-needs returned 503 (GROQ_API_KEY likely not configured), skipping the rest of the P8 flow test"
 else
   pass "parse-needs (P8 listing)" "$HTTP_CODE" "200"
 fi
@@ -602,11 +602,11 @@ print('yes' if any(r.get('match_id') == ${P8_MATCH_ID} and r.get('status') == 'v
 ")
   [ "$ADMIN_TASK_SEEN" = "yes" ] && echo "OK    admin Validation page lists this match's verified task, status=verified" || { echo "FAIL  admin does not see this match's task completion as verified"; fail=$((fail+1)); }
 
-  # Cleanup — same pattern as PART A/C. task_completions/verified_skills rows
+  # Cleanup, same pattern as PART A/C. task_completions/verified_skills rows
   # are left in place (harmless, tagged [E2E TEST] via the listing title they
   # join back to) since withdraw is a soft-delete (learner_status='withdrawn',
   # the match row itself isn't removed) and there's no delete endpoint for
-  # these two tables — deleting them isn't part of what P8 exposes to either
+  # these two tables, deleting them isn't part of what P8 exposes to either
   # side, by design (an org's validation is meant to be a durable record).
   call DELETE "${API_BASE}/api/matching/${P8_MATCH_ID}" "$LJAR" "$LCSRF"
   pass "learner withdraws P8 test match (cleanup)" "$HTTP_CODE" "200"
@@ -618,7 +618,7 @@ pass "org deactivates P8 test listing (cleanup)" "$HTTP_CODE" "200"
 echo ""
 
 # ------------------------------------------------------------
-# PART B — Polis
+# PART B, Polis
 # ------------------------------------------------------------
 echo "-- Polis --"
 
@@ -644,11 +644,11 @@ call GET "${API_BASE}/api/polis/proposals" "$LJAR"
 pass "GET proposals" "$HTTP_CODE" "200"
 
 if [ "$CAN_POLIS" = "True" ]; then
-  echo "  (Grove+ — testing write endpoints)"
+  echo "  (Grove+, testing write endpoints)"
 
   PROP_TITLE="[E2E TEST] proposal ${TS}"
   call POST "${API_BASE}/api/polis/proposals" "$LJAR" "$LCSRF" \
-    "{\"title\":\"${PROP_TITLE}\",\"description\":\"Automated e2e test — safe to ignore/delete.\",\"scope\":\"local\"}"
+    "{\"title\":\"${PROP_TITLE}\",\"description\":\"Automated e2e test, safe to ignore/delete.\",\"scope\":\"local\"}"
   pass "submit local proposal (Grove+ allowed)" "$HTTP_CODE" "200"
   PROP_ID=$(echo "$HTTP_BODY" | json_get "id")
 
@@ -667,11 +667,11 @@ if [ "$CAN_POLIS" = "True" ]; then
       "{\"title\":\"[E2E TEST] should be rejected\",\"scope\":\"global\"}"
     pass "global proposal blocked below Ecosystem stage" "$HTTP_CODE" "403"
   else
-    note "TEST_LEARNER is already Ecosystem stage — skipping the below-Ecosystem global-scope-block check"
+    note "TEST_LEARNER is already Ecosystem stage, skipping the below-Ecosystem global-scope-block check"
   fi
 
   if [ -n "$FIRST_REF_ID" ] && [ "${E2E_POLIS_WRITE:-0}" = "1" ]; then
-    echo "  (E2E_POLIS_WRITE=1 — testing vote/discussion on referendum ${FIRST_REF_ID}; NOT auto-cleaned-up)"
+    echo "  (E2E_POLIS_WRITE=1, testing vote/discussion on referendum ${FIRST_REF_ID}; NOT auto-cleaned-up)"
     call POST "${API_BASE}/api/polis/referenda/${FIRST_REF_ID}/vote" "$LJAR" "$LCSRF" '{"position":"abstain"}'
     pass "cast vote (abstain)" "$HTTP_CODE" "200"
 
@@ -679,7 +679,7 @@ if [ "$CAN_POLIS" = "True" ]; then
     pass "GET discussion" "$HTTP_CODE" "200"
 
     call POST "${API_BASE}/api/polis/referenda/${FIRST_REF_ID}/discussion" "$LJAR" "$LCSRF" \
-      '{"body":"[E2E TEST] automated check — feel free to delete"}'
+      '{"body":"[E2E TEST] automated check, feel free to delete"}'
     pass "post discussion comment" "$HTTP_CODE" "200"
     COMMENT_ID=$(echo "$HTTP_BODY" | json_get "id")
 
@@ -689,12 +689,12 @@ if [ "$CAN_POLIS" = "True" ]; then
     ALREADY=$(echo "$HTTP_BODY" | json_get "already_upvoted")
     [ "$ALREADY" = "True" ] && echo "OK    duplicate upvote deduped (already_upvoted=true)" || { echo "FAIL  duplicate upvote not deduped"; fail=$((fail+1)); }
   elif [ -n "$FIRST_REF_ID" ]; then
-    note "referenda exist but E2E_POLIS_WRITE!=1 — skipping vote/discussion/upvote (no delete endpoint exists to clean these up; export E2E_POLIS_WRITE=1 to opt in)"
+    note "referenda exist but E2E_POLIS_WRITE!=1, skipping vote/discussion/upvote (no delete endpoint exists to clean these up; export E2E_POLIS_WRITE=1 to opt in)"
   else
-    note "no open referenda to test vote/discussion/upvote against — seed one via polis_migrate.sql or add_polis_tables.sql if you want that path covered"
+    note "no open referenda to test vote/discussion/upvote against, seed one via polis_migrate.sql or add_polis_tables.sql if you want that path covered"
   fi
 else
-  echo "  (below Grove — testing the write gate)"
+  echo "  (below Grove, testing the write gate)"
   call POST "${API_BASE}/api/polis/proposals" "$LJAR" "$LCSRF" \
     '{"title":"[E2E TEST] should be rejected","scope":"local"}'
   pass "proposal blocked below Grove stage" "$HTTP_CODE" "403"
@@ -703,7 +703,7 @@ fi
 echo ""
 
 # ------------------------------------------------------------
-# PART E — AI session generation (P42, 2026-08-01)
+# PART E, AI session generation (P42, 2026-08-01)
 #
 # The actual gap that let P41 ship a `_bool_setting` NameError past both
 # smoke.sh AND this script: neither one had ever called

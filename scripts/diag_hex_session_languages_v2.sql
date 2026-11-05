@@ -1,4 +1,4 @@
--- FreqLearn — diagnostic v2: find ACTUAL non-ASCII rows and test regexes against them
+-- FreqLearn, diagnostic v2: find ACTUAL non-ASCII rows and test regexes against them
 -- Run on server:
 --   mysql freqlearn < scripts/diag_hex_session_languages_v2.sql
 --

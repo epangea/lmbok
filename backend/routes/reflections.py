@@ -1,9 +1,9 @@
 # ============================================================
-# FreqLearn — routes/reflections.py
+# FreqLearn, routes/reflections.py
 # Stoa: personal reflection journal
-# GET  /api/reflections       — recent entries for learner
-# POST /api/reflections       — save a new entry
-# DELETE /api/reflections/{id} — delete an entry
+# GET  /api/reflections, recent entries for learner
+# POST /api/reflections, save a new entry
+# DELETE /api/reflections/{id}, delete an entry
 # ============================================================
 
 from datetime import datetime, timezone

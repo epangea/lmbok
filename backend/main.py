@@ -1,6 +1,6 @@
 # ============================================================
-# FreqLearn Backend — main.py
-# FastAPI entry point — schema v2
+# FreqLearn Backend, main.py
+# FastAPI entry point, schema v2
 # Run: uvicorn main:app --host 0.0.0.0 --port 8000
 # ============================================================
 
@@ -46,9 +46,9 @@ logger = logging.getLogger("freqlearn")
 # ── Lifespan ──────────────────────────────────────────────
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Tables managed via schema.sql — no create_all to avoid
+    # Tables managed via schema.sql, no create_all to avoid
     # silently diverging from the canonical schema.
-    logger.info("FreqLearn API starting — schema v2 (P_MAP versioning)")
+    logger.info("FreqLearn API starting, schema v2 (P_MAP versioning)")
     yield
     logger.info("FreqLearn API shutting down")
 
@@ -56,7 +56,7 @@ async def lifespan(app: FastAPI):
 # ── App ───────────────────────────────────────────────────
 app = FastAPI(
     title       = "FreqLearn API",
-    description = "Surfing the Frequencies — adaptive lifelong learning platform",
+    description = "Surfing the Frequencies, adaptive lifelong learning platform",
     version     = "2.1.0",
     lifespan    = lifespan,
 )
@@ -81,7 +81,7 @@ app.add_middleware(
 # ── CSRF (double-submit cookie check) ─────────────────────
 # Added 2026-07-16 as part of P-SEC1: now that auth tokens live in httpOnly
 # cookies, browsers attach them automatically to *any* request to this origin
-# — including ones triggered by a malicious cross-site page. A JS-readable
+#, including ones triggered by a malicious cross-site page. A JS-readable
 # csrf cookie + a required matching header closes that gap: a cross-site
 # attacker can make the browser send the auth cookies, but can't read the
 # csrf cookie's value to also put it in the header, so the request 403s.
@@ -102,22 +102,22 @@ async def csrf_protect(request: Request, call_next):
         return await call_next(request)
 
     # Rewritten 2026-08-11 (P-SEC3 follow-up) to route on path prefix alone,
-    # for ALL three session kinds — no more cookie-presence fallback at all.
+    # for ALL three session kinds, no more cookie-presence fallback at all.
     # ADMIN_ACCESS_COOKIE is deliberately scoped to all of /api (see
     # cookie_auth.py), so it rides along on every request whenever the same
     # browser also has an admin session open (a very normal thing for a
     # solo operator testing multiple roles at once, e.g. Charbel). The
     # original design only gave /api/orgs its own explicit branch and let
     # everything else fall through to "admin cookie present? use admin CSRF
-    # pair" — which is correct ONLY for endpoints that are actually
+    # pair", which is correct ONLY for endpoints that are actually
     # admin-gated. It silently mis-checked every OTHER learner-facing
     # prefix (confirmed live 2026-08-11 via /api/generate/session
     # "CSRF check failed" while both a learner and admin session were open
     # in the same browser). The 2026-08-10 patch only widened the
-    # /api/orgs-style special case to /api/matching and /api/learners —
+    # /api/orgs-style special case to /api/matching and /api/learners,
     # still a whitelist of two, not a fix of the underlying assumption.
     # Ground truth (confirmed via `grep -rl require_admin routes/`,
-    # 2026-08-11): require_admin is used in exactly two places —
+    # 2026-08-11): require_admin is used in exactly two places,
     # routes/admin.py (all of /api/admin) and routes/bioregions.py's
     # /admin/... sub-paths only. Every other router (auth's non-exempt
     # endpoints, learners, matching, generate, sessions, progress, radar,
@@ -142,7 +142,7 @@ async def csrf_protect(request: Request, call_next):
         session_cookie = ACCESS_COOKIE
 
     # Requests with no matching session cookie at all aren't riding on
-    # cookie auth for this request — let them through; they'll 401/403 on
+    # cookie auth for this request, let them through; they'll 401/403 on
     # their own merits if they needed auth.
     if not request.cookies.get(session_cookie):
         return await call_next(request)

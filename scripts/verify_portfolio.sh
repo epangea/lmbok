@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================
-# FreqLearn — scripts/verify_portfolio.sh   (2026-11-03)
+# FreqLearn, scripts/verify_portfolio.sh   (2026-11-03)
 #
 # Live checks for the 2026-11-01 learner-portfolio changes (PROJECT.md
 # PART 43, backlog 2026.177-180). Run it like smoke.sh:
@@ -10,21 +10,21 @@
 #
 # What it checks
 #   A  Settings        ai_include_learner_portfolio / ai_include_prior_context /
-#                      ai_inline_reuse_enabled — warns if any of them would stop
+#                      ai_inline_reuse_enabled, warns if any of them would stop
 #                      the portfolio from reaching a prompt.
 #   B  Prompt blocks   Runs the REAL continuity query and portfolio builder
 #                      against MariaDB for the test learner (the sandbox tests
 #                      ran on sqlite): the queries execute, the block builds
 #                      from the learner's profile, the journey additions are a
 #                      superset of the legacy block. Prints lengths and yes/no
-#                      only — never the profile or response text.
+#                      only, never the profile or response text.
 #   C  Generation      First checks GET /api/learners/me returns learner_profile
 #                      (the My Story card and the profile the client sends back
 #                      to companions/distiller depend on it). Then a real POST /api/generate/session for a land art ("grow")
 #                      as the test learner: 200, fields populated, a real AI
 #                      model answered (not a library fallback). If the learner
 #                      has a bioregion set, notes whether the generated text
-#                      mentions it (informational — a model may paraphrase, so
+#                      mentions it (informational, a model may paraphrase, so
 #                      this is never a FAIL).
 #   D  Growth rule     ONLY with VERIFY_WRITES=1 (see side effects below).
 #                      Completes one session with empty challenge+reflection
@@ -41,7 +41,7 @@
 # Requires in backend/.env (same as e2e_org_polis.sh):
 #   ADMIN_KEY, TEST_LEARNER_EMAIL / TEST_LEARNER_PASSWORD
 # Optional overrides, to run against a different learner (recommended for
-# Part D — see below): VERIFY_LEARNER_EMAIL / VERIFY_LEARNER_PASSWORD.
+# Part D, see below): VERIFY_LEARNER_EMAIL / VERIFY_LEARNER_PASSWORD.
 # Part B needs backend/venv/bin/python; Parts B-D use the mysql/mariadb CLI
 # (same db_query() pattern as e2e_org_polis.sh) and warn-and-skip if the CLI
 # or venv is missing.
@@ -70,7 +70,7 @@ if [ ! -f "$ENV_FILE" ]; then
   exit 1
 fi
 
-# Same pattern as smoke.sh / e2e_org_polis.sh — "|| true" is load-bearing under set -e.
+# Same pattern as smoke.sh / e2e_org_polis.sh, "|| true" is load-bearing under set -e.
 env_or_file() {
   local var_name="$1"
   local current="${!var_name:-}"
@@ -91,7 +91,7 @@ fi
 LEARNER_EMAIL="${VERIFY_LEARNER_EMAIL:-$(env_or_file TEST_LEARNER_EMAIL)}"
 LEARNER_PASSWORD="${VERIFY_LEARNER_PASSWORD:-$(env_or_file TEST_LEARNER_PASSWORD)}"
 if [ -z "$LEARNER_EMAIL" ] || [ -z "$LEARNER_PASSWORD" ]; then
-  echo "SKIP  no learner credentials (TEST_LEARNER_* in $ENV_FILE, or VERIFY_LEARNER_*) — nothing to test"
+  echo "SKIP  no learner credentials (TEST_LEARNER_* in $ENV_FILE, or VERIFY_LEARNER_*), nothing to test"
   exit 0
 fi
 
@@ -163,7 +163,7 @@ echo "== Learner portfolio live checks (PART 43) =="
 echo ""
 
 # ------------------------------------------------------------
-# PART A — settings that decide whether the portfolio can reach a prompt
+# PART A, settings that decide whether the portfolio can reach a prompt
 # ------------------------------------------------------------
 echo "-- A: settings --"
 call POST "${API_BASE}/api/admin/login" "$AJAR" "" "{\"admin_key\":\"${ADMIN_KEY}\"}"
@@ -179,25 +179,25 @@ S_REUSE=$(echo "$SETTINGS_BODY"     | json_get "settings.ai_inline_reuse_enabled
 case "$(echo "${S_PORTFOLIO}" | tr '[:upper:]' '[:lower:]')" in
   "")    ok "ai_include_learner_portfolio has no row -> code default (true) applies; run scripts/2026-11-01-learner-portfolio-setting.sql if you want the toggle visible in admin Settings" ;;
   true|1|yes|on) ok "ai_include_learner_portfolio=${S_PORTFOLIO}" ;;
-  *)     warn "ai_include_learner_portfolio=${S_PORTFOLIO} — the portfolio block and journey additions are OFF; Parts B-D below will not reflect them in real prompts" ;;
+  *)     warn "ai_include_learner_portfolio=${S_PORTFOLIO}, the portfolio block and journey additions are OFF; Parts B-D below will not reflect them in real prompts" ;;
 esac
 case "$(echo "${S_PRIOR}" | tr '[:upper:]' '[:lower:]')" in
-  false|0|no|off) warn "ai_include_prior_context=${S_PRIOR} — the whole continuity block is OFF" ;;
+  false|0|no|off) warn "ai_include_prior_context=${S_PRIOR}, the whole continuity block is OFF" ;;
   *) ok "ai_include_prior_context is on (${S_PRIOR:-default true})" ;;
 esac
 case "$(echo "${S_REUSE}" | tr '[:upper:]' '[:lower:]')" in
-  true|1|yes|on) warn "ai_inline_reuse_enabled=${S_REUSE} — stored sessions can pre-empt the AI call, so the portfolio is skipped for those requests" ;;
+  true|1|yes|on) warn "ai_inline_reuse_enabled=${S_REUSE}, stored sessions can pre-empt the AI call, so the portfolio is skipped for those requests" ;;
   *) ok "ai_inline_reuse_enabled is off (${S_REUSE:-default false})" ;;
 esac
 echo ""
 
 # ------------------------------------------------------------
-# PART B — the real prompt-building code against MariaDB
+# PART B, the real prompt-building code against MariaDB
 # ------------------------------------------------------------
 echo "-- B: prompt blocks against the real database --"
 LEARNER_ID=""; BIOREGION=""; PROFILE_LEN=""
 if [ ! -x "$VENV_PY" ]; then
-  warn "backend venv python not found at $VENV_PY — skipping Part B"
+  warn "backend venv python not found at $VENV_PY, skipping Part B"
 else
   B_PY=$(mktemp)
   trap 'rm -f "$AJAR" "$LJAR" "$B_PY"' EXIT
@@ -243,7 +243,7 @@ PY
   if [ -n "$B_ERR" ]; then
     bad "Part B raised an error against the live DB: $B_ERR"
   elif [ -z "$B_OUT" ]; then
-    warn "Part B produced no output (venv/import problem?) — run it by hand: cd backend && venv/bin/python -c 'import prior_session_context'"
+    warn "Part B produced no output (venv/import problem?), run it by hand: cd backend && venv/bin/python -c 'import prior_session_context'"
   elif [ "$(getv learner_found)" != "1" ]; then
     bad "no learner with email ${LEARNER_EMAIL} in the database"
   else
@@ -255,7 +255,7 @@ PY
       note "learner has a My Story profile (${PROFILE_LEN} chars)"
       if [ "${PB_LEN:-0}" -gt 0 ]; then ok "portfolio block builds from the profile (${PB_LEN} chars)"; else bad "profile is non-empty but the portfolio block is empty"; fi
     else
-      warn "this learner has NO My Story yet — the portfolio block is empty for this account, so the main change cannot be exercised here. Finish a session with a written reflection first, or set VERIFY_LEARNER_EMAIL to a learner who has one."
+      warn "this learner has NO My Story yet, the portfolio block is empty for this account, so the main change cannot be exercised here. Finish a session with a written reflection first, or set VERIFY_LEARNER_EMAIL to a learner who has one."
     fi
     if [ "${JOU:-0}" -ge "${LEG:-0}" ]; then
       ok "journey continuity (${JOU} chars) is a superset of the legacy block (${LEG} chars)"
@@ -263,13 +263,13 @@ PY
       bad "journey continuity (${JOU}) is shorter than the legacy block (${LEG})"
     fi
     note "journey excerpts present: $(getv journey_has_excerpt) | cross-art list present: $(getv journey_has_cross_art)  (1 = yes; 0 is normal if the learner has no matching completed sessions)"
-    [ -n "$BIOREGION" ] && note "learner bioregion on file: ${BIOREGION}" || note "learner has no bioregion on file — the restored bioregion line is skipped for this account"
+    [ -n "$BIOREGION" ] && note "learner bioregion on file: ${BIOREGION}" || note "learner has no bioregion on file, the restored bioregion line is skipped for this account"
   fi
 fi
 echo ""
 
 # ------------------------------------------------------------
-# PART C — a real generation call as the test learner
+# PART C, a real generation call as the test learner
 # ------------------------------------------------------------
 echo "-- C: real session generation (land art: grow) --"
 call POST "${API_BASE}/api/auth/login" "$LJAR" "" \
@@ -292,9 +292,9 @@ except Exception:
 " 2>/dev/null || echo 0)
 if [ "${PROFILE_LEN:-0}" -gt 0 ]; then
   if [ "${ME_PROFILE_LEN:-0}" -gt 0 ]; then
-    ok "/api/learners/me returns learner_profile (${ME_PROFILE_LEN} chars) — the My Story card has data to show"
+    ok "/api/learners/me returns learner_profile (${ME_PROFILE_LEN} chars), the My Story card has data to show"
   else
-    bad "/api/learners/me returns NO learner_profile although the database has ${PROFILE_LEN} chars — My Story will show empty and the profile cannot accumulate (backend/routes/learners.py get_me; restart freqlearn after deploying)"
+    bad "/api/learners/me returns NO learner_profile although the database has ${PROFILE_LEN} chars, My Story will show empty and the profile cannot accumulate (backend/routes/learners.py get_me; restart freqlearn after deploying)"
   fi
 else
   note "no stored profile to compare against /api/learners/me (Part B had none, or was skipped)"
@@ -326,17 +326,17 @@ print('MISSING:' + ','.join(missing) if missing else 'OK')
       if [ -z "$MODEL" ]; then
         warn "could not read sessions.model for id=${SESSION1_ID}"
       elif [ "$MODEL" = "library" ]; then
-        warn "sessions.model='library' — this session was NOT generated for the learner, so the portfolio did not apply (breaker tripped or ai_inline_reuse_enabled on)"
+        warn "sessions.model='library', this session was NOT generated for the learner, so the portfolio did not apply (breaker tripped or ai_inline_reuse_enabled on)"
       else
-        ok "sessions.model='${MODEL}' — a real AI call answered with the portfolio-aware prompt"
+        ok "sessions.model='${MODEL}', a real AI call answered with the portfolio-aware prompt"
       fi
       # 2026-11-03: live sessions have no dev_phase_id on purpose; the phase they
       # were generated for lives in generated_for_phase_id (admin shows it).
       GEN_PHASE=$(db_query "SELECT generated_for_phase_id FROM sessions WHERE id=${SESSION1_ID};")
       if [ -n "$GEN_PHASE" ] && [ "$GEN_PHASE" != "NULL" ]; then
-        ok "sessions.generated_for_phase_id=${GEN_PHASE} recorded — the admin session list can show this session's phase"
+        ok "sessions.generated_for_phase_id=${GEN_PHASE} recorded, the admin session list can show this session's phase"
       else
-        warn "sessions.generated_for_phase_id is empty for id=${SESSION1_ID} — run scripts/2026-11-03-sessions-generated-for-phase.sql, and check the new generate.py is live (restart freqlearn). Not a failure."
+        warn "sessions.generated_for_phase_id is empty for id=${SESSION1_ID}, run scripts/2026-11-03-sessions-generated-for-phase.sql, and check the new generate.py is live (restart freqlearn). Not a failure."
       fi
     fi
   else
@@ -351,19 +351,19 @@ bio = os.environ['BIO'].lower()
 words = [w.strip(',.()') for w in bio.split() if len(w.strip(',.()')) >= 5]
 print('yes' if (bio in text or any(w in text for w in words)) else 'no')
 ")
-    note "generated text mentions the learner's bioregion ('${BIOREGION}'): ${MENTIONED} (informational only — models paraphrase, so this is never a FAIL)"
+    note "generated text mentions the learner's bioregion ('${BIOREGION}'): ${MENTIONED} (informational only, models paraphrase, so this is never a FAIL)"
   fi
 fi
 echo ""
 
 # ------------------------------------------------------------
-# PART D — the real-response growth rule (writes real progress)
+# PART D, the real-response growth rule (writes real progress)
 # ------------------------------------------------------------
 echo "-- D: real-response growth rule --"
 if [ "$VERIFY_WRITES" != "1" ]; then
   note "skipped. Re-run with VERIFY_WRITES=1 to complete two sessions for ${LEARNER_EMAIL} (adds real progress; see the SIDE EFFECTS note at the top of this script)."
 elif [ -z "$MYSQL_BIN" ] || [ -z "$LEARNER_ID" ]; then
-  warn "Part D needs the mysql/mariadb CLI and a learner id from Part B — skipping"
+  warn "Part D needs the mysql/mariadb CLI and a learner id from Part B, skipping"
 else
   skill_state() {   # skill_state SKILL_ID -> "level|evidence"
     local s
@@ -373,7 +373,7 @@ else
 
   # --- D1: empty challenge + reflection -> not counted ---
   if [ -z "$SESSION1_ID" ]; then
-    warn "no session from Part C to complete — skipping D1"
+    warn "no session from Part C to complete, skipping D1"
   else
     SID1=$(db_query "SELECT primary_skill_id FROM sessions WHERE id=${SESSION1_ID};")
     B1=$(skill_state "$SID1")
@@ -382,7 +382,7 @@ else
     pass "complete session ${SESSION1_ID} with empty challenge + reflection" "$HTTP_CODE" "200"
     FLAG=$(echo "$HTTP_BODY" | json_get "counted_toward_growth")
     if [ "$FLAG" = "False" ]; then ok "response says counted_toward_growth=false"
-    elif [ -z "$FLAG" ]; then bad "response has no counted_toward_growth field — is the new sessions.py running? (restart freqlearn)"
+    elif [ -z "$FLAG" ]; then bad "response has no counted_toward_growth field, is the new sessions.py running? (restart freqlearn)"
     else bad "counted_toward_growth=${FLAG} for an empty session (expected False)"; fi
     A1=$(skill_state "$SID1")
     if [ "$A1" = "$B1" ]; then ok "primary skill ${SID1} unchanged (level|evidence ${B1})"; else bad "primary skill ${SID1} changed ${B1} -> ${A1} on an uncounted session"; fi
@@ -394,7 +394,7 @@ else
   call POST "${API_BASE}/api/generate/session" "$LJAR" "$LCSRF" \
     '{"art_slug":"grow","phase_slug":"water","language":"en"}' "$AI_GEN_MAX_TIME"
   if [ "$HTTP_CODE" != "200" ]; then
-    warn "second generation returned HTTP ${HTTP_CODE} — skipping D2"
+    warn "second generation returned HTTP ${HTTP_CODE}, skipping D2"
   else
     SESSION2_ID=$(echo "$HTTP_BODY" | json_get "session_id")
     SID2=$(db_query "SELECT primary_skill_id FROM sessions WHERE id=${SESSION2_ID};")
@@ -418,7 +418,7 @@ fi
 echo ""
 
 # ------------------------------------------------------------
-# PART E — the reflect-screen hint is actually being served
+# PART E, the reflect-screen hint is actually being served
 # ------------------------------------------------------------
 echo "-- E: frontend assets --"
 check_asset() {   # check_asset LABEL URL MIN_COUNT
@@ -426,7 +426,7 @@ check_asset() {   # check_asset LABEL URL MIN_COUNT
   body=$(curl -s --max-time 20 "$2" || true)
   count=$({ echo "$body" | grep -o "session.growth_hint" | wc -l | tr -d ' '; } || true)
   if [ "${count:-0}" -ge "$3" ]; then ok "$1 contains session.growth_hint (x${count})"
-  else bad "$1 does not contain session.growth_hint (found ${count:-0}, need >= $3) — did bump_asset_versions.sh run, and is the file deployed?"; fi
+  else bad "$1 does not contain session.growth_hint (found ${count:-0}, need >= $3), did bump_asset_versions.sh run, and is the file deployed?"; fi
 }
 check_asset "app.js"       "${API_BASE}/app.js"       2
 check_asset "lang/en.json" "${API_BASE}/lang/en.json" 1

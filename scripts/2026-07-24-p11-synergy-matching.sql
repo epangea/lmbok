@@ -1,7 +1,7 @@
--- P11: Synergy — AI-driven org needs matching
+-- P11: Synergy, AI-driven org needs matching
 -- Run this against the live DB before deploying the corresponding code.
 --
--- PREFLIGHT — run these first and eyeball the output before ALTERing anything:
+-- PREFLIGHT, run these first and eyeball the output before ALTERing anything:
 --   DESCRIBE opportunity_listings;
 --   DESCRIBE opportunity_matches;
 -- Confirm opportunity_matches.learner_status is currently:
@@ -19,15 +19,15 @@ ALTER TABLE opportunity_matches
     ADD COLUMN notified_at DATETIME NULL AFTER matched_at;
 
 -- 3. Two new learner_status values for the AI-suggested flow:
---      'suggested' — AI ranked them into an org's top 10; org sees them anonymized, hasn't invited yet
---      'invited'   — org sent a notification; learner hasn't responded yet
+--      'suggested', AI ranked them into an org's top 10; org sees them anonymized, hasn't invited yet
+--      'invited', org sent a notification; learner hasn't responded yet
 --    Existing values are preserved verbatim (do not drop/reorder them).
 ALTER TABLE opportunity_matches
     MODIFY COLUMN learner_status
         ENUM('pending','interested','declined','connected','withdrawn','suggested','invited')
         NOT NULL DEFAULT 'pending';
 
--- POSTFLIGHT — confirm:
+-- POSTFLIGHT, confirm:
 --   DESCRIBE opportunity_listings;
 --   DESCRIBE opportunity_matches;
 -- and that existing rows still read learner_status/org_status unchanged

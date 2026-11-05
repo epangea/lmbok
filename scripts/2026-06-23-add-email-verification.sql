@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — migrate: add email verification to learners
+-- FreqLearn, migrate: add email verification to learners
 -- Run once after deploying updated models.py:
 --   mysql freqlearn < scripts/2026-06-23-add-email-verification.sql
 -- ============================================================

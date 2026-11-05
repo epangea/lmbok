@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<meta name="description" content="Surfing the Frequencies — a free lifelong learning platform for every human on earth"/>
+<meta name="description" content="Surfing the Frequencies, a free lifelong learning platform for every human on earth"/>
 <meta name="theme-color" content="#080C14"/>
 <title>Surfing the Frequencies</title>
 
-<!-- Favicon — inline SVG wave, no separate file needed -->
+<!-- Favicon, inline SVG wave, no separate file needed -->
 <link rel="icon" type="image/png" href="/icons/icon-192.png"/>
 
-<!-- PWA — installable app shell (added 2026-08-19). manifest.json + icons/
+<!-- PWA, installable app shell (added 2026-08-19). manifest.json + icons/
      live in frontend/; sw.js registered below. See sw.js's own header
      comment for caching strategy and how CACHE_NAME versioning ties into
      scripts/bump_asset_versions.sh. -->
@@ -24,41 +24,41 @@
 <!-- Styles -->
 <!-- Cache-busting: bump ASSET_VERSION below on every deploy that touches
      app.css/app.js. Without it, browsers can hold a long-lived cached copy
-     of these files and a plain reload won't fetch the new version — only a
+     of these files and a plain reload won't fetch the new version, only a
      hard-refresh or incognito window would show the change (confirmed
      2026-07-19, P12 follow-up). Query-string versioning forces a fresh
      fetch on any version bump regardless of nginx cache headers. -->
-<link rel="stylesheet" href="app.css?v=902190621">
+<link rel="stylesheet" href="app.css?v=2794695757">
 </head>
 <body>
 
 <!-- ============================================================
-     Surfing the Frequencies — build.onehouse.top
+     Surfing the Frequencies, build.onehouse.top
 
      Platform architecture:
-       index.html  — shell (this file)
-       app.css     — styles (external, cached separately)
-       app.js      — logic  (external, cached separately)
+       index.html, shell (this file)
+       app.css, styles (external, cached separately)
+       app.js, logic  (external, cached separately)
 
      Portals:
-       /           — Learner portal (Agora, Academy, Mouseion, Peripatos)
-       /org        — Organization portal
-       /contribute — Community LECKO contribution
-       /admin      — Admin portal
-       /polis      — The Polis (referenda, bioregions, civic)
+       /, Learner portal (Agora, Academy, Mouseion, Peripatos)
+       /org, Organization portal
+       /contribute, Community LECKO contribution
+       /admin, Admin portal
+       /polis, The Polis (referenda, bioregions, civic)
 
      Backend:
        FastAPI on port 8000 (proxied via nginx at /api/*)
-       MariaDB — schema in /var/www/freqlearn/schema.sql
+       MariaDB, schema in /var/www/freqlearn/schema.sql
 
      To update: edit app.js or app.css and upload, then bump ASSET_VERSION
      (the ?v=... query string on both tags below) so browsers don't serve a
-     stale cached copy on a plain reload — see P12 follow-up, 2026-07-19.
-     No build step required — nginx serves static files directly.
+     stale cached copy on a plain reload, see P12 follow-up, 2026-07-19.
+     No build step required, nginx serves static files directly.
 
      i18n (2026-07-21): translated strings live in lang/<code>.json (one file
      per language, en/fr/es/vi/zh/ar/de/ru), fetched lazily by app.js only
-     when a learner's UI language isn't English — see ensureLanguageLoaded()
+     when a learner's UI language isn't English, see ensureLanguageLoaded()
      in app.js. If you edit any file under lang/, bump LANG_ASSET_VERSION at
      the top of app.js (separate from ASSET_VERSION here, since app.html
      never references the lang/ files directly).
@@ -66,14 +66,14 @@
 
 <div id="root"></div>
 
-<script src="app.js?v=8280730"></script>
+<script src="app.js?v=3015466554"></script>
 
-<!-- Service worker registration — see sw.js header comment for strategy.
+<!-- Service worker registration, see sw.js header comment for strategy.
      Kept as a tiny inline script (not folded into app.js) so it registers
      even if app.js itself ever fails to parse/execute. Dispatches a
      'lmbok:sw-update-ready' event on the new-version-waiting case; app.js
      listens for it to show the non-disruptive "update available" banner
-     rather than force-reloading mid-session (2026-08-19 decision — see
+     rather than force-reloading mid-session (2026-08-19 decision, see
      PROJECT.md). -->
 <script>
 if ('serviceWorker' in navigator) {

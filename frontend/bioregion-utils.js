@@ -1,12 +1,12 @@
 // ══════════════════════════════════════════════════
-// bioregion-utils.js — shared bioregion auto-detection
+// bioregion-utils.js, shared bioregion auto-detection
 // Added 2026-07-24 for P11 (org bioregion self-service + admin parity).
 //
 // NOTE: app.js has its own long-standing copy of this same lat/lng-matching
 // logic (getBioregionProfile / loadBioregionProfiles / initBioregion), built
 // for the learner onboarding flow and wired into localStorage state that's
 // specific to that flow. It was deliberately NOT refactored to use this file
-// — app.js is a large, history-laden file and this was a small enough need
+//, app.js is a large, history-laden file and this was a small enough need
 // that duplicating ~20 lines of pure logic was lower-risk than touching it.
 // This is acknowledged tech debt: two copies of the same bounding-box match
 // exist (app.js's internal one, and this shared one for org.html/admin.html).
@@ -49,7 +49,7 @@ var BioregionUtils = (function () {
     return null;
   }
 
-  // detect(onResult) — onResult({ok, name, placeName, lat, lng, reason})
+  // detect(onResult), onResult({ok, name, placeName, lat, lng, reason})
   function detect(onResult) {
     if (!navigator.geolocation) { onResult({ ok: false, reason: 'no_geolocation' }); return; }
     navigator.geolocation.getCurrentPosition(
@@ -79,7 +79,7 @@ var BioregionUtils = (function () {
     );
   }
 
-  // listNames(cb) — cb(['Red River Delta', ...]) for a manual-override dropdown
+  // listNames(cb), cb(['Red River Delta', ...]) for a manual-override dropdown
   function listNames(cb) {
     loadProfiles().then(function (profiles) {
       cb(profiles.map(function (p) { return p.name; }).filter(Boolean).sort());

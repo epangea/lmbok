@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn Backend — cookie_auth.py
+# FreqLearn Backend, cookie_auth.py
 # Shared helpers for httpOnly-cookie based auth (learner + org).
 # Added 2026-07-16 as part of P-SEC1 (move JWTs out of localStorage).
 #
@@ -10,7 +10,7 @@
 #   - A separate, NON-httpOnly "csrf" cookie holds a random token that JS
 #     CAN read. Every state-changing request (POST/PATCH/PUT/DELETE) must
 #     echo that value back in an X-CSRF-Token header. This is the standard
-#     "double-submit cookie" pattern — an attacker's cross-site form/script
+#     "double-submit cookie" pattern, an attacker's cross-site form/script
 #     can make the browser send the httpOnly cookies, but can't read the
 #     csrf cookie to also send a matching header, so the request is
 #     rejected. Enforced globally in main.py's csrf_protect middleware.
@@ -23,14 +23,14 @@ import secrets
 from fastapi import Response
 
 COOKIE_SECURE   = os.getenv("COOKIE_SECURE", "true").lower() != "false"  # keep True in prod (HTTPS); allow override for local http dev
-COOKIE_SAMESITE = "lax"   # sent on same-site + top-level nav; blocked on cross-site POSTs — first line of CSRF defense, backed up by the double-submit check
+COOKIE_SAMESITE = "lax"   # sent on same-site + top-level nav; blocked on cross-site POSTs, first line of CSRF defense, backed up by the double-submit check
 
 # Learner cookies
 ACCESS_COOKIE       = "fl_access"
 REFRESH_COOKIE      = "fl_refresh"
 CSRF_COOKIE         = "fl_csrf"
 ACCESS_COOKIE_PATH  = "/api"
-REFRESH_COOKIE_PATH = "/api/auth"   # only sent to /api/auth/* — narrows exposure of the long-lived refresh token
+REFRESH_COOKIE_PATH = "/api/auth"   # only sent to /api/auth/*, narrows exposure of the long-lived refresh token
 
 # Org cookies (separate namespace from learner cookies)
 ORG_ACCESS_COOKIE      = "fl_org_access"
@@ -97,13 +97,13 @@ def clear_org_cookies(response: Response) -> None:
 # Added 2026-07-17 as part of P-SEC2. Admin still authenticates with the
 # single shared ADMIN_KEY (checked once, server-side, at POST /api/admin/login)
 # but the raw secret is never handed back to the browser and never touches
-# localStorage again — this closes the same XSS-exposure class P-SEC1 closed
+# localStorage again, this closes the same XSS-exposure class P-SEC1 closed
 # for learner/org. A short-lived signed session token stands in for it,
 # transported the same httpOnly-cookie-plus-CSRF-cookie way as the others.
 #
 # ADMIN_ACCESS_COOKIE_PATH is intentionally broad ("/api", not "/api/admin")
-# because admin-gated routes live under two different prefixes —
-# /api/admin/* (admin.py) and /api/bioregions/admin/* (bioregions.py) — and
+# because admin-gated routes live under two different prefixes,
+# /api/admin/* (admin.py) and /api/bioregions/admin/* (bioregions.py), and
 # the cookie needs to reach both.
 ADMIN_ACCESS_COOKIE      = "fl_admin_session"
 ADMIN_CSRF_COOKIE        = "fl_admin_csrf"

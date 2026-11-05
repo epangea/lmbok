@@ -1,4 +1,4 @@
--- FreqLearn — add language column to sessions + heuristic backfill
+-- FreqLearn, add language column to sessions + heuristic backfill
 -- Run:  mysql freqlearn < /var/www/freqlearn/scripts/migrate_session_language.sql
 -- Safe to re-run: idempotent (guarded by INFORMATION_SCHEMA checks).
 -- Created: 2026-06-27 by openclaw agent.
@@ -15,19 +15,19 @@ SET @col_exists := (
 
 SET @ddl := IF(@col_exists = 0,
   'ALTER TABLE sessions ADD COLUMN language VARCHAR(10) NULL DEFAULT ''en'' AFTER created_at',
-  'SELECT ''language column already exists — skipping ALTER'' AS note');
+  'SELECT ''language column already exists, skipping ALTER'' AS note');
 
 PREPARE stmt FROM @ddl;
 EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- ============================================================
--- 2. Backfill heuristic — order matters (more specific patterns first)
+-- 2. Backfill heuristic, order matters (more specific patterns first)
 --    Use ICU-style regex via MariaDB (\\xNNNN) which works without
 --    any external deps. Each UPDATE only touches rows still NULL/''.
 -- ============================================================
 
--- 2a. Russian / Cyrillic (any Cyrillic character wins first — it's unambiguous)
+-- 2a. Russian / Cyrillic (any Cyrillic character wins first, it's unambiguous)
 UPDATE sessions
 SET language = 'ru'
 WHERE (language IS NULL OR language = '')
@@ -60,7 +60,7 @@ WHERE (language IS NULL OR language = '')
      OR reflect_prompt    REGEXP '[\\x{0600}-\\x{06FF}]'
   );
 
--- 2d. Chinese / Japanese / Korean (CJK unified — collapsed to 'zh' for now;
+-- 2d. Chinese / Japanese / Korean (CJK unified, collapsed to 'zh' for now;
 --     if you ever need ja/ko distinction, split by Hiragana/Katakana ranges)
 UPDATE sessions
 SET language = 'zh'
@@ -127,7 +127,7 @@ EXECUTE stmt;
 DEALLOCATE PREPARE stmt;
 
 -- ============================================================
--- 4. Report — show the resulting distribution
+-- 4. Report, show the resulting distribution
 -- ============================================================
 SELECT language, COUNT(*) AS session_count
 FROM sessions

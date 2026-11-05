@@ -1,4 +1,4 @@
-# FreqLearn — routes/progress.py
+# FreqLearn, routes/progress.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select

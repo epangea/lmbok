@@ -3,15 +3,15 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>Contribute — Surfing the Frequencies</title>
+<title>Contribute, Surfing the Frequencies</title>
 <link rel="icon" type="image/png" href="/icons/icon-192.png"/>
 <link rel="manifest" href="/manifest.json"/>
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
-<meta name="description" content="Help build the universal library of human learning. Submit a LECKO — a Learning Experience Knowledge Chunk Object."/>
+<meta name="description" content="Help build the universal library of human learning. Submit a LECKO, a Learning Experience Knowledge Chunk Object."/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
-<link rel="stylesheet" href="app.css?v=902190621">
+<link rel="stylesheet" href="app.css?v=2794695757">
 </head>
 <body class="page-contribute">
 
@@ -25,7 +25,7 @@
 <div class="hero">
   <div class="lecko-pill">LECKO</div>
   <h1>Help build the universal<br>learning library</h1>
-  <p>A LECKO — <em>Learning Experience Knowledge Chunk Object</em> — is a unit of real human knowledge. Submit one from your own practice, culture, or field of expertise.</p>
+  <p>A LECKO, <em>Learning Experience Knowledge Chunk Object</em>, is a unit of real human knowledge. Submit one from your own practice, culture, or field of expertise.</p>
   <p style="font-size:13px;color:var(--text3);margin-top:8px">Every LECKO goes through a review before it enters the library. Quality over quantity.</p>
 </div>
 
@@ -51,7 +51,7 @@
         <div class="form-group">
           <label>LECKO title <span>*</span></label>
           <input type="text" id="f-title" placeholder="e.g. How to read the wind before planting" maxlength="200"/>
-          <div class="form-hint">A clear, concrete title. Not a topic — a piece of knowledge you can actually use.</div>
+          <div class="form-hint">A clear, concrete title. Not a topic, a piece of knowledge you can actually use.</div>
         </div>
         <div class="form-group">
           <label>What does this teach? <span>*</span></label>
@@ -73,36 +73,36 @@
             <label>Which art does it develop? <span>*</span></label>
             <select id="f-art">
               <option value="">Select an art…</option>
-              <option value="move">Moving — inner-connectedness</option>
-              <option value="eat">Eating — bodily nourishment</option>
-              <option value="feel">Feeling — emotional growth</option>
-              <option value="notice">Noticing — outward awareness</option>
-              <option value="express">Expressing — creative growth</option>
-              <option value="live">Living — civil duties</option>
-              <option value="listen">Listening — empathy</option>
-              <option value="give">Giving — compassion</option>
-              <option value="receive">Receiving — humility</option>
-              <option value="collaborate">Collaborating — shared vision</option>
-              <option value="understand">Understanding — first principles</option>
-              <option value="respect">Respecting — the golden rule</option>
-              <option value="build">Building — green design</option>
-              <option value="grow">Growing — food sovereignty</option>
-              <option value="consume">Consuming — stewardship</option>
+              <option value="move">Moving, inner-connectedness</option>
+              <option value="eat">Eating, bodily nourishment</option>
+              <option value="feel">Feeling, emotional growth</option>
+              <option value="notice">Noticing, outward awareness</option>
+              <option value="express">Expressing, creative growth</option>
+              <option value="live">Living, civil duties</option>
+              <option value="listen">Listening, empathy</option>
+              <option value="give">Giving, compassion</option>
+              <option value="receive">Receiving, humility</option>
+              <option value="collaborate">Collaborating, shared vision</option>
+              <option value="understand">Understanding, first principles</option>
+              <option value="respect">Respecting, the golden rule</option>
+              <option value="build">Building, green design</option>
+              <option value="grow">Growing, food sovereignty</option>
+              <option value="consume">Consuming, stewardship</option>
             </select>
           </div>
           <div class="form-group">
             <label>Who is it for? <span>*</span></label>
             <select id="f-phase">
               <option value="">Select a phase…</option>
-              <!-- Populated on load from GET /api/phases (dev_phases table) —
+              <!-- Populated on load from GET /api/phases (dev_phases table),
                    the same source as onboarding/preferences' PHASES array.
                    Static fallback options below are only used if that fetch fails. -->
-              <option value="prenascent">Expecting a child (ParentGuide) — Pregnancy</option>
-              <option value="nascent">Newborn & Infant (GuardianGuide) — Ages 0~2</option>
-              <option value="child">Child (GuardianGuide) — Ages 3~11</option>
-              <option value="adolescent">Adolescent — Ages 12~19</option>
-              <option value="adult">Adult — Ages 20~59</option>
-              <option value="elder">Elder — Ages 60+</option>
+              <option value="prenascent">Expecting a child (ParentGuide), Pregnancy</option>
+              <option value="nascent">Newborn & Infant (GuardianGuide), Ages 0~2</option>
+              <option value="child">Child (GuardianGuide), Ages 3~11</option>
+              <option value="adolescent">Adolescent, Ages 12~19</option>
+              <option value="adult">Adult, Ages 20~59</option>
+              <option value="elder">Elder, Ages 60+</option>
             </select>
           </div>
         </div>
@@ -112,7 +112,7 @@
             <select id="f-domain" onchange="onDomainChange()">
               <option value="">Select a domain… (optional)</option>
             </select>
-            <div class="form-hint">The broader field this knowledge comes from — same 8 domains as the Mouseion.</div>
+            <div class="form-hint">The broader field this knowledge comes from, same 8 domains as the Mouseion.</div>
           </div>
           <div class="form-group">
             <label>Related skill</label>
@@ -131,7 +131,7 @@
       <div id="step-3" style="display:none">
         <div class="form-group">
           <label>How would you know someone learned it?</label>
-          <textarea id="f-assess" rows="3" placeholder="Describe a task, observation, or conversation that would show real understanding — not a quiz."></textarea>
+          <textarea id="f-assess" rows="3" placeholder="Describe a task, observation, or conversation that would show real understanding, not a quiz."></textarea>
           <div class="form-hint">The best assessment is something real: a thing made, a conversation had, a decision taken.</div>
         </div>
         <div class="form-group">
@@ -203,7 +203,7 @@ async function loadContextOptions() {
       sel.appendChild(opt);
     });
   } catch (e) {
-    console.warn('Could not load Mouseion domains — domain/skill selects will stay empty.', e);
+    console.warn('Could not load Mouseion domains, domain/skill selects will stay empty.', e);
   }
 
   try {
@@ -215,14 +215,14 @@ async function loadContextOptions() {
       phases.forEach(function(p) {
         var opt = document.createElement('option');
         opt.value = p.slug;
-        opt.textContent = p.name + (p.age_range ? ' — ' + p.age_range : '');
+        opt.textContent = p.name + (p.age_range ? ', ' + p.age_range : '');
         phaseSel.appendChild(opt);
       });
     }
     // If the fetch succeeds but returns nothing, the static fallback options
     // already in the HTML are left in place untouched.
   } catch (e) {
-    console.warn('Could not load phases — keeping static fallback options.', e);
+    console.warn('Could not load phases, keeping static fallback options.', e);
   }
 }
 
@@ -328,14 +328,14 @@ async function loadLeckos(artSlug) {
     document.getElementById('lecko-count').textContent = allLeckos.length + ' entries';
   } catch(e) {
     document.getElementById('lecko-grid').innerHTML =
-      '<div class="empty"><div>🌊</div>Could not load the library — please try again.</div>';
+      '<div class="empty"><div>🌊</div>Could not load the library, please try again.</div>';
   }
 }
 
 function renderLeckos(leckos) {
   var grid = document.getElementById('lecko-grid');
   if (!leckos.length) {
-    grid.innerHTML = '<div class="empty"><div>🌊</div>No LECKOs here yet — be the first to contribute one.</div>';
+    grid.innerHTML = '<div class="empty"><div>🌊</div>No LECKOs here yet, be the first to contribute one.</div>';
     return;
   }
   grid.innerHTML = leckos.map(function(l) {
@@ -365,7 +365,7 @@ loadContextOptions();
 loadLeckos('');
 </script>
 
-<!-- Service worker registration — see frontend/sw.js header comment. -->
+<!-- Service worker registration, see frontend/sw.js header comment. -->
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {

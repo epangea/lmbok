@@ -1,4 +1,4 @@
-# FreqLearn — show real nginx server blocks
+# FreqLearn, show real nginx server blocks
 # Run on server:  bash scripts/show_nginx_sites.sh
 
 set -e

@@ -1,5 +1,5 @@
 -- ============================================================
--- FreqLearn — add_polis_tables.sql
+-- FreqLearn, add_polis_tables.sql
 -- Civic participation tables for the Polis portal.
 -- Run: mysql -u freqlearn -p freqlearn < add_polis_tables.sql
 -- ============================================================
@@ -86,7 +86,7 @@ INSERT INTO referenda (title, description, scope, bioregion, status, opens_at, c
  'regional', 'Local bioregion', 'open', NOW(), DATE_ADD(NOW(), INTERVAL 60 DAY)),
 
 ('30% minimum green space in all urban developments',
- 'Should local governments be legally required to ensure that at least 30% of all new urban developments is dedicated to green space — trees, gardens, wetlands, or community food forests — accessible to all residents at no cost?',
+ 'Should local governments be legally required to ensure that at least 30% of all new urban developments is dedicated to green space, trees, gardens, wetlands, or community food forests, accessible to all residents at no cost?',
  'local', NULL, 'open', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY)),
 
 ('Open source AI for public education globally',

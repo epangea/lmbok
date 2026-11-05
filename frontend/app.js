@@ -1,24 +1,24 @@
 // ============================================================
-// Surfing the Frequencies — app.js
+// Surfing the Frequencies, app.js
 // Complete frontend application logic
 //
 // SECTIONS:
-// 1.  Sound System      — Web Audio API, no external files
-// 2.  API Client        — All fetch calls to FastAPI backend
-// 3.  State             — Single source of truth
-// 4.  Radar Graph       — SVG triangle renderer
-// 5.  Auth Pages        — Login and registration
-// 6.  Navigation        — Nav bar
-// 7.  Dashboard/Agora   — Main learner home
-// 8.  Session/Academy   — 5-phase learning session
-// 9.  Mouseion          — Skill map
-// 10. Peripatos         — Reflection space
-// 11. Handlers          — All user interaction handlers
-// 12. Onboarding        — 5-screen new user flow
-// 13. Render            — Main draw() function and boot
+// 1.  Sound System, Web Audio API, no external files
+// 2.  API Client, All fetch calls to FastAPI backend
+// 3.  State, Single source of truth
+// 4.  Radar Graph, SVG triangle renderer
+// 5.  Auth Pages, Login and registration
+// 6.  Navigation, Nav bar
+// 7.  Dashboard/Agora, Main learner home
+// 8.  Session/Academy, 5-phase learning session
+// 9.  Mouseion, Skill map
+// 10. Peripatos, Reflection space
+// 11. Handlers, All user interaction handlers
+// 12. Onboarding, 5-screen new user flow
+// 13. Render, Main draw() function and boot
 //
 // Architecture notes:
-//   - No framework — vanilla JS for maximum compatibility (Tier 2/3)
+//   - No framework, vanilla JS for maximum compatibility (Tier 2/3)
 //   - State managed in single S object, draw() rerenders on change
 //   - API calls return promises; errors logged but never crash the UI
 //   - Sound system degrades gracefully if browser blocks audio
@@ -38,7 +38,7 @@ const LANG_ASSET_VERSION = '20260817b';
 
 // ══════════════════════════════════════════════════
 // SOUND SYSTEM
-// Web Audio API — no external files needed
+// Web Audio API, no external files needed
 // Gracefully disabled if browser blocks autoplay
 // ══════════════════════════════════════════════════
 var SND = {
@@ -77,7 +77,7 @@ var SND = {
   },
 
   // ── Named sounds ─────────────────────────────────
-  // Session start — rising wave
+  // Session start, rising wave
   sessionStart: function() {
     SND.init();
     setTimeout(function(){ SND.tone(220, 'sine', 0.4, 0.08); }, 0);
@@ -86,14 +86,14 @@ var SND = {
     setTimeout(function(){ SND.chord([440,550,660], 'sine', 0.8, 0.12); }, 400);
   },
 
-  // Phase complete — soft chime
+  // Phase complete, soft chime
   phaseComplete: function() {
     SND.init();
     SND.chord([528, 660], 'sine', 0.5, 0.10);
     setTimeout(function(){ SND.tone(792, 'sine', 0.4, 0.07); }, 150);
   },
 
-  // Correct answer — warm affirmation
+  // Correct answer, warm affirmation
   correct: function() {
     SND.init();
     SND.tone(523, 'sine', 0.15, 0.08);
@@ -101,14 +101,14 @@ var SND = {
     setTimeout(function(){ SND.tone(784, 'sine', 0.35, 0.10); }, 200);
   },
 
-  // Wrong answer — gentle nudge, not punishing
+  // Wrong answer, gentle nudge, not punishing
   wrong: function() {
     SND.init();
     SND.tone(300, 'sine', 0.15, 0.06);
     setTimeout(function(){ SND.tone(260, 'sine', 0.3, 0.06); }, 120);
   },
 
-  // Session complete — resonant resolution
+  // Session complete, resonant resolution
   sessionComplete: function() {
     SND.init();
     setTimeout(function(){ SND.chord([261,329,392], 'sine', 0.3, 0.08); }, 0);
@@ -117,14 +117,14 @@ var SND = {
     setTimeout(function(){ SND.chord([523,659,784,1047], 'sine', 1.2, 0.10); }, 650);
   },
 
-  // Onboard step — gentle progress
+  // Onboard step, gentle progress
   step: function() {
     SND.init();
     SND.tone(440, 'sine', 0.2, 0.07);
     setTimeout(function(){ SND.tone(554, 'sine', 0.25, 0.07); }, 100);
   },
 
-  // UI click — subtle tap
+  // UI click, subtle tap
   tap: function() {
     SND.init();
     SND.tone(800, 'sine', 0.06, 0.04);
@@ -142,7 +142,7 @@ var SND = {
 // Talks to FastAPI backend at /api/*
 // ══════════════════════════════════════════════════
 // Reads a non-httpOnly cookie by name (used only for the CSRF double-submit
-// token — fl_access/fl_refresh are httpOnly and never visible to JS, by
+// token, fl_access/fl_refresh are httpOnly and never visible to JS, by
 // design, since P-SEC1 2026-07-16).
 function getCookie(name) {
   const m = document.cookie.match('(?:^|; )' + name + '=([^;]*)');
@@ -156,13 +156,13 @@ const API = {
   // (e.g. bioregion save firing '/auth/me' + '/generate/profile-update'
   // back-to-back with no await between them, plus a session start around the
   // same time) can all hit a 401 at once when the access cookie has expired.
-  // Each used to call POST /auth/refresh independently — but the refresh
+  // Each used to call POST /auth/refresh independently, but the refresh
   // token is single-use/rotated server-side, so only the first of several
   // concurrent refresh calls actually succeeds; the rest 401 and trigger
   // clear_learner_cookies(), which deletes fl_csrf. Set-Cookie headers apply
   // in whatever order the responses happen to arrive, not send order, so the
   // "clear" response could land after the "refresh succeeded" one and wipe
-  // out the just-issued CSRF cookie — every pending retry then 403s with
+  // out the just-issued CSRF cookie, every pending retry then 403s with
   // "CSRF check failed". Fix: only the first 401 starts a real refresh;
   // anyone else who hits a 401 while one is already in flight just awaits
   // that same promise instead of racing a second one.
@@ -193,18 +193,18 @@ const API = {
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(API.base + path, opts);
     if (res.status === 401 && !isRetry && API.isLoggedIn()) {
-      // Access cookie expired — try a silent refresh (cookie-based, no body
+      // Access cookie expired, try a silent refresh (cookie-based, no body
       // needed) then retry once. Concurrent callers share one refresh call
-      // — see API._refresh() above.
+      //, see API._refresh() above.
       try {
         const ok = await API._refresh();
         if (ok) {
           return API.req(method, path, body, true);  // retry once now that cookies are refreshed
         }
       } catch(e) { /* fall through to logout */ }
-      // Can't refresh — log out
+      // Can't refresh, log out
       API.logout();
-      set({view:'login', authError:'Your session expired — please sign in again', learner:null});
+      set({view:'login', authError:'Your session expired, please sign in again', learner:null});
       throw new Error('Session expired');
     }
     if (!res.ok) {
@@ -220,7 +220,7 @@ const API = {
   delete: (path)       => API.req('DELETE', path),
 
   async register(email, password, language) {
-    // 2026-07-20: registration no longer logs the learner in — no cookies
+    // 2026-07-20: registration no longer logs the learner in, no cookies
     // come back on this response, so nothing to store in fl_learner here.
     // The learner must verify their email, then log in normally.
     return API.post('/auth/register', { email, password, language });
@@ -240,7 +240,7 @@ const API = {
   },
 
   // fl_learner is just a display-info cache (id/name/onboarding flag), not a
-  // credential — it's fine in localStorage. The actual session lives in the
+  // credential, it's fine in localStorage. The actual session lives in the
   // httpOnly cookies and is validated server-side on every request.
   isLoggedIn() { return !!localStorage.getItem('fl_learner'); },
   getLearner() {
@@ -290,12 +290,12 @@ const S = {
   onboardBirthYear: '',
   onboardExpecting: false,
   onboardArt: '',       // no longer set during onboarding; kept for the loadAISession() fallback chain
-  // Prosopon onboarding card (step 4) — replaces the old first-art pick +
+  // Prosopon onboarding card (step 4), replaces the old first-art pick +
   // being/becoming/connecting familiarity self-assessment. See PROSOPON.md.
   onboardCuriosity:  '',
   onboardCaresAbout: '',
   onboardWantsToDo:  '',
-  // Help section (docs/*.md rendered client-side) — see docs/README.md
+  // Help section (docs/*.md rendered client-side), see docs/README.md
   helpDocs:      null,   // manifest: [{slug,title,section}]
   helpActiveDoc: null,   // currently-open slug
   helpContent:   {},     // slug -> rendered HTML, cached per session
@@ -305,7 +305,7 @@ const S = {
   activeSession: null,  // current session data from API
   sessionStartTime: null,
   assessSelectedIndex: null,   // 0-based index of the option the learner picked on the current session's assess; null if not yet answered (added 2026-07-07)
-  // P40 (2026-07-23): assess companion — opens on a wrong pick instead of the old red/coral flag.
+  // P40 (2026-07-23): assess companion, opens on a wrong pick instead of the old red/coral flag.
   assessCompanionOpen: false,      // chat panel visible
   assessCompanionMessages: [],     // [{role,content}] this assess's companion thread
   assessCompanionLoading: false,   // true while waiting for a companion reply
@@ -318,7 +318,7 @@ const S = {
   skillType:    null,    // skill_type for current skill session (cognitive/affective/psychomotor)
   sandboxMessages: [],   // [{role,content}] current sandbox conversation thread
   sandboxLoading: false, // true while waiting for companion reply
-  portfolioMessages: [], // [{role,content}] Portfolio companion thread — kept separate, never triggers profile update
+  portfolioMessages: [], // [{role,content}] Portfolio companion thread, kept separate, never triggers profile update
   portfolioLoading: false,
   sandboxOpen: false,    // challenge/reflect companion panel open
   peripatosTab: 'write',          // 'write' | 'journal'
@@ -342,7 +342,7 @@ const S = {
   answered: false,
   challengeText: '',
   lite: false,
-  // Live data — seeded from localStorage cache so initial draw shows real data,
+  // Live data, seeded from localStorage cache so initial draw shows real data,
   // then refreshed from API in loadDashboard().
   learner: API.getLearner(),
   streak:      _dc ? _dc.streak      : 0,
@@ -356,7 +356,7 @@ const S = {
   topMatch:    (_dc && _dc.topMatch)    ? _dc.topMatch    : null,
   skillsTouched: (_dc && _dc.skillsTouched != null) ? _dc.skillsTouched : null,
   arts: [],
-  // artScores — restored from localStorage if available, populated/refreshed from API after login
+  // artScores, restored from localStorage if available, populated/refreshed from API after login
   artScores: (function(){ try { return JSON.parse(localStorage.getItem('fl_artScores')||'{}'); } catch(e){ return {}; } })(),
   matchLoaded: _dc && _dc.topMatch ? true : false,   // true once /matching/listings/top resolves
   radarTab: 'avatar',   // 'avatar' (15-art) | 'domains' (8-domain)
@@ -364,7 +364,7 @@ const S = {
 
   // ── Progress page ─────────────────────────────────────────────
   progressHistory:  null,  // [{id,title,art_name,art_slug,xp_earned,duration_seconds,phase_reached,completed_at}]
-  progressActivity: null,  // [{date,sessions_done,xp_earned,minutes_spent}] — last 30 days
+  progressActivity: null,  // [{date,sessions_done,xp_earned,minutes_spent}], last 30 days
   progressLoading:  false,
   progressArt:      null,  // slug of expanded art in the skill breakdown, or null
   progressTab:      'chart', // 'chart' | 'history' | 'arts'
@@ -470,7 +470,7 @@ async function loadDashboard() {
       API.get('/sessions/today').catch(() => null),
       API.get('/sessions/skills-touched').catch(() => null),
     ]);
-    // Load top match separately (non-blocking — fails gracefully if no listings)
+    // Load top match separately (non-blocking, fails gracefully if no listings)
     API.get('/matching/listings/top').then(function(m) {
       set({topMatch: m || null, matchLoaded: true});
       try {
@@ -511,7 +511,7 @@ async function loadDashboard() {
       updates.skillsTouched = skillsTouchedData.skills_touched;
     }
     set(updates);
-    // Only update the cache when we received fresh data — never overwrite with nulls.
+    // Only update the cache when we received fresh data, never overwrite with nulls.
     // Merge new values into existing cache so partial responses don't erase good data.
     try {
       const _prev = JSON.parse(localStorage.getItem('fl_dash_cache') || '{}');
@@ -563,7 +563,7 @@ async function loadProgress() {
 
 
 // ══════════════════════════════════════════════════
-// RADAR — clean triangle
+// RADAR, clean triangle
 // ══════════════════════════════════════════════════
 function radar(being, becoming, connecting) {
   var cx = 150, cy = 155, r = 100;
@@ -785,7 +785,7 @@ function CheckInboxPage() {
       <div class="onboard-title" style="text-align:center">${T('auth.check_inbox')}</div>
       <div class="onboard-sub" style="text-align:center">
         We sent a verification link to <strong>${S.pendingVerifyEmail||'your email'}</strong>.
-        Click it to activate your account — the link expires in 24 hours.<br><br>
+        Click it to activate your account, the link expires in 24 hours.<br><br>
         ${T('auth.check_spam')}
       </div>
       ${S.resendSent ? `
@@ -818,7 +818,7 @@ function VerifyPage() {
     body = `<div style="text-align:center;padding:24px 0"><div class="spinner"></div></div>
       <div class="onboard-sub" style="text-align:center">${T('auth.verifying_email')}</div>`;
   } else {
-    // 'error' or 'expired' — the backend returns the same 400 shape for
+    // 'error' or 'expired', the backend returns the same 400 shape for
     // both invalid and expired tokens, so we surface its message directly
     // and offer a resend rather than guessing which case it was.
     body = `<div style="text-align:center;font-size:40px;margin:8px 0 4px">⚠️</div>
@@ -856,12 +856,12 @@ window.resendVerification = async function(emailOverride) {
     await API.post('/auth/resend-verification', { email: email });
     set({resendLoading:false, resendSent:true});
   } catch(e) {
-    set({resendLoading:false, resendError: e.message || 'Could not resend — please try again'});
+    set({resendLoading:false, resendError: e.message || 'Could not resend, please try again'});
   }
 };
 
 
-// ── i18n — T(key, vars) translation helper ────────────────────
+// ── i18n, T(key, vars) translation helper ────────────────────
 const LANG = {  // Only English ships inline; other languages load
                // on demand from lang/<code>.json (see ensureLanguageLoaded).
   en: {
@@ -880,10 +880,10 @@ const LANG = {  // Only English ships inline; other languages load
     'agora.streak':'day streak',
     'agora.total_xp':'total xp',
     'agora.welcome':'Welcome',
-    'auth.account_active':'Your account is active — sign in to begin.',
+    'auth.account_active':'Your account is active, sign in to begin.',
     'auth.already_riding':'Already riding?',
     'auth.back_to_signin':'← Back to sign in',
-    'auth.birth_year':'Birth year <span style="color:var(--text3)">(optional — helps us personalise)</span>',
+    'auth.birth_year':'Birth year <span style="color:var(--text3)">(optional, helps us personalise)</span>',
     'auth.check_inbox':'Check your inbox',
     'auth.check_spam':'Don’t see it? Check your spam or junk folder.',
     'auth.create':'Create your account',
@@ -919,14 +919,14 @@ const LANG = {  // Only English ships inline; other languages load
     'bio.contributors':'Contributors',
     'bio.coordinates':'Coordinates',
     'bio.describe_bioregion':'Describe your bioregion',
-    'bio.describe_body':'Describe your bioregion — its rhythms, waters, living systems, and what it feels like to be here. Your voice joins a collective portrait.',
+    'bio.describe_body':'Describe your bioregion, its rhythms, waters, living systems, and what it feels like to be here. Your voice joins a collective portrait.',
     'bio.err_map_library':'Map library could not be loaded. Check your connection.',
     'bio.err_version_history':'Could not load version history.',
     'bio.err_webgl_required':'WebGL is required for the map view and is not available in this browser.',
     'bio.explore_local':'to explore a local bioregion',
     'bio.locate':'Locate my bioregion',
     'bio.locating':'Locating your bioregion…',
-    'bio.location_declined':'Location access declined — that’s fine. You can describe your bioregion below when learner profiles open up.',
+    'bio.location_declined':'Location access declined, that’s fine. You can describe your bioregion below when learner profiles open up.',
     'bio.make_it_yours':'Make it yours',
     'bio.name_label':'Bioregion name',
     'bio.near_you':'near you',
@@ -942,7 +942,7 @@ const LANG = {  // Only English ships inline; other languages load
     'bio.version_history':'Version History',
     'bio.where':'Where on this earth are you surfing from?',
     'bio.where_are_you_now':'Where are you right now?',
-    'bio.you_know_land_desc':'You know this land — its rhythms, its waters, its living systems.',
+    'bio.you_know_land_desc':'You know this land, its rhythms, its waters, its living systems.',
     'bio.you_know_your_land':'You know your land',
     'bio.your':'Your Bioregion',
     'bio.your_contribution':'Your contribution',
@@ -989,7 +989,7 @@ const LANG = {  // Only English ships inline; other languages load
     'lang.translate_page_short':'Translate page',
     'lang.translate_session':'Translate session content in-place',
     'lang.translate_short':'Translate',
-    'voice.toggle_on':'Turn on voice mode — listen to prompts, answer by speaking',
+    'voice.toggle_on':'Turn on voice mode, listen to prompts, answer by speaking',
     'voice.toggle_off':'Turn off voice mode',
     'voice.listen':'Listen',
     'voice.stop':'Stop',
@@ -998,9 +998,9 @@ const LANG = {  // Only English ships inline; other languages load
     'voice.options_prefix':'Options:',
     'voice.unsupported':'Voice features aren\u2019t supported in this browser yet. Try Chrome or Edge.',
     'voice.mic_unsupported':'Voice answering isn\u2019t supported in this browser. You can still type your answer.',
-    'voice.transcribing_error':'Couldn\u2019t hear that clearly — please try again or type your answer.',
+    'voice.transcribing_error':'Couldn\u2019t hear that clearly, please try again or type your answer.',
     'mouseion.lmbok_full':'Life Management Body of Knowledge',
-    'mouseion.lmbok_modal_body':'The LMBoK organises everything a human being can learn, develop, and master into 15 arts across three domains — Being, Becoming, and Connecting. Rooted in the belief that free, open, lifelong learning belongs to everyone, it maps human development into measurable skills that grow at your own pace, guided by curiosity and owned by no one but you.',
+    'mouseion.lmbok_modal_body':'The LMBoK organises everything a human being can learn, develop, and master into 15 arts across three domains, Being, Becoming, and Connecting. Rooted in the belief that free, open, lifelong learning belongs to everyone, it maps human development into measurable skills that grow at your own pace, guided by curiosity and owned by no one but you.',
     'mouseion.placeholder':'What are you thinking about, struggling with, or curious about today? (optional)',
     'mouseion.subtitle':'The universal library of human arts · yours to explore at your own pace!',
     'mouseion.tagline':'Your living map of human potential',
@@ -1020,14 +1020,14 @@ const LANG = {  // Only English ships inline; other languages load
     'nav.signout':'Sign out',
     'nav.help':'Help',
     'help.title':'Help & Documentation',
-    'help.subtitle':'How the platform works, section by section — searchable, always up to date.',
+    'help.subtitle':'How the platform works, section by section, searchable, always up to date.',
     'help.search_placeholder':'Search docs\u2026',
     'help.select_prompt':'Choose a topic on the left to read about it.',
     'help.no_results':'No matching docs.',
     'help.load_error':'Could not load this doc. Try again shortly.',
     'nav.stoa':'Peripatos',
     'nav.syneisfero':'Syneisféro',
-    'onboard.avatar_body':'Your avatar is your presence on the platform. Pick what feels right — you can always change it later.',
+    'onboard.avatar_body':'Your avatar is your presence on the platform. Pick what feels right, you can always change it later.',
     'onboard.begin_journey':'Begin my journey',
     'onboard.choose_colour':'Choose your colour',
     'onboard.choose_wave':'Choose your wave',
@@ -1035,8 +1035,8 @@ const LANG = {  // Only English ships inline; other languages load
     'onboard.desc_becoming':'Living, listening, giving, collaborating',
     'onboard.desc_being':'Moving, feeling, noticing, expressing',
     'onboard.desc_connecting':'Understanding, building, growing, consuming',
-    'onboard.familiarity_body':'This helps the engine meet you where you are — not where it assumes you should be.',
-    'onboard.first_art_body':'Choose the art that speaks to where you are today. This shapes your first session — you can explore all 15 arts over time.',
+    'onboard.familiarity_body':'This helps the engine meet you where you are, not where it assumes you should be.',
+    'onboard.first_art_body':'Choose the art that speaks to where you are today. This shapes your first session, you can explore all 15 arts over time.',
     'onboard.language_title':'Choose your language',
     'onboard.language_body':'This is the language you\u2019ll see the platform in. You can always change it later in Preferences.',
     'onboard.name_body_cont':'It can be your real name, a nickname, anything that feels like you.',
@@ -1052,11 +1052,11 @@ const LANG = {  // Only English ships inline; other languages load
     'onboard.sub_phase':'Your phase',
     'onboard.sub_prosopon':'Getting to know you',
     'onboard.prosopon_title':'A few things worth knowing about you',
-    'onboard.prosopon_flavor':'If you had all the money in the world and could talk to anyone you wanted \u2014 what would you ask them?',
+    'onboard.prosopon_flavor':'If you had all the money in the world and could talk to anyone you wanted, what would you ask them?',
     'onboard.prosopon_curiosity_label':'What would you ask them?',
     'onboard.prosopon_cares_label':'What do you care about most?',
     'onboard.prosopon_wants_label':'What do you want to do most?',
-    'onboard.welcome_body':'This is a space for lifelong learning — free, open, and entirely yours. No grades, no competition, no wrong answers. Just you, growing at your own pace.<br><br>Let us start by getting to know you a little.',
+    'onboard.welcome_body':'This is a space for lifelong learning, free, open, and entirely yours. No grades, no competition, no wrong answers. Just you, growing at your own pace.<br><br>Let us start by getting to know you a little.',
     'onboard.welcome_title':'Welcome to the frequency 🌊',
     'onboard.what_call':'What shall we call you?',
     'onboard.what_pulls':'What pulls you right now?',
@@ -1067,14 +1067,14 @@ const LANG = {  // Only English ships inline; other languages load
     'peripatos.my_story':'My Story',
     'peripatos.no_saved_conversations':'No saved conversations yet',
     'peripatos.recent_reflections':'Recent reflections',
-    'peripatos.save_failed':'✗ Save failed — retry',
+    'peripatos.save_failed':'✗ Save failed, retry',
     'peripatos.save_reflection':'Save reflection',
     'peripatos.save_to_peripatos':'Save to Peripatos',
     'peripatos.saved_check':'✓ Saved to Peripatos',
     'peripatos.saving':'Saving…',
     'peripatos.start_conversation':'Start a conversation with the Companion',
     'peripatos.story_not_started':'Your story hasn’t started growing yet.',
-    'peripatos.story_not_started_full':'Your story hasn’t started growing yet.<br>Talk with the companion during a session — it listens and remembers.',
+    'peripatos.story_not_started_full':'Your story hasn’t started growing yet.<br>Talk with the companion during a session, it listens and remembers.',
     'peripatos.tap_save_hint':'and tap <strong style="color:var(--text2)">{save}</strong> to journal it here.',
     'peripatos.the_companion':'The Companion',
     'peripatos.title_full':'The Peripatos',
@@ -1103,7 +1103,7 @@ const LANG = {  // Only English ships inline; other languages load
     'session.art_of_growing':'the art of growing',
     'session.art_of_x_reflection':'The art of {art} · {group} · reflection',
     'session.assess':'Assess',
-    'session.beautiful_created':'Beautiful. You just created something real. Now let’s go deeper — reflection is where the real roots form.',
+    'session.beautiful_created':'Beautiful. You just created something real. Now let’s go deeper, reflection is where the real roots form.',
     'session.calling':'What\'s calling you?',
     'session.challenge':'Challenge',
     'session.challenge_fallback':'Design a small growing space using at least three permaculture principles. Describe what you’d plant, why, and how each element supports the others.',
@@ -1114,18 +1114,18 @@ const LANG = {  // Only English ships inline; other languages load
     'session.explainer':'What\'s this question about?',
     'session.explore':'Explore',
     'session.explore_companion':'Explore with the companion',
-    'session.explore_fallback':'In permaculture there is a principle: <em>observe and interact</em>. Before you change anything, you watch. A skilled farmer doesn’t fight their land — they listen to it. The same is true of learning. The most important thing you can do right now is notice what’s already here.',
+    'session.explore_fallback':'In permaculture there is a principle: <em>observe and interact</em>. Before you change anything, you watch. A skilled farmer doesn’t fight their land, they listen to it. The same is true of learning. The most important thing you can do right now is notice what’s already here.',
     'session.getting_it':'✓ Getting it',
     'session.head_to_academy':'Head to the Academy to start your first wave.',
     'session.how_well_understand':'How well do you feel you understand this concept?',
     'session.knew_this':'🚀 I knew this',
-    'session.last_wave':'One last wave. Your honest best — this helps me know where to take you next.',
+    'session.last_wave':'One last wave. Your honest best, this helps me know where to take you next.',
     'session.no_completed_yet':'No completed sessions yet.',
     'session.not_loaded':'Session not loaded yet',
     'session.paddle':'Paddle in',
-    'session.placeholder_no_single_answer':'Write freely — there is no single right answer...',
-    'session.placeholder_no_wrong_answer':'Write freely — there is no wrong answer here...',
-    'session.growth_hint':'A few words here, or in the challenge, are enough — sharing something is what records this session in your growth.',
+    'session.placeholder_no_single_answer':'Write freely, there is no single right answer...',
+    'session.placeholder_no_wrong_answer':'Write freely, there is no wrong answer here...',
+    'session.growth_hint':'A few words here, or in the challenge, are enough, sharing something is what records this session in your growth.',
     'session.preparing':'Preparing your session...',
     'session.reading_frequency':'Reading your frequency',
     'session.recommended_next':'Recommended next',
@@ -1133,7 +1133,7 @@ const LANG = {  // Only English ships inline; other languages load
     'session.reflect_fallback':'What connection do you notice between growing food and building community?',
     'session.resonates':'Choose what resonates right now',
     'session.sit_with_this':'Take a moment to sit with this. The next phase will invite you to put it into practice.',
-    'session.skip':'Skip — use engine recommendation',
+    'session.skip':'Skip, use engine recommendation',
     'session.still_learning':'🌱 Still learning',
     'session.thinking':'thinking...',
     'session.today_journey':'Today’s journey',
@@ -1143,7 +1143,7 @@ const LANG = {  // Only English ships inline; other languages load
     'session.unlock_arts':'Complete sessions to see your strongest arts',
     'session.unlock_domains':'Complete sessions to unlock your domain profile',
     'session.warmup':'Warm up',
-    'session.warmup_fallback':'Welcome to the Academy. Today we explore <strong>the art of growing</strong> — learning to work with the land, not against it. Permaculture teaches us that healthy systems are diverse, connected and self-renewing. So are healthy humans. Ready to surf this frequency?',
+    'session.warmup_fallback':'Welcome to the Academy. Today we explore <strong>the art of growing</strong>, learning to work with the land, not against it. Permaculture teaches us that healthy systems are diverse, connected and self-renewing. So are healthy humans. Ready to surf this frequency?',
     'stat.active_days':'active days',
     'stat.art_progressing':'art progressing',
     'stat.arts':'Arts',
@@ -1156,12 +1156,12 @@ const LANG = {  // Only English ships inline; other languages load
     'stat.skills_touched':'skills touched',
     'stat.this_session':'this session',
     'stat.time_invested':'time invested',
-    'stat.xp_last_30_days':'XP earned — last 30 days',
+    'stat.xp_last_30_days':'XP earned, last 30 days',
     'stat.xp_month':'XP this month',
     'stoa.private':'Private by default · yours always',
     'stoa.recent':'Recent reflections',
     'stoa.save':'Save reflection',
-    'stoa.tagline':'A walkway for wandering thought. This space is yours — no grades, no performance, just honest reflection.',
+    'stoa.tagline':'A walkway for wandering thought. This space is yours, no grades, no performance, just honest reflection.',
     'stoa.title':'The Peripatos',
     'stoa.todays_prompt':'Today\'s prompt',
   },
@@ -1232,7 +1232,7 @@ window.toggleMobileNav = function() {
   }
 };
 
-// Action map keyed by tab id — avoids quoting hell in onclick attributes
+// Action map keyed by tab id, avoids quoting hell in onclick attributes
 var _mobileNavActions = {};
 window.mobileNavGo = function(id) {
   var panel  = document.getElementById('nav-mobile-panel');
@@ -1344,7 +1344,7 @@ window.showProfileMenu = function(e) {
 // Based on XP + breadth across Being/Becoming/Connecting
 // ══════════════════════════════════════════════════
 // 2026-09-05: replaced the old (xp, touched-count, domain-breadth) gate
-// with a pure Art-level bottleneck gate — every one of the 15 Arts must
+// with a pure Art-level bottleneck gate, every one of the 15 Arts must
 // reach the threshold; the learner's weakest art is what determines the
 // stage. XP and "how many arts touched" no longer matter.
 // Mirrors compute_avatar_stage() in utils.py exactly.
@@ -1360,27 +1360,27 @@ function computeAvatarStage(artScores) {
   }, 1.0);
 
   if (minScore >= 1.00) return { stage:'Ecosystem', icon:'🌍', level:6,
-    desc:'A living system in full expression — Being, Becoming and Connecting flow as one.',
-    polis:'Global Polis — planetary proposals and cross-bioregion dialogue' };
+    desc:'A living system in full expression, Being, Becoming and Connecting flow as one.',
+    polis:'Global Polis, planetary proposals and cross-bioregion dialogue' };
   if (minScore >= 0.65) return { stage:'Forest',    icon:'🌲', level:5,
-    desc:'Deep roots, wide canopy — your growth shelters others and reaches across regions.',
-    polis:'Regional Polis — watershed and climate-zone level discussion' };
+    desc:'Deep roots, wide canopy, your growth shelters others and reaches across regions.',
+    polis:'Regional Polis, watershed and climate-zone level discussion' };
   if (minScore >= 0.40) return { stage:'Grove',      icon:'🌳', level:4,
-    desc:'Interconnected and thriving — you support and are supported by your learning community.',
-    polis:'Community Polis — local bioregion discussion and proposals' };
+    desc:'Interconnected and thriving, you support and are supported by your learning community.',
+    polis:'Community Polis, local bioregion discussion and proposals' };
   if (minScore >= 0.20) return { stage:'Sapling',    icon:'🌿', level:3,
-    desc:'Growing steadily toward the light — your roots are finding their depth.',
-    polis:'Polis: view only — keep growing to unlock discussion' };
+    desc:'Growing steadily toward the light, your roots are finding their depth.',
+    polis:'Polis: view only, keep growing to unlock discussion' };
   if (minScore >= 0.10) return { stage:'Sprout',     icon:'🌱', level:2,
-    desc:'Breaking through — the first signs of a pattern are emerging.',
-    polis:'Polis: view only — keep growing to unlock discussion' };
+    desc:'Breaking through, the first signs of a pattern are emerging.',
+    polis:'Polis: view only, keep growing to unlock discussion' };
   return                { stage:'Seed',        icon:'🫘', level:1,
-    desc:'Everything begins here — potential in its purest form.',
-    polis:'Polis: view only — keep growing to unlock discussion' };
+    desc:'Everything begins here, potential in its purest form.',
+    polis:'Polis: view only, keep growing to unlock discussion' };
 }
 
 // ══════════════════════════════════════════════════
-// BIOREGION — seed profiles loaded async from DB
+// BIOREGION, seed profiles loaded async from DB
 // Profiles were previously hardcoded (BIOREGION_PROFILES constant).
 // P17d: moved to bioregion_seed_profiles table; fetched on boot with 24h localStorage cache.
 // ══════════════════════════════════════════════════
@@ -1388,7 +1388,7 @@ function computeAvatarStage(artScores) {
 var _loadedProfiles = [];   // populated by loadBioregionProfiles()
 
 function getBioregionProfile(lat, lng) {
-  // Simple bounding-box match — replaces the old per-profile match() functions
+  // Simple bounding-box match, replaces the old per-profile match() functions
   for (var i = 0; i < _loadedProfiles.length; i++) {
     var p = _loadedProfiles[i];
     if (lat >= p.min_lat && lat <= p.max_lat && lng >= p.min_lng && lng <= p.max_lng) {
@@ -1416,7 +1416,7 @@ function loadBioregionProfiles(onDone) {
           Array.isArray(_c.profiles) && _c.profiles.length > 0) {
         _loadedProfiles = _c.profiles;
         _reattachBioregionProfile();
-        draw();   // update card immediately — cache hit is synchronous so this is safe
+        draw();   // update card immediately, cache hit is synchronous so this is safe
         if (onDone) onDone();
         return;
       }
@@ -1438,15 +1438,15 @@ function loadBioregionProfiles(onDone) {
       if (onDone) onDone();
     })
     .catch(function() {
-      // Profiles unavailable — card shows without ecological detail until next load
+      // Profiles unavailable, card shows without ecological detail until next load
       if (onDone) onDone();
     });
 }
 
-// State for bioregion card — module-level, persists during session
+// State for bioregion card, module-level, persists during session
 var _bioregionState = (function() {
   // Restore from localStorage if available.
-  // Profile object NOT re-attached here — loadBioregionProfiles() does that after
+  // Profile object NOT re-attached here, loadBioregionProfiles() does that after
   // seed profiles arrive from DB (or cache). This avoids a sync dependency on DB data.
   try {
     var _stored = localStorage.getItem('fl_bioregion');
@@ -1474,7 +1474,7 @@ function resetBioregion() {
 }
 
 function _saveBioregionToProfile() {
-  // Fire-and-forget — writes a BIOREGION line into learner_profile server-side.
+  // Fire-and-forget, writes a BIOREGION line into learner_profile server-side.
   // Builds a compact note from whatever the matched profile contains.
   var bs = _bioregionState;
   if (!bs || bs.status !== 'done') return;
@@ -1522,7 +1522,7 @@ function initBioregion() {
       _bioregionState.lat = lat;
       _bioregionState.lng = lng;
       _bioregionState.profile = getBioregionProfile(lat, lng);
-      // Reverse geocode — city level only, no street
+      // Reverse geocode, city level only, no street
       fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lng+'&zoom=10&format=json')
         .then(function(r){ return r.json(); })
         .then(function(d){
@@ -1609,7 +1609,7 @@ function renderBioregionCard(avatarStage) {
         + _bioRow('🌋','Tectonic', p.tectonic)
         + _bioRow('🦅','Keystone species', p.species)
         + _bioRow('🌱','Soil', p.soil)
-        + _bioRow('⛏','Natural resources', p.resources || '—')
+        + _bioRow('⛏','Natural resources', p.resources || '-')
         + _bioRow('💚','Vitality', p.vitality, p.vitality.startsWith('Critical')?'#E88080':p.vitality.startsWith('Stressed')?'#E8A87C':p.vitality.startsWith('At risk')?'#E8A87C':'var(--wave)')
         + _bioRow('🔗','Connections', p.connections)
         + _refreshBtn()
@@ -1658,19 +1658,19 @@ function Dashboard() {
   const learner = S.learner || {};
   const name    = learner.display_name || 'Learner';
 
-  // Skills touched — from backend /sessions/skills-touched; falls back to client-side estimate
+  // Skills touched, from backend /sessions/skills-touched; falls back to client-side estimate
   const skillsTouched = S.skillsTouched != null
     ? S.skillsTouched
     : Object.keys(SKILL_ART_WEIGHTS || {}).filter(function(sk){ return computeSkillScore(sk, S.artScores||{}) > 0; }).length;
 
-  // Arts touched — arts with score > 0.05
+  // Arts touched, arts with score > 0.05
   const artsTouched = Object.values(S.artScores||{}).filter(function(v){ return v > 0.05; }).length;
 
-  // Hours — total_minutes from backend (via weekMinutes state field)
+  // Hours, total_minutes from backend (via weekMinutes state field)
   const _hoursRaw = Math.round((S.weekMinutes||0) / 60);
   const hoursStr  = _hoursRaw > 0 ? _hoursRaw + 'h' : '0h';
 
-  // Today's journey — real session data from /sessions/today
+  // Today's journey, real session data from /sessions/today
   var _td = S.todaySessions;
   var journeySteps;
   if (_td && _td.sessions) {
@@ -1720,7 +1720,7 @@ function Dashboard() {
     language:'Language & Communication', emotional:'Emotional & Psychological', meta:'Meta-Learning', technical:'Technical & Digital',
   };
 
-  // Strongest Arts — for the domains/arts toggle (reuses _domColors/_domLabels above)
+  // Strongest Arts, for the domains/arts toggle (reuses _domColors/_domLabels above)
   const _artEmojis = {
     move:'🏃', eat:'🍎', feel:'💙', notice:'👁️', express:'🎨',
     live:'🌍', listen:'👂', give:'🎁', receive:'📥', collaborate:'🤝',
@@ -1731,12 +1731,12 @@ function Dashboard() {
     .sort(function(a,b){ return (S.artScores[b]||0)-(S.artScores[a]||0); })
     .slice(0,5);
 
-  // Avatar stage — computed from the weakest of the 15 Arts
+  // Avatar stage, computed from the weakest of the 15 Arts
   const _avatarStage = computeAvatarStage(S.artScores || {});
 
   return `
   <div class="page">
-    <!-- ── Page header — title | stat bar | paddle in ──────────────────────── -->
+    <!-- ── Page header, title | stat bar | paddle in ──────────────────────── -->
     <div class="dash-header" style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
       <div style="flex-shrink:0">
         <h1 style="font-size:clamp(18px,2.5vw,30px);line-height:1.2">${name}'s Waves</h1>
@@ -1744,7 +1744,7 @@ function Dashboard() {
           <span onclick="showLMBoKInfo()" style="color:var(--wave);cursor:pointer;border-bottom:1px dashed rgba(0,229,200,0.5);white-space:nowrap" title="${T('dash.click_learn_more')}">${T('dash.lmbok_title')}</span>
         </p>
       </div>
-      <!-- Stat bar — inline center -->
+      <!-- Stat bar, inline center -->
       <div class="stat-box" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:8px 6px">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border)">
           <span class="stat-v" style="color:var(--deep);font-size:17px;line-height:1">${S.xp||0}</span>
@@ -1779,7 +1779,7 @@ function Dashboard() {
       <!-- ══ COL 1: Radar → Strongest Domains/Arts ══ -->
       <div class="dash-col-1" style="display:flex;flex-direction:column;gap:12px;order:1">
 
-        <!-- Radar — entire card navigates to Mouseion; toggles stop propagation -->
+        <!-- Radar, entire card navigates to Mouseion; toggles stop propagation -->
         <div class="dash-card-radar card card-wave" style="padding:12px 12px 16px;cursor:pointer;transition:box-shadow .2s"
           onclick="set({view:'skills'})"
           onmouseover="this.style.boxShadow='0 0 28px rgba(0,229,200,0.28)'"
@@ -1798,7 +1798,7 @@ function Dashboard() {
           </div>
         </div>
 
-        <!-- Strongest Arts / Domains — tabbed toggle -->
+        <!-- Strongest Arts / Domains, tabbed toggle -->
         <div class="dash-card-domains card">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
             <h4>${S.domainTab==='domains' ? T('dash.strongest_domains') : T('dash.strongest_arts')}</h4>
@@ -1854,7 +1854,7 @@ function Dashboard() {
       <!-- ══ COL 2: Recommended Next → Today's Journey → New Match ══ -->
       <div class="dash-col-2" style="display:flex;flex-direction:column;gap:12px;order:2">
 
-        <!-- Recommended next — entire card clickable, no Start button -->
+        <!-- Recommended next, entire card clickable, no Start button -->
         <div class="dash-card-rec card" style="background:linear-gradient(135deg,rgba(0,229,200,0.07),rgba(61,123,255,0.08));border-color:rgba(0,229,200,0.2);cursor:pointer;transition:border-color .2s,box-shadow .2s"
           onclick="startDirectSession(S.nextRec && S.nextRec.art_slug)"
           onmouseover="this.style.borderColor='rgba(0,229,200,0.4)';this.style.boxShadow='0 0 24px rgba(0,229,200,0.15)'"
@@ -1933,12 +1933,12 @@ function Dashboard() {
 }
 
 // ══════════════════════════════════════════════════
-// SESSION (Academy) — 5-phase learning session
+// SESSION (Academy), 5-phase learning session
 // ══════════════════════════════════════════════════
 const phaseNames = ['Warm-up','Explore','Challenge','Reflect','Assess'];
 
 // ── Voice mode (2026-08-17) ──────────────────────────────────
-// Browser-native Web Speech APIs only — no server round-trip, no cost,
+// Browser-native Web Speech APIs only, no server round-trip, no cost,
 // keeps this free on low-end devices/2G (same spirit as the i18n work).
 // Synthesis (listen) and Recognition (speak-to-answer) are feature-detected
 // independently: a browser with only one of the two still gets partial
@@ -2108,7 +2108,7 @@ function phaseBody(p) {
   if(false && p===0) return `
     <div class="tutor-row"><div class="tutor-icon">🌊</div>
     <div class="tutor-bubble">
-      Welcome to the Academy. Today we explore <strong>the art of growing</strong> — learning to work with the land,
+      Welcome to the Academy. Today we explore <strong>the art of growing</strong>, learning to work with the land,
       not against it. Permaculture teaches us that healthy systems are diverse, connected and self-renewing.
       So are healthy humans. Ready to surf this frequency?
     </div></div>
@@ -2123,7 +2123,7 @@ function phaseBody(p) {
     </div>`;
 
   if(p===1) {
-    // FIX: was showing hardcoded permaculture quiz below the AI content —
+    // FIX: was showing hardcoded permaculture quiz below the AI content,
     // removed the static cards so only the AI explore_content renders.
     var explore = currentSession ? currentSession.explore_content
       : T('session.explore_fallback');
@@ -2135,7 +2135,7 @@ function phaseBody(p) {
     <div class="tutor-row"><div class="tutor-icon">🌊</div>
     <div class="tutor-bubble">
       In permaculture there is a principle: <em>observe and interact</em>. Before you change anything,
-      you watch. A skilled farmer doesn't fight their land — they listen to it.
+      you watch. A skilled farmer doesn't fight their land, they listen to it.
       The same is true of learning. The most important thing you can do right now is notice what's already here.
     </div></div>
     <div class="card" style="margin-bottom:12px">
@@ -2171,16 +2171,16 @@ function phaseBody(p) {
   if(false && p===2) return `
     <div class="tutor-row"><div class="tutor-icon">🌊</div>
     <div class="tutor-bubble">
-      Your challenge: design a small growing space — a windowsill, a balcony corner, a backyard patch —
+      Your challenge: design a small growing space, a windowsill, a balcony corner, a backyard patch,
       using at least three permaculture principles. Describe what you'd plant, why, and how each element
       supports the others.
     </div></div>
     <div class="card">
       <p style="font-size:13px;font-weight:500;color:var(--text2);margin-bottom:5px">Three permaculture principles to consider:</p>
       <p style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.7">
-        <strong style="color:var(--wave)">Diversity</strong> — multiple species support each other ·
-        <strong style="color:var(--wave)">Edge effect</strong> — the most life happens at boundaries ·
-        <strong style="color:var(--wave)">Closed loops</strong> — waste from one element feeds another
+        <strong style="color:var(--wave)">Diversity</strong>, multiple species support each other ·
+        <strong style="color:var(--wave)">Edge effect</strong>, the most life happens at boundaries ·
+        <strong style="color:var(--wave)">Closed loops</strong>, waste from one element feeds another
       </p>
       <p style="font-size:13px;color:var(--text2);margin-bottom:8px">Describe your growing space:</p>
       <textarea id="ctxt" rows="4"
@@ -2189,12 +2189,12 @@ function phaseBody(p) {
     </div>`;
 
   if(p===3) {
-    // FIX: reflectQ was defined but never used — hardcoded Grow question and
+    // FIX: reflectQ was defined but never used, hardcoded Grow question and
     // preset buttons were rendered instead. Now uses AI reflect_prompt and
     // gives the learner a free-text textarea for genuine introspection.
     var reflectQ = currentSession ? currentSession.reflect_prompt
       : T('session.reflect_fallback');
-    const w = S.challengeText || '"A small herb garden where each plant supports the others — the way a good community works."';
+    const w = S.challengeText || '"A small herb garden where each plant supports the others, the way a good community works."';
     return `
     ${tutorBubble(T('session.beautiful_created'))}
     <div class="card" style="margin-bottom:14px">
@@ -2232,7 +2232,7 @@ function phaseBody(p) {
     };
     // P40 (2026-07-23 fix): this template must reconstruct the full
     // post-answer state on EVERY render, not just render the choice
-    // buttons once and let chkA() patch them in imperatively — that
+    // buttons once and let chkA() patch them in imperatively, that
     // assumption broke the moment the assess companion needed a full
     // re-render (set({})) to open/close/update its own chat modal, which
     // wiped chkA()'s one-time DOM edits back to a pristine "unanswered"
@@ -2241,7 +2241,7 @@ function phaseBody(p) {
     var selIdx     = S.assessSelectedIndex;
     var isCorrect  = answered && typeof selIdx === 'number' && selIdx === aq.correct_index;
     return `
-    ${tutorBubble('One last wave. Your honest best — this helps me know where to take you next.')}
+    ${tutorBubble('One last wave. Your honest best, this helps me know where to take you next.')}
     <div class="card" style="margin-bottom:14px">
       <p style="font-size:15px;font-weight:500;margin-bottom:13px">${aq.question}</p>
       ${aq.options.map((opt,i) => {
@@ -2272,14 +2272,14 @@ function phaseBody(p) {
 // ── AI Session state ─────────────────────────────────────────
 var currentSession = null;  // stores generated session data
 var sessionLoading = false;
-var lastSessionArtSlug = null;  // saved for retry — preserves skill context on Groq failure
+var lastSessionArtSlug = null;  // saved for retry, preserves skill context on Groq failure
 
 async function loadAISession(artSlug) {
   if (sessionLoading) return;
   sessionLoading = true;
   set({sessionLoading: true});
 
-  // Determine art slug — prefer engine recommendation, then onboarding choice
+  // Determine art slug, prefer engine recommendation, then onboarding choice
   var slug = artSlug
     || (S.nextRec && S.nextRec.art_slug)
     || S.onboardArt
@@ -2301,7 +2301,7 @@ async function loadAISession(artSlug) {
   try {
     var res = await API.post('/generate/session', {
       art_slug:          slug,
-      // phase_slug intentionally omitted — generate_session resolves phase
+      // phase_slug intentionally omitted, generate_session resolves phase
       // server-side from the learner's own stored phase_id (2026-08-24/25
       // elemental phases redesign; see backend/routes/generate.py).
       learner_interests: learnerInterests || null,
@@ -2323,7 +2323,7 @@ async function loadAISession(artSlug) {
     S.assessCompanionScoreUpdate = null;
     S.assessCompanionSummary = null;
   } catch(e) {
-    console.error('AI generation failed — full error:', e);
+    console.error('AI generation failed, full error:', e);
     console.error('Error message:', e.message);
     // Try to get more detail from the response
     if (e.response) {
@@ -2407,7 +2407,7 @@ function Session() {
       + '</div></div>';
   }
 
-  // Generation failed or timed out — offer retry
+  // Generation failed or timed out, offer retry
   if (!currentSession) {
     return '<div class="page" style="display:flex;align-items:center;justify-content:center;min-height:70vh">'
       + '<div style="text-align:center;max-width:400px;padding:0 20px">'
@@ -2421,7 +2421,7 @@ function Session() {
   }
 
   // Voice mode: speak the phase content once per phase, not on every
-  // re-render (set({}) fires on lots of unrelated state changes here —
+  // re-render (set({}) fires on lots of unrelated state changes here,
   // e.g. the sandbox companion thread). voiceLastSpokenPhase is the guard;
   // it's re-armed to -1 on toggle-on (Session's toggleVoiceMode) and on a
   // fresh session load (loadAISession), so both cases re-speak correctly.
@@ -2469,7 +2469,7 @@ function Session() {
 
 
 // ══════════════════════════════════════════════════
-// SANDBOX — Socratic companion shared component
+// SANDBOX, Socratic companion shared component
 // Used in: Mouseion (free exploration) + Challenge + Reflect phases
 // ══════════════════════════════════════════════════
 
@@ -2533,7 +2533,7 @@ async function sendSandboxMessage(inputId, phaseLabel) {
 // 2026.116: opt-in image/video search chips for a companion reply that
 // plainly defined a concrete physical/visual term (see [[MEDIA: ...]]
 // marker parsing in backend/routes/generate.py::scaffold_companion).
-// Deliberately NOT embedded media — just two links the learner can choose
+// Deliberately NOT embedded media, just two links the learner can choose
 // to open, so nothing downloads or preloads for anyone on a slow
 // connection who doesn't tap them. Query is a plain search term parsed
 // server-side out of the model's own reply, never a model-supplied URL.
@@ -2553,7 +2553,7 @@ function mediaHintChipsHTML(hint) {
 function renderSandboxThread(inputId, phaseLabel, showGenerateBtn) {
   var msgs = S.sandboxMessages;
   var threadHTML = msgs.length === 0
-    ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;font-style:italic">Start the conversation — write anything you\'re thinking, wondering, or stuck on.</div>'
+    ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;font-style:italic">Start the conversation, write anything you\'re thinking, wondering, or stuck on.</div>'
     : msgs.map(function(m) {
         var isUser = m.role === 'user';
         return '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start'+(isUser?';flex-direction:row-reverse':'')+'">'
@@ -2634,7 +2634,7 @@ function _reloadProfileAndGuidingStar() {
 function triggerProfileUpdate() {
   if (!S.sandboxMessages || S.sandboxMessages.length < 2) return;
   var msgs = S.sandboxMessages.slice(); // snapshot
-  // Fire-and-forget — no await, no UI feedback
+  // Fire-and-forget, no await, no UI feedback
   API.post('/generate/profile-update', {
     messages:         msgs,
     existing_profile: S.learnerProfile || null,
@@ -2645,7 +2645,7 @@ function triggerProfileUpdate() {
 
 // Distils a completed session's challenge/reflect answers (and, when the
 // wrong-answer companion reached a conclusion, its verdict summary) into
-// My Story — same distillation pipeline as the sandbox companion, just fed
+// My Story, same distillation pipeline as the sandbox companion, just fed
 // from regular session content instead of a sandbox chat. Without this,
 // My Story only ever grew for learners who opened the sandbox companion,
 // even though session challenge/reflect responses were being collected
@@ -2745,7 +2745,7 @@ async function deletePeripatosEntry(id) {
     } else {
       set({});
     }
-  } catch(e) { /* silent — entry may already be gone */ }
+  } catch(e) { /* silent, entry may already be gone */ }
 }
 
 function peripatosRelativeTime(iso) {
@@ -2845,9 +2845,9 @@ function renderPeripatosEntry(entry) {
 
 // ══════════════════════════════════════════════════
 // PORTFOLIO COMPANION
-// Reflective mirror — speaks from learner_profile.
+// Reflective mirror, speaks from learner_profile.
 // Uses phase_label:'Portfolio' for a different system prompt.
-// Never triggers profile update — conversation is meta, not learning content.
+// Never triggers profile update, conversation is meta, not learning content.
 // ══════════════════════════════════════════════════
 window.sendPortfolioMessage = async function sendPortfolioMessage() {
   var inputEl = document.getElementById('portfolio-input');
@@ -2887,7 +2887,7 @@ window.sendPortfolioMessage = async function sendPortfolioMessage() {
 function renderPortfolioThread() {
   var msgs = S.portfolioMessages;
   var threadHTML = msgs.length === 0
-    ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;font-style:italic">Ask anything about what your story reveals — patterns, recurring themes, what you might be avoiding…</div>'
+    ? '<div style="font-size:12px;color:var(--text3);padding:10px 0;font-style:italic">Ask anything about what your story reveals, patterns, recurring themes, what you might be avoiding…</div>'
     : msgs.map(function(m) {
         var isUser = m.role === 'user';
         return '<div style="display:flex;gap:8px;margin-bottom:10px;align-items:flex-start'+(isUser?';flex-direction:row-reverse':'')+'">'
@@ -3029,7 +3029,7 @@ function Mouseion() {
           var _sPct = Math.round(computeSkillScore(sk, S.artScores||{})*100);
           var _lv = _sPct === 0 ? 0 : _sPct <= 25 ? 1 : _sPct <= 50 ? 2 : _sPct <= 75 ? 3 : 4;
           var _indicator = _lv === 0
-            ? '<span style="font-size:10px;color:var(--text3)">—</span>'
+            ? '<span style="font-size:10px;color:var(--text3)">-</span>'
             : '<span style="font-size:10px;font-weight:600;color:'+_d.color+';background:'+_d.color+'18;padding:2px 8px;border-radius:20px">Lv '+_lv+'</span>';
           return '<div onclick="startSkillSession(\''+sk.replace(/&/g,'&amp;')+'\',\''+_d.primaryArt+'\')" '
             +'style="display:flex;align-items:center;justify-content:space-between;gap:8px;'
@@ -3065,7 +3065,7 @@ function Mouseion() {
 // ══════════════════════════════════════════════════
 // ── Stoa daily prompts (rotate by day, no API call needed) ───
 const STOA_PROMPTS = [
-  "What in your life is already growing well — and what might need more tending?",
+  "What in your life is already growing well, and what might need more tending?",
   "What have you noticed today that you might normally walk past?",
   "When did you last change your mind about something important? What shifted?",
   "What would you do differently if you weren't afraid of looking foolish?",
@@ -3084,7 +3084,7 @@ const STOA_PROMPTS = [
   "What truth are you circling without landing on?",
   "Where do you feel most like yourself? Why not more of the time?",
   "What would you say to the person you were five years ago?",
-  "What does rest mean to you — and when did you last truly have it?",
+  "What does rest mean to you, and when did you last truly have it?",
 ];
 
 function stoaDailyPrompt() {
@@ -3131,7 +3131,7 @@ window.saveReflection = async function() {
     await loadStoa();
     setTimeout(function(){ set({stoaSaved:false}); }, 2500);
   } catch(e) {
-    set({stoaSaving:false, stoaError:'Could not save — please try again'});
+    set({stoaSaving:false, stoaError:'Could not save, please try again'});
   }
 };
 
@@ -3164,7 +3164,7 @@ function Stoa() {
   <div class="page" style="max-width:680px">
     <div style="margin-bottom:24px">
       <h2>${T('peripatos.title_full')}</h2>
-      <p style="margin-top:4px">A colonnade for solitary thinking. This space is yours — no grades, no performance, just honest thought.</p>
+      <p style="margin-top:4px">A colonnade for solitary thinking. This space is yours, no grades, no performance, just honest thought.</p>
     </div>
 
     <div style="display:flex;gap:4px;margin-bottom:20px;background:var(--bg3);border-radius:10px;padding:4px;border:1px solid var(--border)">
@@ -3212,7 +3212,7 @@ function Stoa() {
     <div class="card" style="text-align:center;padding:32px">
       <div style="font-size:32px;margin-bottom:10px">🌊</div>
       <div style="color:var(--text3);font-size:13px;line-height:1.7">
-        Your journal is empty — write your first reflection above.<br>
+        Your journal is empty, write your first reflection above.<br>
         Every wave caught is worth recording.
       </div>
     </div>`}
@@ -3247,12 +3247,12 @@ function Portfolio() {
 
   // ── Tab content builders ───────────────────────
 
-  // 1. XP CHART — 30-day bar chart (SVG, no library)
+  // 1. XP CHART, 30-day bar chart (SVG, no library)
   function xpChart() {
     if (activity.length === 0) {
       return `<div style="text-align:center;padding:48px 0;color:var(--text3)">
         <div style="font-size:32px;margin-bottom:10px">🌊</div>
-        <div style="font-size:13px;line-height:1.7">No activity yet — complete a session to see your XP chart.</div>
+        <div style="font-size:13px;line-height:1.7">No activity yet, complete a session to see your XP chart.</div>
       </div>`;
     }
 
@@ -3273,7 +3273,7 @@ function Portfolio() {
     }
     var maxXP = Math.max.apply(null, days.map(function(d){ return d.xp; })) || 1;
 
-    // SVG bar chart — 30 bars, responsive via viewBox
+    // SVG bar chart, 30 bars, responsive via viewBox
     var W = 560, H = 130, PAD_L = 28, PAD_B = 22, barW = 13, gap = 5;
     var chartW = days.length * (barW + gap) - gap;
     var startX = PAD_L;
@@ -3325,7 +3325,7 @@ function Portfolio() {
     </div>`;
   }
 
-  // 2. SESSION HISTORY — scrollable card list
+  // 2. SESSION HISTORY, scrollable card list
   function sessionHistory() {
     if (history.length === 0) {
       return `<div style="text-align:center;padding:48px 0;color:var(--text3)">
@@ -3367,7 +3367,7 @@ function Portfolio() {
     </div>`;
   }
 
-  // 3. PER-ART SKILL BREAKDOWN — arts list; click to expand skill levels
+  // 3. PER-ART SKILL BREAKDOWN, arts list; click to expand skill levels
   function artBreakdown() {
     // Arts ordered by score descending (touched first, then alphabetical)
     var _artScores = S.artScores || {};
@@ -3420,7 +3420,7 @@ function Portfolio() {
         var gc       = GC[art.group];
         var skills   = artSkillMap[art.slug] || [];
         var skillRows = isOpen ? skills.slice(0,8).map(function(sk) {
-          // Rough skill score — art score * weight, mapped to 0–4 levels
+          // Rough skill score, art score * weight, mapped to 0–4 levels
           var rawLevel = score * sk.weight * 20; // scale to 0–4 range
           var lv = Math.min(4, Math.floor(rawLevel));
           var lvColors = ['var(--text3)','#5B8DD9','#6DB97A','var(--gold)','var(--wave)'];
@@ -3524,7 +3524,7 @@ function Portfolio() {
         `}
       </div>
 
-      <!-- P8: Org-Verified Skills — read-only credentials an org rep confirmed
+      <!-- P8: Org-Verified Skills, read-only credentials an org rep confirmed
            while working with this learner on a Need. Deliberately shown as its
            own card, separate from self-paced skill progress above, since these
            are org-vouched, not platform-computed. Only rendered when non-empty. -->
@@ -3541,7 +3541,7 @@ function Portfolio() {
         }).join('')}
       </div>` : ''}
 
-      <!-- Weekly Story — reverse-chronological history of weekly_report.py's
+      <!-- Weekly Story, reverse-chronological history of weekly_report.py's
            "this week's growth" paragraphs (2026-09-02). Bank-statement style:
            each entry is a persisted snapshot, unlike the Life-CV card above
            which merges/compresses into one current profile with no history
@@ -3564,7 +3564,7 @@ function Portfolio() {
       <!-- Portfolio companion -->
       <div style="background:var(--bg2);border:1px solid rgba(0,229,200,0.2);border-radius:var(--r);padding:18px">
         <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px">${T('peripatos.companion_my_story')}</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">Ask about what your story reveals — patterns, strengths, blind spots. This conversation doesn't change your profile.</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">Ask about what your story reveals, patterns, strengths, blind spots. This conversation doesn't change your profile.</div>
         ${renderPortfolioThread()}
       </div>
 
@@ -3590,25 +3590,25 @@ window.doLogin = async function() {
          onboardStep: learnerData?.onboarding_complete ? S.onboardStep : 0, learner:learnerData});
     if (learnerData?.onboarding_complete) loadDashboard();
   } catch(e) {
-    var msg = 'Something went wrong — please try again';
+    var msg = 'Something went wrong, please try again';
     if (e.message) {
       var c = parseInt(e.message, 10) || 0;
       var m = e.message.toLowerCase();
       if (m.includes('verify your email')) {
-        // Backend gate (login() checks email_verified) — send them to the
+        // Backend gate (login() checks email_verified), send them to the
         // same check-inbox screen registration uses, with resend available.
         set({authLoading:false, view:'checkInbox', pendingVerifyEmail: email, resendSent:false, resendError:''});
         return;
       }
       if (c === 401 || c === 403 || c === 400 || c === 422
           || m.includes('invalid') || m.includes('credentials') || m.includes('incorrect') || m.includes('unauthorized'))
-        msg = 'Wrong email or password — please try again';
+        msg = 'Wrong email or password, please try again';
       else if (c === 404 || m.includes('not found'))
-        msg = 'Account not found — check your email or create an account';
+        msg = 'Account not found, check your email or create an account';
       else if (c === 429 || m.includes('too many'))
-        msg = 'Too many attempts — please wait a moment and try again';
+        msg = 'Too many attempts, please wait a moment and try again';
       else if (c >= 500)
-        msg = 'Server is taking a moment — please try again in a few seconds';
+        msg = 'Server is taking a moment, please try again in a few seconds';
     }
     set({authLoading:false, authError: msg});
   }
@@ -3620,7 +3620,7 @@ window.doRegister = async function() {
   const lang  = document.getElementById('reg-language')?.value || S.language || 'en';
   if (email) S.regEmail = email;
   if (!email || !pass) { set({authError:'Please fill in all required fields'}); return; }
-  if (pass.length < 8) { set({authError:'Password must be at least 8 characters — please try again'}); return; }
+  if (pass.length < 8) { set({authError:'Password must be at least 8 characters, please try again'}); return; }
   set({authLoading:true, authError:''});
   try {
     await API.register(email, pass, lang);
@@ -3660,7 +3660,7 @@ window.tapR = function(id, ok) {
   el.className='choice-btn '+(ok?'ok':'no');
   ['r0','r1','r2'].forEach(r=>{const b=document.getElementById(r);if(b)b.disabled=true;});
   const fb=document.getElementById('rfb');
-  if(fb){fb.style.color=ok?'var(--wave)':'var(--coral)';fb.textContent=ok?'✓ Exactly — diversity and interdependence are the foundation of all living systems.':'Think about a forest — does one species dominate, or do many coexist?';}
+  if(fb){fb.style.color=ok?'var(--wave)':'var(--coral)';fb.textContent=ok?'✓ Exactly, diversity and interdependence are the foundation of all living systems.':'Think about a forest, does one species dominate, or do many coexist?';}
 };
 
 window.pickR = function(btn, resp) {
@@ -3672,7 +3672,7 @@ window.pickR = function(btn, resp) {
 window.setSelfScore = function(score, el) {
   S.selfScore = score;
   // P40 fix (2026-07-23): used to be pure imperative DOM styling with no
-  // set({}) call — worked only because nothing else ever re-rendered the
+  // set({}) call, worked only because nothing else ever re-rendered the
   // assess phase after an answer. The companion modal now legitimately
   // needs to re-render (new messages, loading state), so this has to go
   // through state + a real re-render like everything else, or a later
@@ -3697,7 +3697,7 @@ function renderSelfRatingRow() {
     + '<div style="display:flex;gap:6px">'+btns+'</div></div>';
 }
 
-// Renders the #afb feedback area for the assess phase — pulled out of chkA()
+// Renders the #afb feedback area for the assess phase, pulled out of chkA()
 // into its own function (P40 fix, 2026-07-23) so the p===4 template above can
 // call it on every render and reconstruct the exact same post-answer state,
 // rather than relying on chkA() to inject it once and never again. See the
@@ -3707,7 +3707,7 @@ function renderAssessFeedback(answered, isCorrect) {
   if (isCorrect) {
     return '✓ Correct!' + renderSelfRatingRow();
   }
-  // Wrong pick: no red/coral, no immediately-revealed correct answer —
+  // Wrong pick: no red/coral, no immediately-revealed correct answer,
   // that's the "red error" P40 replaces. Companion invite stays available
   // even after being opened and closed (this was the actual reported bug:
   // it used to vanish on any re-render, leaving nothing to click). Self-
@@ -3715,11 +3715,11 @@ function renderAssessFeedback(answered, isCorrect) {
   var companionLine = S.assessCompanionResolved
     ? '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
       + '<span style="font-size:15px">🌊</span>'
-      + '<span>Discussion with the companion is done — you can head to Complete whenever you\'re ready.</span></div>'
+      + '<span>Discussion with the companion is done, you can head to Complete whenever you\'re ready.</span></div>'
       + '<button onclick="openAssessCompanion()" class="btn btn-ghost btn-sm" style="margin-top:8px">Reopen the companion</button>'
     : '<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">'
       + '<span style="font-size:15px">🌊</span>'
-      + '<span>Let\'s talk this through — there\'s often more than one way to see this.</span></div>'
+      + '<span>Let\'s talk this through, there\'s often more than one way to see this.</span></div>'
       + '<button onclick="openAssessCompanion()" class="btn btn-wave btn-sm" style="margin-top:10px">Open the companion →</button>';
   return companionLine
     + '<div style="margin-top:4px;font-size:11px;color:var(--text3)">or, if you\'d rather just rate yourself:</div>'
@@ -3730,10 +3730,10 @@ window.chkA = function(id, ok, pickedIndex) {
   if(S.answered) return;
   // 2026-07-07: capture which option the learner picked so the backend
   // can persist it and the LEARNER CONTINUITY block in future prompts can
-  // show "learner chose B 'X', correct was D 'Y'" — especially useful when
+  // show "learner chose B 'X', correct was D 'Y'", especially useful when
   // the wrong answer is close to the correct one.
   // P40 fix (2026-07-23): setting state + calling set({}) here, instead of
-  // manually flipping button classNames/afb.innerHTML, is the actual fix —
+  // manually flipping button classNames/afb.innerHTML, is the actual fix,
   // the p===4 template now derives everything from this same state on every
   // render, so a later re-render (opening/closing the companion) reconstructs
   // the identical UI instead of reverting to a blank "unanswered" look.
@@ -3743,7 +3743,7 @@ window.chkA = function(id, ok, pickedIndex) {
 };
 
 // ══════════════════════════════════════════════════
-// P40 — Assess companion (Socratic discussion on a "wrong" pick)
+// P40, Assess companion (Socratic discussion on a "wrong" pick)
 // Sibling to the Mouseion/Challenge/Reflect sandbox companion above,
 // but hits its own endpoint (structured reply/resolved/score_update,
 // not plain text) and keeps its own message thread.
@@ -3753,7 +3753,7 @@ window.openAssessCompanion = function() {
   S.assessCompanionOpen = true;
   if (S.assessCompanionMessages.length === 0) {
     // Seed the thread with an opening question from the companion so the
-    // learner isn't staring at a blank box — matches the sandbox pattern.
+    // learner isn't staring at a blank box, matches the sandbox pattern.
     var aq = currentSession && currentSession.assess_question;
     var pickedText = (aq && typeof S.assessSelectedIndex === 'number') ? aq.options[S.assessSelectedIndex] : '';
     S.assessCompanionMessages = [{
@@ -3808,7 +3808,7 @@ async function sendAssessCompanionMessage() {
       S.selfScore = res.score_update;  // overrides the self-rating fallback per decision #2
     }
     if (res.resolved) {
-      // Short verdict summary for the LEARNER CONTINUITY block — reuse the
+      // Short verdict summary for the LEARNER CONTINUITY block, reuse the
       // companion's own final reply rather than a second AI call.
       S.assessCompanionSummary = res.reply;
       var wrap = document.getElementById('complete-btn-wrap');
@@ -3856,7 +3856,7 @@ function renderAssessCompanionModal() {
       </div>
       <div id="assess-companion-thread" style="flex:1;overflow-y:auto;padding:16px 18px">${threadHTML}</div>
       ${S.assessCompanionResolved ? `
-      <div style="padding:0 18px 10px;font-size:11px;color:var(--wave)">✓ This discussion has reached a conclusion — you can close this and complete the session whenever you're ready.</div>
+      <div style="padding:0 18px 10px;font-size:11px;color:var(--wave)">✓ This discussion has reached a conclusion, you can close this and complete the session whenever you're ready.</div>
       ` : ''}
       <div style="padding:12px 18px;border-top:1px solid var(--border);display:flex;gap:8px">
         <input id="assess-companion-input" type="text" placeholder="Say what you're thinking…"
@@ -3868,7 +3868,7 @@ function renderAssessCompanionModal() {
   </div>`;
 }
 
-// Direct session start — skips interest pulse, goes straight to the art.
+// Direct session start, skips interest pulse, goes straight to the art.
 // Used by Recommended Next Start and individual art row clicks.
 window.startDirectSession = function(artSlug) {
   currentSession = null;
@@ -3905,12 +3905,12 @@ window.startRecommendedSession = async function() {
   showInterestPulse();
 };
 
-// Retry after Groq failure — replays the exact same session trigger (art slug + skill context).
+// Retry after Groq failure, replays the exact same session trigger (art slug + skill context).
 // Does NOT show the interest pulse or clear skillContext/skillDomain/skillType.
 window.retryLastSession = function() {
   var retrySlug = lastSessionArtSlug || (S.nextRec && S.nextRec.art_slug) || 'grow';
   currentSession = null;
-  // skillContext / skillDomain / skillType intentionally NOT reset — preserve the Mouseion skill that was clicked
+  // skillContext / skillDomain / skillType intentionally NOT reset, preserve the Mouseion skill that was clicked
   set({view:'session', phase:0, answered:false, selfScore:null, sessionLoading:true,
        sessionStartTime: Date.now(), challengeText:'', reflectText:''});
   loadAISession(retrySlug);
@@ -4049,7 +4049,7 @@ window.savePreferences = async function() {
   }
 };
 // ── LMBoK info popup ─────────────────────────────────────────
-// Reading the Polis is open to any logged-in learner — no client-side
+// Reading the Polis is open to any logged-in learner, no client-side
 // gate needed here. The destination page (polis.html's checkGate())
 // is the single source of truth for participation status (Grove+),
 // via the real backend check at /polis/my-access.
@@ -4073,7 +4073,7 @@ window.showLMBoKInfo = function() {
     + T('mouseion.lmbok_modal_body')
     + '</p>'
     + '<p style="font-size:14px;color:var(--text2);line-height:1.8;margin-bottom:20px">'
-    + 'It is not a curriculum handed to you. It is a body of knowledge navigated by you — built by the community, for the community, forever freely accessible to anyone, anywhere, at any time.'
+    + 'It is not a curriculum handed to you. It is a body of knowledge navigated by you, built by the community, for the community, forever freely accessible to anyone, anywhere, at any time.'
     + '</p>'
     + '<a href="https://www.epangea.top/the-mission" target="_blank" rel="noopener" '
     + 'style="display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--wave);border:1px solid rgba(0,229,200,0.3);border-radius:20px;padding:7px 16px;text-decoration:none">'
@@ -4111,7 +4111,7 @@ window.showInterestPulse = function() {
           + '</button>';
       }).join('')
     + '</div>'
-    + '<button onclick="pickInterest(null)" style="margin-top:14px;width:100%;background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:8px">Skip — use engine recommendation</button>'
+    + '<button onclick="pickInterest(null)" style="margin-top:14px;width:100%;background:none;border:none;color:var(--text3);font-size:12px;cursor:pointer;padding:8px">Skip, use engine recommendation</button>'
     + '</div>';
   document.body.appendChild(m);
 };
@@ -4159,7 +4159,7 @@ window.finishSession = function() {
           reflect_response:   S.reflectText   || '',
           phase_reached:      5,
           // P40: when the companion resolved the discussion, S.selfScore was
-          // already overridden with its score_update by sendAssessCompanionMessage —
+          // already overridden with its score_update by sendAssessCompanionMessage,
           // this line doesn't need special-casing, it just picks that up.
           assess_score:       S.selfScore || (S.answered ? 85 : 50),
           // 2026-07-07: which option did the learner actually pick? Backend
@@ -4201,13 +4201,13 @@ window.finishSession = function() {
   // Fire-and-forget: distil sandbox conversation into learner profile
   if (S.sandboxMessages && S.sandboxMessages.length >= 2) triggerProfileUpdate();
   // Fire-and-forget: distil this session's challenge/reflect answers (and
-  // any resolved companion verdict) into My Story too — see
+  // any resolved companion verdict) into My Story too, see
   // triggerSessionStoryUpdate() for why this was missing before.
   triggerSessionStoryUpdate(currentSession, S.challengeText, S.reflectText, S.assessCompanionResolved, S.assessCompanionSummary);
   currentSession = null;
   S.sandboxMessages = [];
   S.sandboxOpen = false;
-  // P40: reset companion state — the next session's assess starts fresh
+  // P40: reset companion state, the next session's assess starts fresh
   S.assessCompanionOpen = false;
   S.assessCompanionMessages = [];
   S.assessCompanionResolved = false;
@@ -4485,11 +4485,11 @@ function OnboardPage() {
   }
 
   else if (step === 4) {
-    // Prosopon onboarding card — replaces the old first-art pick (step 4) and
+    // Prosopon onboarding card, replaces the old first-art pick (step 4) and
     // the being/becoming/connecting familiarity self-assessment (old step 6).
     // Three short, skippable, voice-enabled free-text answers. Raw text is
     // stored as-is; a one-time AI pass at completion (POST /learners/me/prosopon)
-    // extracts skill/domain tags to seed learner_skill_progress — the direct
+    // extracts skill/domain tags to seed learner_skill_progress, the direct
     // functional replacement for what the old familiarity screen fed into
     // seed-progress. See PROSOPON.md for the full design.
     var flavor = T('onboard.prosopon_flavor');
@@ -4541,7 +4541,7 @@ window.obSetName = function() {
   set({onboardName: name.value.trim(), onboardStep: 3});
 };
 
-// Prosopon card (step 4) — three live-bound free-text fields.
+// Prosopon card (step 4), three live-bound free-text fields.
 window.obSetProsopon = function(key, value) { S[key] = value; };
 
 window.obSkipProsopon = function() {
@@ -4558,11 +4558,11 @@ window.obComplete = async function() {
     });
   } catch(e) { console.log('Preferences save:', e.message); }
 
-  // Prosopon (the learner's living profile — see PROSOPON.md):
+  // Prosopon (the learner's living profile, see PROSOPON.md):
   // the 3 onboarding answers are the FIRST entry into learner_profile,
   // going through the exact same distillation pipeline a sandbox
   // conversation would (POST /generate/profile-update) rather than a
-  // separate one-off code path — one profile, one way it grows.
+  // separate one-off code path, one profile, one way it grows.
   // Separately, seed-progress-domains gives the ZPD engine real initial
   // signal, functionally replacing what the old familiarity screen fed.
   var hasProsopon = (S.onboardCuriosity || S.onboardCaresAbout || S.onboardWantsToDo);
@@ -4718,7 +4718,7 @@ window.submitBioregionContrib = function() {
     _fetchMyContribution();
     _fetchBioregionPortraits();
   }).catch(function(e) {
-    set({bioregionFormSaving:false, bioregionFormError: e && e.detail ? e.detail : 'Could not save — please try again.'});
+    set({bioregionFormSaving:false, bioregionFormError: e && e.detail ? e.detail : 'Could not save, please try again.'});
   });
 };
 
@@ -4773,7 +4773,7 @@ function BioregionPage() {
       + '<div style="font-size:12px;color:var(--text3);margin-bottom:20px">'+p.contributor_count+' voice'+(p.contributor_count!==1?'s':'')+' shaping this portrait</div>'
       + (p.summary
           ? '<div style="background:linear-gradient(135deg,var(--bg2) 0%,rgba(0,229,200,0.04) 100%);border:1px solid rgba(0,229,200,0.2);border-radius:var(--r);padding:20px;margin-bottom:24px;font-size:14px;color:var(--text2);line-height:1.8">'+_esc(p.summary)+'</div>'
-          : '<div style="padding:16px;background:var(--bg2);border-radius:var(--r-sm);color:var(--text3);font-size:13px;margin-bottom:24px">This portrait hasn&#39;t been synthesised yet &#8212; an admin will generate it once enough voices are gathered.</div>')
+          : '<div style="padding:16px;background:var(--bg2);border-radius:var(--r-sm);color:var(--text3);font-size:13px;margin-bottom:24px">This portrait hasn&#39;t been synthesised yet, an admin will generate it once enough voices are gathered.</div>')
       + '<div style="font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:12px">'+T('bio.contributing_voices')+'</div>'
       + voicesHtml
       + '</div></div>';
@@ -4785,7 +4785,7 @@ function BioregionPage() {
       + '<div style="max-width:1100px;margin:0 auto">'
       + '<div style="margin-bottom:16px">'
       + '<h2 style="font-size:24px;font-weight:800;font-family:var(--font-display);color:var(--text1);margin:0 0 6px">🌍 Bioregion Portraits</h2>'
-      + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Living collective portraits of the earth&#39;s places &#8212; shaped by learners who know them from the inside.</p>'
+      + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Living collective portraits of the earth&#39;s places, shaped by learners who know them from the inside.</p>'
       + '</div>'
       + _renderBioViewToggle()
       + _renderBioMapView()
@@ -4798,20 +4798,20 @@ function BioregionPage() {
       + '<div style="max-width:1100px;margin:0 auto">'
       + '<div style="margin-bottom:16px">'
       + '<h2 style="font-size:24px;font-weight:800;font-family:var(--font-display);color:var(--text1);margin:0 0 6px">🌍 Bioregion Portraits</h2>'
-      + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Living collective portraits of the earth&#39;s places &#8212; shaped by learners who know them from the inside.</p>'
+      + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Living collective portraits of the earth&#39;s places, shaped by learners who know them from the inside.</p>'
       + '</div>'
       + _renderBioViewToggle()
       + _renderBioTableView()
       + '</div></div>';
   }
 
-  // ── Field Guide view — point-form seed profiles (Layer 1) ──────────────────
+  // ── Field Guide view, point-form seed profiles (Layer 1) ──────────────────
   if (S.bioregionView === 'fieldguide') {
     return '<div class="page-content">'
       + '<div style="max-width:1100px;margin:0 auto">'
       + '<div style="margin-bottom:16px">'
       + '<h2 style="font-size:24px;font-weight:800;font-family:var(--font-display);color:var(--text1);margin:0 0 6px">🌍 Bioregion Portraits</h2>'
-      + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Precise, point-form natural identity for each of the earth&#39;s named bioregions &#8212; the same data that powers your &quot;Where I Stand&quot; card.</p>'
+      + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Precise, point-form natural identity for each of the earth&#39;s named bioregions, the same data that powers your &quot;Where I Stand&quot; card.</p>'
       + '</div>'
       + _renderBioViewToggle()
       + _renderBioFieldGuideView()
@@ -4948,7 +4948,7 @@ function BioregionPage() {
     + '<div style="max-width:800px;margin:0 auto">'
     + '<div style="margin-bottom:20px">'
     + '<h2 style="font-size:24px;font-weight:800;font-family:var(--font-display);color:var(--text1);margin:0 0 6px">🌍 Bioregion Portraits</h2>'
-    + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Living collective portraits of the earth&#39;s places &#8212; shaped by learners who know them from the inside.</p>'
+    + '<p style="font-size:13px;color:var(--text3);line-height:1.6;margin:0">Living collective portraits of the earth&#39;s places, shaped by learners who know them from the inside.</p>'
     + '</div>'
     + _renderBioViewToggle()
     + myCard
@@ -4966,7 +4966,7 @@ function _esc(s) {
 
 // ══════════════════════════════════════════════════════════════════════════════
 // BIOREGION MAP, TABLE & VERSION HISTORY  (P_MAP)
-// All functions below are additions — no existing functions modified.
+// All functions below are additions, no existing functions modified.
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Module-level state ────────────────────────────────────────────────────────
@@ -5054,7 +5054,7 @@ function _bioFmtCoords(lat, lng) {
 }
 
 function _bioFmtDate(iso) {
-  if (!iso) return '\u2014';
+  if (!iso) return '-';
   try { return new Date(iso).toLocaleDateString(undefined, {year:'numeric',month:'short',day:'numeric'}); }
   catch(e) { return String(iso).slice(0, 10); }
 }
@@ -5091,7 +5091,7 @@ function _buildBioMap(portraits) {
     maxZoom:   14,
   });
 
-  // Globe projection (MapLibre GL JS v4+) — degrades to Mercator silently
+  // Globe projection (MapLibre GL JS v4+), degrades to Mercator silently
   _bioMap.once('styledata', function() {
     try { _bioMap.setProjection('globe'); } catch(e) {}
   });
@@ -5303,7 +5303,7 @@ function _renderBioTableView() {
   }
   var rows = portraits.map(function(p) {
     var label   = _bioFormatLabel(p.cluster_label);
-    var coords  = _bioFmtCoords(p.center_lat, p.center_lng) || '\u2014';
+    var coords  = _bioFmtCoords(p.center_lat, p.center_lng) || '-';
     var vNum    = p.version_number || 1;
     var vitCls  = _bioVitClass(p.vitality_snapshot);
     var summary = _bioTrunc(p.summary || '', 110);
@@ -5314,9 +5314,9 @@ function _renderBioTableView() {
       + (p.vitality_snapshot ? '<span class="bio-vit-badge '+vitCls+' bio-vit-sm">'+_esc(p.vitality_snapshot)+'</span>' : '')
       + '</div>'
       + '</td>'
-      + '<td class="bio-td bio-td-summary" title="'+_esc((p.summary||'').trim())+'">'+(_esc(summary)||'<span class="bio-td-nil">\u2014</span>')+'</td>'
+      + '<td class="bio-td bio-td-summary" title="'+_esc((p.summary||'').trim())+'">'+(_esc(summary)||'<span class="bio-td-nil">-</span>')+'</td>'
       + '<td class="bio-td bio-td-center"><span class="bio-v-num-badge" title="'+(p.vitality_snapshot?'Vitality: '+_esc(p.vitality_snapshot):'Version '+vNum)+'">v'+vNum+'</span></td>'
-      + '<td class="bio-td bio-td-center">'+( p.contributor_count != null ? p.contributor_count : '\u2014')+'</td>'
+      + '<td class="bio-td bio-td-center">'+( p.contributor_count != null ? p.contributor_count : '-')+'</td>'
       + '<td class="bio-td bio-td-coords">'+_esc(coords)+'</td>'
       + '<td class="bio-td bio-td-date">'+_bioFmtDate(p.last_generated_at)+'</td>'
       + '<td class="bio-td bio-td-action"><button class="bio-tbl-view-btn" onclick="window.setBioView(\'portraits\');requestAnimationFrame(function(){var el=document.getElementById(\'portrait-'+p.id+'\');if(el)el.scrollIntoView({behavior:\'smooth\',block:\'center\'});})">View \u2192</button></td>'
@@ -5348,7 +5348,7 @@ function _renderBioTableView() {
     + '</div>';
 }
 
-// ── Field Guide view (Layer 1 — author-curated seed profiles) ─────────────────
+// ── Field Guide view (Layer 1, author-curated seed profiles) ─────────────────
 // Reuses _loadedProfiles (populated by loadBioregionProfiles(), the same
 // fetch + 24h localStorage cache that powers the "Where I Stand" dashboard
 // card) and the existing _bioRow() helper, so styling stays in perfect sync
@@ -5516,7 +5516,7 @@ window.switchBioVersion = async function(portraitId, versionNumber) {
 // HELP SECTION
 // Renders docs/*.md client-side. Manifest lists every doc; content is
 // fetched lazily (same lazy-load pattern as lang/<code>.json) and cached
-// in memory for the session. No markdown library — a small hand-rolled
+// in memory for the session. No markdown library, a small hand-rolled
 // renderer covers headings, bold/italic, links, lists, code, tables and
 // paragraphs, which is everything docs/*.md actually uses. Keeps this
 // consistent with the rest of the platform's zero-dependency, low-
@@ -5665,11 +5665,11 @@ function draw() {
   const root = document.getElementById('root');
   const isAuth = S.view === 'login' || S.view === 'register' || S.view === 'checkInbox' || S.view === 'verify';
   // The 'Session not loaded yet' warning (Session() view, no currentSession,
-  // not currently loading) is a dead-end error state — skip the footer there.
+  // not currently loading) is a dead-end error state, skip the footer there.
   const suppressFooter = (S.view === 'session' && !S.sessionLoading && !currentSession);
 
   root.innerHTML = (isAuth ? '' : Nav()) + (views[S.view] || Dashboard)() + (suppressFooter ? '' : Footer())
-    // P40: assess companion modal — only relevant during a session's assess phase.
+    // P40: assess companion modal, only relevant during a session's assess phase.
     + (S.view === 'session' ? renderAssessCompanionModal() : '');
 
   // Restore challenge text
@@ -5694,7 +5694,7 @@ async function boot() {
   ensureLanguageLoaded(S.language);
 
   // ── Email verification link (?token=...) ──────────────────
-  // 2026-07-20: previously nothing anywhere consumed this — the emailed
+  // 2026-07-20: previously nothing anywhere consumed this, the emailed
   // link pointed here but no code ever called the verify-email API, so
   // clicking it did nothing. Handled first, before the login-state check
   // below, since a learner clicking this link isn't necessarily logged in.
@@ -5711,7 +5711,7 @@ async function boot() {
         set({verifyStatus:'error', verifyError: d.detail || 'This link may have expired or already been used.'});
       }
     } catch(e) {
-      set({verifyStatus:'error', verifyError:'Network error — please try again.'});
+      set({verifyStatus:'error', verifyError:'Network error, please try again.'});
     }
     // Strip the token out of the URL bar so a refresh doesn't re-verify
     history.replaceState(null, '', '/app.html');
@@ -5723,7 +5723,7 @@ async function boot() {
   }
   // Being back in the app means the "stay on the homepage" session flag
   // (set by index.html when landing there via the Home link) no longer
-  // applies — clear it so a future bare visit to "/" redirects normally.
+  // applies, clear it so a future bare visit to "/" redirects normally.
   try { sessionStorage.removeItem('lmbok_home_visit'); } catch(e) {}
   // ── Responsive dashboard grid ──────────────────────────────
   // Injects CSS once: on narrow viewports columns stack in order 1→2→3
@@ -5733,7 +5733,7 @@ async function boot() {
   }
   // Try to refresh the access token before doing anything. The refresh
   // token itself lives in the httpOnly fl_refresh cookie (path-scoped to
-  // /api/auth) — the browser attaches it automatically, nothing to read
+  // /api/auth), the browser attaches it automatically, nothing to read
   // from localStorage here (P-SEC1, 2026-07-16).
   try {
     const res = await fetch('/api/auth/refresh', {
@@ -5749,19 +5749,19 @@ async function boot() {
       }
       console.log('Token refreshed successfully');
     } else if (res.status === 401 || res.status === 403) {
-      // Refresh token genuinely expired/missing — log out cleanly
-      console.log('Refresh token expired — logging out');
+      // Refresh token genuinely expired/missing, log out cleanly
+      console.log('Refresh token expired, logging out');
       API.logout();
       set({view:'login', learner:null});
       return;
     } else {
-      // Server error (5xx) or other transient failure — keep going; the
+      // Server error (5xx) or other transient failure, keep going; the
       // server may just be restarting or temporarily overloaded.
-      console.log('Token refresh server error (' + res.status + ') — continuing');
+      console.log('Token refresh server error (' + res.status + '), continuing');
     }
   } catch(e) {
     console.log('Token refresh failed:', e.message);
-    // Network error — continue and try anyway
+    // Network error, continue and try anyway
   }
   draw();
   // Load bioregion seed profiles (populates the ecological detail in the Where I Stand card)

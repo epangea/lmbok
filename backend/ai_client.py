@@ -1,5 +1,5 @@
 # ============================================================
-# FreqLearn — ai_client.py
+# FreqLearn, ai_client.py
 # THE single AI-calling module for the entire codebase.
 #
 # Rewritten 2026-07-29 (P41). Before this, six different files each had
@@ -594,7 +594,7 @@ async def groq_status(db: AsyncSession) -> dict:
     if not GROQ_API_KEY:
         return {
             "available": False,
-            "message":   "Sign up free at console.groq.com — no credit card needed",
+            "message":   "Sign up free at console.groq.com, no credit card needed",
             "setup":     "Add GROQ_API_KEY=gsk_... to your .env file",
             "active":    settings["ai_provider"] == "groq",
         }
@@ -646,7 +646,7 @@ async def gemini_status(db: AsyncSession) -> dict:
     if not GEMINI_API_KEY:
         return {
             "available": False,
-            "message":   "Sign up free at aistudio.google.com — no credit card needed",
+            "message":   "Sign up free at aistudio.google.com, no credit card needed",
             "setup":     "Add GEMINI_API_KEY=... to your .env file",
             "active":    settings["ai_provider"] == "gemini",
         }

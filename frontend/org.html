@@ -3,14 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Ekklesia — Surfing the Frequencies</title>
+<title>Ekklesia, Surfing the Frequencies</title>
 <link rel="icon" type="image/png" href="/icons/icon-192.png">
 <link rel="manifest" href="/manifest.json"/>
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png"/>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300;1,9..40,400&display=swap">
-<link rel="stylesheet" href="app.css?v=902190621">
+<link rel="stylesheet" href="app.css?v=2794695757">
 <script src="bioregion-utils.js"></script>
 </head>
 <body class="page-org">
@@ -42,7 +42,7 @@
     </div>
   </div>
 </div>
-<!-- P8 VALIDATION MODAL — shared by org rep + learner views, content differs by S.valMode -->
+<!-- P8 VALIDATION MODAL, shared by org rep + learner views, content differs by S.valMode -->
 <div id="val-modal" class="org-modal" style="display:none" onclick="if(event.target===this)closeValModal()">
   <div class="org-modal-box val-modal-box" id="val-modal-box"><div class="spin"></div></div>
 </div>
@@ -117,7 +117,7 @@
   <main>
     <div class="sec on" id="s-koinonia"><div id="ai"><div class="spin"></div></div></div>
     <div class="sec" id="s-stoa">
-      <div class="sh"><div class="st">The Stoa</div><div class="ss">All active opportunities — matched to your arts</div></div>
+      <div class="sh"><div class="st">The Stoa</div><div class="ss">All active opportunities, matched to your arts</div></div>
       <div class="fbar">
         <button class="fp on" data-f="all"        onclick="sf('all',this)">All</button>
         <button class="fp"    data-f="volunteer"  onclick="sf('volunteer',this)">Volunteer</button>
@@ -170,7 +170,7 @@ const ARTS=[{s:'move',n:'Move'},{s:'eat',n:'Eat'},{s:'feel',n:'Feel'},{s:'notice
 
 // ── API ───────────────────────────────────────────────────
 // Learner and org sessions each live in their own httpOnly cookies now
-// (fl_access/fl_refresh for learners, fl_org_access for orgs) — set by the
+// (fl_access/fl_refresh for learners, fl_org_access for orgs), set by the
 // server, never touched by localStorage, and immune to XSS token theft
 // (P-SEC1, 2026-07-16). State-changing calls carry the matching CSRF
 // double-submit header (fl_csrf / fl_org_csrf cookie value echoed back).
@@ -197,13 +197,13 @@ const OA={
     if(r.status===401){S.org=null;if(!S._booting)showGate();return null;}
     if(r.status===403){
       // The only way a /api/orgs/* POST/PATCH 403s is the CSRF double-submit
-      // check (get_current_org only ever raises 401s) — meaning fl_org_access
+      // check (get_current_org only ever raises 401s), meaning fl_org_access
       // and fl_org_csrf have gotten out of sync (e.g. a stale/partial cookie
       // clear). No amount of retrying fixes that; only a fresh login re-issues
       // both cookies together. Surface it the same way a 401 does, rather
       // than silently returning null and leaving every action after this one
       // failing with a cryptic "not sent"/"could not save" toast.
-      S.org=null;if(!S._booting){toast('Session out of sync — please sign in again',true);showGate();}
+      S.org=null;if(!S._booting){toast('Session out of sync, please sign in again',true);showGate();}
       return null;
     }
     return r.ok?r.json().catch(()=>null):null;
@@ -214,7 +214,7 @@ const OA={
 // ── Boot ──────────────────────────────────────────────────
 async function boot(){
   document.documentElement.dataset.theme=localStorage.getItem('fl_theme')||'dark';
-  // No more localStorage flag to check first — just ask each API whether a
+  // No more localStorage flag to check first, just ask each API whether a
   // valid session cookie is present; a 401 from OA.get('/me') falls through
   // to the learner check below. S._booting suppresses OA.c's normal
   // "401 → show login gate" side effect while we're still probing.
@@ -248,7 +248,7 @@ async function loadLearner(){
 function drawKoinonia(){
   const el=document.getElementById('ai');
   const xp=S.streak?.total_xp||0,str=S.streak?.current_streak||0,app=S.myMatches.length;
-  let h=`<div class="sh"><div class="st">The Koinonia</div><div class="ss">The commons — where your learning meets the world</div></div>
+  let h=`<div class="sh"><div class="st">The Koinonia</div><div class="ss">The commons, where your learning meets the world</div></div>
   <div class="srow">
     <div class="sbox"><div class="snum">${app}</div><div class="slbl">Interests</div></div>
     <div class="sbox"><div class="snum">${xp}</div><div class="slbl">Total XP</div></div>
@@ -284,7 +284,7 @@ function drawKoinonia(){
       h+=`<div class="card" style="margin-bottom:10px">
         <div class="corg">${orgLine(l)}</div>
         <div class="ctitle">${e(l.title)}</div>
-        <div style="font-size:13px;color:var(--mu);margin:6px 0 12px">An organization thinks you'd be a great fit — accepting shares your profile with them so they can reach out.</div>
+        <div style="font-size:13px;color:var(--mu);margin:6px 0 12px">An organization thinks you'd be a great fit, accepting shares your profile with them so they can reach out.</div>
         <div style="display:flex;gap:8px">
           <button class="btn bp sm" onclick="aiAccept(${m.id})">Accept</button>
           <button class="btn bd2 sm" onclick="aiDecline(${m.id})">Decline</button>
@@ -301,7 +301,7 @@ function drawKoinonia(){
   }
   el.innerHTML=h;
 }
-async function aiAccept(mid){const r=await LA.post(`/matching/${mid}/accept`,{});if(r&&r.ok){toast('Accepted ✓ — they can now see your profile');await loadLearner();}else toast('Could not accept',true);}
+async function aiAccept(mid){const r=await LA.post(`/matching/${mid}/accept`,{});if(r&&r.ok){toast('Accepted ✓, they can now see your profile');await loadLearner();}else toast('Could not accept',true);}
 async function aiDecline(mid){if(!confirm('Decline this invitation?'))return;const r=await LA.post(`/matching/${mid}/decline`,{});if(r&&r.ok){toast('Declined');await loadLearner();}}
 
 // ── STOA ──────────────────────────────────────────────────
@@ -319,7 +319,7 @@ async function drawLPnyx(){
   if(!threads.length){el.innerHTML=`<div class="empty"><div class="ei">📜</div><h3>No conversations yet</h3><p>Express interest in a listing to start a conversation.</p></div>`;return;}
   if(!S.lMid)S.lMid=threads[0].m.id;
   const act=threads.find(t=>t.m.id===S.lMid);
-  // Render structure immediately — messages fill in async below
+  // Render structure immediately, messages fill in async below
   el.innerHTML=pnyxShell(
     threads.map(t=>`<div class="ti ${t.m.id===S.lMid?'on':''}" onclick="selL(${t.m.id})"><div class="tn">${e(t.l.org_name||'Org')}</div><div class="tp">${e(t.l.title)}</div></div>`).join(''),
     act?`<div class="cht">${e(act.l.title)}</div><div class="chs">${e(act.l.org_name||'')}</div>`:'',
@@ -358,7 +358,7 @@ async function loadOrg(){
 function drawODash(){
   const el=document.getElementById('odi');
   const act=S.orgListings.filter(l=>l.is_active).length,tot=S.orgListings.length,mat=S.orgMatches.length,con=S.orgMatches.filter(m=>m.org_status==='connected').length;
-  let h=`<div class="sh"><div class="st">Dashboard</div><div class="ss">${e(S.org.name)} — ${S.org.org_type}</div></div>
+  let h=`<div class="sh"><div class="st">Dashboard</div><div class="ss">${e(S.org.name)}, ${S.org.org_type}</div></div>
   <div class="srow" style="grid-template-columns:repeat(4,1fr)">
     <div class="sbox"><div class="snum">${act}</div><div class="slbl">Active</div></div>
     <div class="sbox"><div class="snum">${tot}</div><div class="slbl">Listings</div></div>
@@ -405,7 +405,7 @@ function obrDetect(){
   if(btn)btn.disabled=true;if(st)st.textContent='Detecting…';
   BioregionUtils.detect(function(res){
     if(btn)btn.disabled=false;
-    if(!res.ok||!res.name){if(st)st.textContent='Could not detect — try setting manually below.';return;}
+    if(!res.ok||!res.name){if(st)st.textContent='Could not detect, try setting manually below.';return;}
     obrSave(res.name, res.placeName);
   });
 }
@@ -450,7 +450,7 @@ function drawOList(){
   // Matches section inline below listings
   h+='<hr><div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mu);margin-bottom:12px;margin-top:4px">Interests Received ('+S.orgMatches.length+')</div>';
   if(!S.orgMatches.length){
-    h+='<div style="color:var(--mu);font-size:13px;padding:10px 0">No interests yet — learners will match as they complete sessions.</div>';
+    h+='<div style="color:var(--mu);font-size:13px;padding:10px 0">No interests yet, learners will match as they complete sessions.</div>';
   }else{
     const _byL={};S.orgMatches.forEach(function(m){if(!_byL[m._lid])_byL[m._lid]={t:m._ltitle,ms:[]};_byL[m._lid].ms.push(m);});
     Object.values(_byL).forEach(function(g){
@@ -460,7 +460,7 @@ function drawOList(){
         if(m.anonymized){
           var artsBadges=(m.arts_met||[]).map(function(a){return '<span class="badge bm" style="font-size:10px">'+e(a)+'</span>';}).join('');
           var action=m.learner_status==='invited'
-            ?'<span class="badge bt">Invited — awaiting response</span>'
+            ?'<span class="badge bt">Invited, awaiting response</span>'
             :'<button class="btn bp sm" onclick="notifyMatch('+m._lid+','+m.match_id+')">Notify candidate</button>';
           h+='<div class="mrow"><div class="mav">❔</div><div style="flex:1"><div style="font-size:14px;font-weight:600;color:var(--mu)">'+e(m.display_name)+'</div><div style="font-size:12px;color:var(--mu)">AI match · score '+(m.match_score||0)+' '+artsBadges+'</div></div>'+action+'</div>';
           return;
@@ -491,7 +491,7 @@ function listingFormHtml(ex=null){
       <div class="ag">${ARTS.map(a=>`<label class="ac"><input type="checkbox" name="art" value="${a.s}"${ex&&(ex.required_arts||[]).includes(a.s)?' checked':''}> ${a.n}</label>`).join('')}</div>
     </div>
     <div class="fg full" style="margin-bottom:8px">
-      <label>What are you looking for? (P11 — AI matches learners against this)</label>
+      <label>What are you looking for? (P11, AI matches learners against this)</label>
       <textarea id="lfn" rows="3" placeholder="e.g. someone comfortable facilitating group discussions and with basic first aid knowledge">${ex&&ex.needs_text?e(ex.needs_text):''}</textarea>
     </div>
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
@@ -532,11 +532,11 @@ async function lfParseNeeds(existingId){
   S.editId=listing.id;
   if(st)st.textContent='Asking the AI…';
   const r=await OA.post(`/listings/${listing.id}/parse-needs`,{});
-  if(!r){if(st)st.textContent='AI parsing unavailable — try again shortly.';return;}
+  if(!r){if(st)st.textContent='AI parsing unavailable, try again shortly.';return;}
   _lfnTargets=r.needs_skill_targets||[];
   const _lfnTasks=r.needs_tasks||[];
   await OA.patch(`/listings/${listing.id}`,{needs_skill_targets:_lfnTargets,needs_tasks:_lfnTasks});
-  const box=document.getElementById('lfn-targets');if(box)box.innerHTML=(_lfnTargets.length||_lfnTasks.length)?lfnTargetsHtml(_lfnTargets,_lfnTasks):'<div style="font-size:12px;color:var(--mu)">No matching skills found — try describing the need differently.</div>';
+  const box=document.getElementById('lfn-targets');if(box)box.innerHTML=(_lfnTargets.length||_lfnTasks.length)?lfnTargetsHtml(_lfnTargets,_lfnTasks):'<div style="font-size:12px;color:var(--mu)">No matching skills found, try describing the need differently.</div>';
   if(st)st.textContent=_lfnTargets.length?'✓ Skill targets & tasks saved.':'';
   await reloadOL();
 }
@@ -648,7 +648,7 @@ async function lrnLogin(){
   var r=await fetch("/api/auth/login",{method:"POST",credentials:"same-origin",headers:{"Content-Type":"application/json"},body:JSON.stringify({email:em,password:pw})});
   if(r.ok){
     // Go straight to the learner view instead of boot(), which checks the
-    // org session first — if a valid org cookie (e.g. curiouscharb) is
+    // org session first, if a valid org cookie (e.g. curiouscharb) is
     // still sitting in the browser, boot() would route here into the Org
     // interface even though a learner login just succeeded. Mirrors the
     // direct-show pattern orgLogin()/omLogin() already use for org login.
@@ -763,7 +763,7 @@ function renderMsgs(ms,pov){
 function stCls(s){return{pending:'sp',reviewing:'sr',connected:'sc',declined:'sd'}[s]||'sp';}
 
 // ── P8: VALIDATION MODAL ─────────────────────────────────────
-// Shared by both the org-rep view and the learner view — S.valMode picks
+// Shared by both the org-rep view and the learner view, S.valMode picks
 // which action buttons render. Full spec: PROJECT_MASTER PART 22.
 function closeValModal(){document.getElementById('val-modal').style.display='none';S.valMode=null;S.valMid=null;S.valData=null;}
 
@@ -855,7 +855,7 @@ async function learnerSubmitTask(idx){
   const ta=document.getElementById(`valtn-${idx}`);
   const note=ta?ta.value.trim():'';
   const r=await LA.post(`/matching/${S.valMid}/tasks/${idx}/submit`,{note:note||null});
-  if(r){toast('Submitted ✓ — awaiting review');const rr=await LA.get(`/matching/${S.valMid}/validation`);if(rr){S.valData=rr;drawValModal();}}
+  if(r){toast('Submitted ✓, awaiting review');const rr=await LA.get(`/matching/${S.valMid}/validation`);if(rr){S.valData=rr;drawValModal();}}
   else toast('Could not submit',true);
 }
 async function orgVerifySkill(skillId){
@@ -899,7 +899,7 @@ function fmt(iso){if(!iso)return'';try{return new Date(iso).toLocaleString(undef
 boot();
 </script>
 
-<!-- Service worker registration — see frontend/sw.js header comment. -->
+<!-- Service worker registration, see frontend/sw.js header comment. -->
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () {
