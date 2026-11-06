@@ -15,4 +15,6 @@ This is deliberately about roundedness, not volume in any one favorite Art, your
 
 Your avatar and your Polis access read the same thing: your growth across the 15 Arts. A session adds to that growth when you share something in it, a few words in the challenge or the reflection are enough. A session you finish without writing anything is still saved, but it doesn't move your avatar.
 
+Your dashboard shows how close you are to the next stage: the share of your Arts that have reached its threshold, and which Arts to grow next. There are no points or streaks to chase, only the shape of your own growth.
+
 Your avatar stage also determines how much of [Polis](polis) is open to you.

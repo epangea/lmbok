@@ -12,7 +12,7 @@ from sqlalchemy import select
 from models import (
     Learner, LearnerSkillProgress, Skill,
     Arts, ArtsGroup, ArtsSkills, LearnerArtProgress,
-    Session, LearnerStreak
+    Session
 )
 
 
@@ -21,7 +21,6 @@ class RecommendationEngine:
     async def recommend_next(self, learner_id: int, db: AsyncSession) -> dict:
         all_skills = await self._get_all_skills(db)
         progress   = await self._get_all_progress(learner_id, db)
-        streak     = await self._get_streak(learner_id, db)
         radar      = await self.compute_radar(learner_id, db)
 
         # Build a set of art_ids practiced in the last 24h so _score_skill can
@@ -38,7 +37,7 @@ class RecommendationEngine:
         for skill in all_skills:
             prog = progress.get(skill.id)
             art_id = skill_art_map.get(skill.id)
-            score, signals = self._score_skill(skill, prog, radar, streak, art_id, recent_art_ids)
+            score, signals = self._score_skill(skill, prog, radar, art_id, recent_art_ids)
             scored.append((score, skill, signals))
 
         scored.sort(key=lambda x: x[0], reverse=True)
@@ -119,7 +118,7 @@ class RecommendationEngine:
             "current_level": current_level,
             "target_level":  min(current_level + 1, 3),
             "title":         self._make_title(best_skill, current_level),
-            "duration_min":  self._estimate_duration(current_level, streak),
+            "duration_min":  self._estimate_duration(current_level),
             "reasoning":     self._make_reasoning(best_signals, best_skill),
             "signals":       best_signals,
             "score":         round(best_score, 3),
@@ -214,7 +213,7 @@ class RecommendationEngine:
             "group_scores": group_scores,
         }
 
-    def _score_skill(self, skill, prog, radar, streak,
+    def _score_skill(self, skill, prog, radar,
                      art_id=None, recent_art_ids=None) -> tuple[float, dict]:
         signals = {}
 
@@ -323,19 +322,13 @@ class RecommendationEngine:
         )
         return {p.skill_id: p for p in r.scalars().all()}
 
-    async def _get_streak(self, learner_id, db):
-        r = await db.execute(
-            select(LearnerStreak).where(LearnerStreak.learner_id == learner_id)
-        )
-        return r.scalar_one_or_none()
-
     def _make_title(self, skill, level: int) -> str:
         verbs = {0: "Discover", 1: "Explore", 2: "Deepen", 3: "Teach"}
         return f"{verbs.get(level, 'Explore')}: {skill.name}"
 
-    def _estimate_duration(self, level: int, streak) -> int:
-        base = 15 + (level * 3)
-        return base + 5 if (streak and streak.current_streak >= 7) else base
+    def _estimate_duration(self, level: int) -> int:
+        # 2026-11-05: no streak bonus any more (day streaks are no longer a platform concept).
+        return 15 + (level * 3)
 
     def _make_reasoning(self, signals: dict, skill) -> str:
         parts = []

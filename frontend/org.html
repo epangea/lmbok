@@ -165,7 +165,7 @@
 <div id="toast"></div>
 <script>
 // ── State ─────────────────────────────────────────────────
-const S={learner:null,streak:null,myMatches:[],topMatch:null,allListings:[],filter:'all',org:null,orgListings:[],orgMatches:[],lMid:null,oMid:null,msgs:{},editId:null};
+const S={learner:null,streak:null,access:null,myMatches:[],topMatch:null,allListings:[],filter:'all',org:null,orgListings:[],orgMatches:[],lMid:null,oMid:null,msgs:{},editId:null};
 const ARTS=[{s:'move',n:'Move'},{s:'eat',n:'Eat'},{s:'feel',n:'Feel'},{s:'notice',n:'Notice'},{s:'express',n:'Express'},{s:'live',n:'Live'},{s:'listen',n:'Listen'},{s:'give',n:'Give'},{s:'receive',n:'Receive'},{s:'collaborate',n:'Collaborate'},{s:'understand',n:'Understand'},{s:'respect',n:'Respect'},{s:'build',n:'Build'},{s:'grow',n:'Grow'},{s:'consume',n:'Consume'}];
 
 // ── API ───────────────────────────────────────────────────
@@ -233,8 +233,8 @@ function showOA(){document.getElementById('gate').style.display='none';document.
 
 // ── Learner load ──────────────────────────────────────────
 async function loadLearner(){
-  const[str,mm,tm,al]=await Promise.all([LA.get('/learners/me/streak'),LA.get('/matching/'),LA.get('/matching/listings/top'),LA.get('/matching/listings')]);
-  S.streak=str||{};S.myMatches=mm||[];S.topMatch=tm;S.allListings=al||[];
+  const[str,mm,tm,al,acc]=await Promise.all([LA.get('/learners/me/streak'),LA.get('/matching/'),LA.get('/matching/listings/top'),LA.get('/matching/listings'),LA.get('/polis/my-access')]);
+  S.streak=str||{};S.access=acc||{};S.myMatches=mm||[];S.topMatch=tm;S.allListings=al||[];
   var _ln=document.getElementById('lnm');
   if(_ln)_ln.textContent=S.learner.display_name||S.learner.username;
   const b=document.getElementById('lpb');
@@ -247,12 +247,12 @@ async function loadLearner(){
 // ── AGORA ─────────────────────────────────────────────────
 function drawKoinonia(){
   const el=document.getElementById('ai');
-  const xp=S.streak?.total_xp||0,str=S.streak?.current_streak||0,app=S.myMatches.length;
+  const ses=S.streak?.total_sessions||0,stg=S.access?.label?((S.access.icon||'')+' '+S.access.label):'-',app=S.myMatches.length;
   let h=`<div class="sh"><div class="st">The Koinonia</div><div class="ss">The commons, where your learning meets the world</div></div>
   <div class="srow">
     <div class="sbox"><div class="snum">${app}</div><div class="slbl">Interests</div></div>
-    <div class="sbox"><div class="snum">${xp}</div><div class="slbl">Total XP</div></div>
-    <div class="sbox"><div class="snum">${str}</div><div class="slbl">Day Streak</div></div>
+    <div class="sbox"><div class="snum">${stg}</div><div class="slbl">Avatar stage</div></div>
+    <div class="sbox"><div class="snum">${ses}</div><div class="slbl">Sessions completed</div></div>
   </div>`;
   if(S.topMatch){
     const tm=S.topMatch,had=S.myMatches.some(m=>m.listing_id===tm.id),mx=S.myMatches.find(m=>m.listing_id===tm.id);

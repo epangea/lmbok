@@ -175,7 +175,6 @@ async def main() -> None:
 
             stats = (await conn.execute(text("""
                 SELECT
-                    COALESCE(SUM(s.xp_earned), 0)        AS total_xp,
                     COALESCE(SUM(s.duration_seconds), 0)  AS total_minutes,
                     COUNT(*)                              AS session_count,
                     SUM(CASE WHEN s.status = 'completed' THEN 1 ELSE 0 END) AS completed,
@@ -235,7 +234,6 @@ async def main() -> None:
                 f"The frequencies you surfed this past week:\n\n"
                 f"  Sessions started : {int(stats['session_count'] or 0)}\n"
                 f"  Sessions completed: {int(stats['completed'] or 0)}\n"
-                f"  XP earned        : {int(stats['total_xp'] or 0)}\n"
                 f"  Minutes learned  : {int(stats['total_minutes'] or 0)}\n"
                 f"  Favorite arts    : {top_arts}\n\n"
                 + (f"This week's growth:\n{story_paragraph}\n\n" if story_paragraph else "")

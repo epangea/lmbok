@@ -345,10 +345,8 @@ const S = {
   // Live data, seeded from localStorage cache so initial draw shows real data,
   // then refreshed from API in loadDashboard().
   learner: API.getLearner(),
-  streak:      _dc ? _dc.streak      : 0,
-  level:       _dc ? _dc.level       : 1,
-  xp:          _dc ? _dc.xp          : 0,
-  xpMax: 100,
+  totalSessions: _dc ? (_dc.totalSessions || 0) : 0,
+  radarSnapshots: null,   // Portfolio growth chart, loaded by loadProgress()
   weekMinutes: _dc ? _dc.weekMinutes : 0,
   nextRec:     _dc ? _dc.nextRec     : null,
   radar: (_dc && _dc.radar) ? _dc.radar : { being: 0, becoming: 0, connecting: 0 },
@@ -482,10 +480,11 @@ async function loadDashboard() {
     // If an API call 503'd (null), we leave S untouched so cached values persist.
     const updates = {};
     if (streakData) {
-      updates.streak      = streakData.current_streak || 0;
-      updates.xp          = streakData.total_xp || 0;
-      updates.level       = Math.max(1, Math.floor((streakData.total_xp || 0) / 100) + 1);
-      updates.weekMinutes = streakData.total_minutes || 0;
+      // 2026-11-05: XP, level and the day streak are no longer shown to learners
+      // (see PHILOSOPHY.md). The endpoint and its data stay for admin analytics and the
+      // weekly email's activity window; the dashboard only needs the session count.
+      updates.totalSessions = streakData.total_sessions || 0;
+      updates.weekMinutes   = streakData.total_minutes || 0;
     }
     if (radarData && radarData.group_scores) {
       updates.radar = radarData.group_scores;
@@ -517,9 +516,7 @@ async function loadDashboard() {
       const _prev = JSON.parse(localStorage.getItem('fl_dash_cache') || '{}');
       const _next = Object.assign({}, _prev, {
         cacheDate:     new Date().toISOString().slice(0, 10),
-        streak:        updates.streak        !== undefined ? updates.streak        : _prev.streak,
-        xp:            updates.xp            !== undefined ? updates.xp            : _prev.xp,
-        level:         updates.level         !== undefined ? updates.level         : _prev.level,
+        totalSessions: updates.totalSessions !== undefined ? updates.totalSessions : _prev.totalSessions,
         weekMinutes:   updates.weekMinutes   !== undefined ? updates.weekMinutes   : _prev.weekMinutes,
         nextRec:       updates.nextRec       !== undefined ? updates.nextRec       : _prev.nextRec,
         radar:         updates.radar         !== undefined ? updates.radar         : _prev.radar,
@@ -542,22 +539,24 @@ async function loadProgress() {
   if (!API.isLoggedIn()) return;
   set({progressLoading: true});
   try {
-    const [history, activity, verifiedSkills, weeklyStories] = await Promise.all([
+    const [history, activity, verifiedSkills, weeklyStories, snapshots] = await Promise.all([
       API.get('/sessions/history?limit=30').catch(() => null),
       API.get('/sessions/activity?days=30').catch(() => null),
       API.get('/learners/me/verified-skills').catch(() => null),
       API.get('/learners/me/weekly-stories').catch(() => null),
+      API.get('/radar/snapshots?limit=60').catch(() => null),
     ]);
     set({
       progressHistory:  history  || [],
       progressActivity: activity || [],
       verifiedSkills:   verifiedSkills || [],
       weeklyStories:    weeklyStories || [],
+      radarSnapshots:   snapshots || [],
       progressLoading:  false,
     });
   } catch(e) {
     console.log('Progress load:', e.message);
-    set({progressLoading: false, progressHistory: [], progressActivity: [], verifiedSkills: [], weeklyStories: []});
+    set({progressLoading: false, progressHistory: [], progressActivity: [], verifiedSkills: [], weeklyStories: [], radarSnapshots: []});
   }
 }
 
@@ -868,7 +867,6 @@ const LANG = {  // Only English ships inline; other languages load
     'admin.no_learners':'No learners yet.',
     'agora.day_journey':'Day {n} on your journey · Surfing the Frequencies',
     'agora.guiding_star':'Guiding Star',
-    'agora.level':'current level',
     'agora.life_profile':'Life Profile',
     'agora.match_score':'Match score',
     'agora.mouseion':'My Mouseion',
@@ -877,8 +875,6 @@ const LANG = {  // Only English ships inline; other languages load
     'agora.rec_next':'Recommended next',
     'agora.sessions':'sessions done',
     'agora.start':'Start →',
-    'agora.streak':'day streak',
-    'agora.total_xp':'total xp',
     'agora.welcome':'Welcome',
     'auth.account_active':'Your account is active, sign in to begin.',
     'auth.already_riding':'Already riding?',
@@ -911,7 +907,7 @@ const LANG = {  // Only English ships inline; other languages load
     'avatar.no_portrait_yet':'No portrait generated yet.',
     'bio.add_voice':'Add your voice to the Bioregion page →',
     'bio.char_count_hint':'(20–2000 characters)',
-    'bio.city_notice':'City-level only · never stored · your data stays on your device',
+    'bio.city_notice':'City-level only · the lookup runs once on your device · your bioregion name is saved to your account',
     'bio.click_map_find':'Click anywhere on the map to find your bioregion',
     'bio.click_marker':'Click any marker or anywhere on the map',
     'bio.confirm_withdraw':'Withdraw your contribution? This cannot be undone.',
@@ -981,7 +977,7 @@ const LANG = {  // Only English ships inline; other languages load
     'dash.learning_domains':'Learning Domains',
     'dash.lmbok_title':'Your Very Own Life Management Body of Knowledge (LMBoK)',
     'dash.progress':'Your Progress',
-    'dash.progress_tagline':'XP earned · sessions completed · skills growing',
+    'dash.progress_tagline':'Avatar stage · sessions completed · skills growing',
     'dash.strongest_arts':'Strongest arts',
     'dash.strongest_domains':'Strongest domains',
     'lang.toggle_ui':'Toggle UI language',
@@ -1084,7 +1080,7 @@ const LANG = {  // Only English ships inline; other languages load
     'prefs.language':'Language',
     'prefs.name':'Display name',
     'prefs.newsletter_optin':'Receive administrative emails and educational newsletters (never spam)',
-    'prefs.weekly_report_optin':'Receive your weekly progress digest (sessions, XP, favorite arts)',
+    'prefs.weekly_report_optin':'Receive your weekly progress digest (sessions, favorite arts)',
     'prefs.phase':'Life phase',
     'prefs.phase_unknown':'Set your birth year below to see your phase',
     'prefs.save':'Save changes',
@@ -1145,19 +1141,27 @@ const LANG = {  // Only English ships inline; other languages load
     'session.warmup':'Warm up',
     'session.warmup_fallback':'Welcome to the Academy. Today we explore <strong>the art of growing</strong>, learning to work with the land, not against it. Permaculture teaches us that healthy systems are diverse, connected and self-renewing. So are healthy humans. Ready to surf this frequency?',
     'stat.active_days':'active days',
+    'stage.badge':'Stage {n} of 6',
+    'stage.next':'Next: {stage}',
+    'stage.arts_at':'{n} of {total} Arts at {pct}%.',
+    'stage.growing_next':'Growing next: {arts}',
+    'stage.top':'You have reached the highest stage.',
+    'stat.stage':'avatar stage',
+    'session.counts':'counts toward your growth',
+    'session.write_to_count':'share a few words to count it',
+    'stat.sessions_month':'sessions, last 30 days',
+    'stat.minutes_month':'minutes, last 30 days',
+    'portfolio.tab_growth':'Growth',
+    'growth.title':'Your growth over time',
+    'growth.empty':'Complete a few sessions to see your growth over time.',
+    'growth.weakest':'Weakest Art',
+    'growth.hint':'The dotted line is your weakest Art, which sets your stage. Icons mark where each stage begins.',
     'stat.art_progressing':'art progressing',
     'stat.arts':'Arts',
-    'stat.avg_xp_day':'avg XP / active day',
-    'stat.day_streak':'day streak',
     'stat.learning':'Learning',
-    'stat.lifetime_xp':'lifetime XP',
-    'stat.points':'Points',
     'stat.skills':'Skills',
     'stat.skills_touched':'skills touched',
-    'stat.this_session':'this session',
     'stat.time_invested':'time invested',
-    'stat.xp_last_30_days':'XP earned, last 30 days',
-    'stat.xp_month':'XP this month',
     'stoa.private':'Private by default · yours always',
     'stoa.recent':'Recent reflections',
     'stoa.save':'Save reflection',
@@ -1323,7 +1327,7 @@ window.showProfileMenu = function(e) {
   menu.innerHTML =
     '<div style="padding:14px 16px;border-bottom:1px solid var(--border)">'
     + '<div style="font-weight:700;color:var(--text1);font-size:14px">' + (l.display_name||l.username||'Learner') + '</div>'
-    + '<div style="color:var(--text3);font-size:12px;margin-top:3px">Lv ' + (S.level||1) + ' · ' + (S.xp||0) + ' XP</div>'
+    + '<div style="color:var(--text3);font-size:12px;margin-top:3px">' + (function(){ var st = computeAvatarStage(S.artScores || {}); return st.icon + ' ' + st.stage; })() + '</div>'
     + '</div>'
     + '<button onclick="showPreferences()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:block">⚙ ' + T('common.preferences') + '</button>'
     + '<button onclick="set({view:\'help\'});document.getElementById(\'profile-menu\').remove()" style="width:100%;padding:11px 16px;text-align:start;background:none;border:none;color:var(--text2);font-size:13px;cursor:pointer;border-bottom:1px solid var(--border);display:block">❓ ' + T('nav.help') + '</button>'
@@ -1341,7 +1345,7 @@ window.showProfileMenu = function(e) {
 // ══════════════════════════════════════════════════
 // AVATAR STAGE
 // Evolutionary path: Seed→Sprout→Sapling→Grove→Forest→Ecosystem
-// Based on XP + breadth across Being/Becoming/Connecting
+// Based on the weakest of the 15 Arts (see below)
 // ══════════════════════════════════════════════════
 // 2026-09-05: replaced the old (xp, touched-count, domain-breadth) gate
 // with a pure Art-level bottleneck gate, every one of the 15 Arts must
@@ -1377,6 +1381,164 @@ function computeAvatarStage(artScores) {
   return                { stage:'Seed',        icon:'🫘', level:1,
     desc:'Everything begins here, potential in its purest form.',
     polis:'Polis: view only, keep growing to unlock discussion' };
+}
+
+// ── Progress toward the NEXT stage (2026-11-05) ───────────────────
+// Same thresholds as computeAvatarStage() and utils.compute_avatar_stage().
+// pct = how close ALL 15 Arts are to the next threshold (mean of
+// min(score / threshold, 1)): it moves a little with every counted
+// session and reaches 100 exactly when the stage changes. It replaces
+// the old XP and streak counters as the learner-facing sense of progress.
+var STAGE_STEPS = [
+  {stage:'Sprout',    icon:'\ud83c\udf31', min:0.10},
+  {stage:'Sapling',   icon:'\ud83c\udf3f', min:0.20},
+  {stage:'Grove',     icon:'\ud83c\udf33', min:0.40},
+  {stage:'Forest',    icon:'\ud83c\udf32', min:0.65},
+  {stage:'Ecosystem', icon:'\ud83c\udf0d', min:1.00}
+];
+var ALL_ART_SLUGS = ['move','eat','feel','notice','express','live','listen','give','receive','collaborate','understand','respect','build','grow','consume'];
+
+function computeStageProgress(artScores) {
+  var arts = artScores || {};
+  var minScore = ALL_ART_SLUGS.reduce(function(m, a){ var v = arts[a] || 0; return v < m ? v : m; }, 1.0);
+  var next = null;
+  for (var i = 0; i < STAGE_STEPS.length; i++) {
+    if (minScore < STAGE_STEPS[i].min) { next = STAGE_STEPS[i]; break; }
+  }
+  var total = ALL_ART_SLUGS.length;
+  if (!next) return {next: null, pct: 100, atNext: total, total: total, holding: []};
+  var sum = 0, at = 0;
+  ALL_ART_SLUGS.forEach(function(a) {
+    var v = arts[a] || 0;
+    sum += Math.min(v / next.min, 1);
+    if (v >= next.min) at++;
+  });
+  var holding = ALL_ART_SLUGS.slice()
+    .sort(function(a, b) { return (arts[a] || 0) - (arts[b] || 0); })
+    .filter(function(a) { return (arts[a] || 0) < next.min; })
+    .slice(0, 3);
+  return {next: next, pct: Math.round(sum / total * 100), atNext: at, total: total, holding: holding};
+}
+
+// Mirrors sessions.has_real_response() in the backend (MIN_RESPONSE_CHARS = 15,
+// CJK_CHAR_WEIGHT = 3). Only used to tell the learner, before they finish, whether
+// the session will count toward their growth. The server is the source of truth.
+function hasRealResponse() {
+  var cjk = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff\uac00-\ud7af]/;
+  for (var i = 0; i < arguments.length; i++) {
+    var t = String(arguments[i] || '').split(/\s+/).filter(Boolean).join(' ');
+    var n = 0;
+    for (var ch of t) n += cjk.test(ch) ? 3 : 1;
+    if (n >= 15) return true;
+  }
+  return false;
+}
+
+function growthCountBox() {
+  var ok = hasRealResponse(S.challengeText, S.reflectText);
+  return '<div class="stat-box"><div class="stat-v" style="color:' + (ok ? 'var(--wave)' : 'var(--text3)') + '">' + (ok ? '\u2713' : '\u270e') + '</div>'
+    + '<div class="stat-l">' + T(ok ? 'session.counts' : 'session.write_to_count') + '</div></div>';
+}
+
+function stageArtName(slug) {
+  var a = (typeof ARTS_DATA !== 'undefined' ? ARTS_DATA : []) || [];
+  a = a.find(function(x){ return x.slug === slug; });
+  return a ? a.name : (slug.charAt(0).toUpperCase() + slug.slice(1));
+}
+
+function stageProgressHtml() {
+  var sp = computeStageProgress(S.artScores);
+  if (!sp.next) {
+    return '<div style="font-size:11px;color:var(--text2);margin-bottom:10px">' + T('stage.top') + '</div>';
+  }
+  var names = sp.holding.map(stageArtName).join(', ');
+  return '<div style="margin-bottom:10px">'
+    + '<div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text2);margin-bottom:5px">'
+    +   '<span>' + T('stage.next', {stage: sp.next.icon + ' ' + sp.next.stage}) + '</span><span>' + sp.pct + '%</span></div>'
+    + '<div style="background:rgba(255,255,255,0.07);border-radius:4px;height:5px;overflow:hidden">'
+    +   '<div style="height:5px;border-radius:4px;background:var(--wave);width:' + sp.pct + '%;transition:width .4s ease"></div></div>'
+    + '<div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.5">'
+    +   T('stage.arts_at', {n: sp.atNext, total: sp.total, pct: Math.round(sp.next.min * 100)})
+    +   (names ? ' ' + T('stage.growing_next', {arts: names}) : '') + '</div>'
+    + '</div>';
+}
+
+// Growth chart for the Portfolio: the three families and the weakest Art over
+// time, with the stage thresholds as guides. `snapsNewestFirst` is the raw
+// /radar/snapshots reply; `activity` is /sessions/activity (last 30 days).
+function renderGrowthChart(snapsNewestFirst, activity, t) {
+  var snaps = (snapsNewestFirst || []).slice().reverse();
+  activity = activity || [];
+  var sess30 = activity.reduce(function(s, r){ return s + (r.sessions_done || 0); }, 0);
+  var mins30 = activity.reduce(function(s, r){ return s + (r.minutes_spent || 0); }, 0);
+  var activeDays = activity.filter(function(r){ return (r.sessions_done || 0) > 0; }).length;
+  var card = function(v, color, label) {
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:90px">'
+      + '<div style="font-size:20px;font-weight:700;color:' + color + '">' + v + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + label + '</div></div>';
+  };
+  var head = '<div style="margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap">'
+    + card(sess30, 'var(--wave)', t('stat.sessions_month'))
+    + card(activeDays, '#6AB0FF', t('stat.active_days'))
+    + card(mins30, 'var(--gold)', t('stat.minutes_month')) + '</div>';
+  if (snaps.length < 2) {
+    return head + '<div style="text-align:center;padding:40px 0;color:var(--text3)">'
+      + '<div style="font-size:32px;margin-bottom:10px">\ud83c\udf31</div>'
+      + '<div style="font-size:13px;line-height:1.7">' + t('growth.empty') + '</div></div>';
+  }
+  var series = {
+    being:      snaps.map(function(s){ return +s.score_being || 0; }),
+    becoming:   snaps.map(function(s){ return +s.score_becoming || 0; }),
+    connecting: snaps.map(function(s){ return +s.score_connecting || 0; }),
+    weakest:    snaps.map(function(s){
+      var a = s.art_scores || {};
+      return ALL_ART_SLUGS.reduce(function(m, k){ var v = +a[k] || 0; return v < m ? v : m; }, 1.0);
+    })
+  };
+  var maxV = Math.max.apply(null, [].concat(series.being, series.becoming, series.connecting));
+  var yMax = Math.min(1, Math.max(0.2, Math.ceil(maxV * 10) / 10 + 0.05));
+  var W = 560, H = 190, PL = 34, PR = 34, PT = 10, PB = 20;
+  var n = snaps.length;
+  var X = function(i){ return PL + (n === 1 ? 0 : i / (n - 1)) * (W - PL - PR); };
+  var Y = function(v){ return PT + (1 - Math.min(v, yMax) / yMax) * (H - PT - PB); };
+  var line = function(vals, color, dash, width) {
+    return '<polyline fill="none" stroke="' + color + '" stroke-width="' + (width || 1.8) + '"'
+      + (dash ? ' stroke-dasharray="' + dash + '"' : '') + ' stroke-linejoin="round" points="'
+      + vals.map(function(v, i){ return X(i).toFixed(1) + ',' + Y(v).toFixed(1); }).join(' ') + '"/>';
+  };
+  var guides = STAGE_STEPS.filter(function(st){ return st.min <= yMax; }).map(function(st) {
+    var y = Y(st.min);
+    return '<line x1="' + PL + '" y1="' + y.toFixed(1) + '" x2="' + (W - PR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(255,255,255,0.07)" stroke-width="0.8"/>'
+      + '<text x="' + (W - PR + 6) + '" y="' + (y + 4).toFixed(1) + '" font-size="11">' + st.icon + '</text>';
+  }).join('');
+  var ticks = [0, yMax / 2, yMax].map(function(v) {
+    return '<text x="' + (PL - 5) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="rgba(255,255,255,0.3)" font-family="sans-serif">' + Math.round(v * 100) + '%</text>';
+  }).join('');
+  var fmt = function(s) {
+    var d = new Date(s.created_at);
+    return isNaN(d) ? '' : d.toLocaleDateString(undefined, {month: 'short', day: 'numeric'});
+  };
+  var xlabels = '<text x="' + PL + '" y="' + (H - 5) + '" font-size="8" fill="rgba(255,255,255,0.35)" font-family="sans-serif">' + fmt(snaps[0]) + '</text>'
+    + '<text x="' + (W - PR) + '" y="' + (H - 5) + '" text-anchor="end" font-size="8" fill="rgba(255,255,255,0.35)" font-family="sans-serif">' + fmt(snaps[n - 1]) + '</text>';
+  var legendItem = function(color, label, dashed) {
+    return '<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px;font-size:10px;color:var(--text3)">'
+      + '<span style="display:inline-block;width:14px;border-top:2px ' + (dashed ? 'dotted' : 'solid') + ' ' + color + '"></span>' + label + '</span>';
+  };
+  return head
+    + '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 14px 8px;overflow:hidden">'
+    + '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">' + t('growth.title') + '</div>'
+    + '<svg width="100%" viewBox="0 0 ' + W + ' ' + H + '" style="overflow:visible;display:block;direction:ltr" dir="ltr">'
+    + guides + ticks + xlabels
+    + line(series.being, 'var(--wave)') + line(series.becoming, '#6AB0FF') + line(series.connecting, 'var(--gold)')
+    + line(series.weakest, 'rgba(255,255,255,0.8)', '2 3', 1.6)
+    + '</svg>'
+    + '<div style="margin-top:8px">'
+    + legendItem('var(--wave)', t('common.category_being'))
+    + legendItem('#6AB0FF', t('common.category_becoming'))
+    + legendItem('var(--gold)', t('common.category_connecting'))
+    + legendItem('rgba(255,255,255,0.8)', t('growth.weakest'), true) + '</div>'
+    + '<div style="font-size:10px;color:var(--text3);margin:6px 0 4px;line-height:1.5">' + t('growth.hint') + '</div>'
+    + '</div>';
 }
 
 // ══════════════════════════════════════════════════
@@ -1563,8 +1725,9 @@ function renderBioregionCard(avatarStage) {
     + '<div style="font-size:13px;font-weight:700;color:var(--wave);font-family:var(--font-display)">'+avatarStage.stage+'</div>'
     + '<div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:2px">'+avatarStage.desc+'</div>'
     + '</div>'
-    + '<div style="font-size:10px;color:var(--text3);background:var(--bg3);border-radius:20px;padding:3px 9px;white-space:nowrap">Lv '+avatarStage.level+' / 6</div>'
+    + '<div style="font-size:10px;color:var(--text3);background:var(--bg3);border-radius:20px;padding:3px 9px;white-space:nowrap">'+T('stage.badge',{n:avatarStage.level})+'</div>'
     + '</div>'
+    + stageProgressHtml()
     + '<div style="font-size:10px;color:var(--text3);margin-bottom:10px;line-height:1.5;padding:6px 10px;background:var(--bg3);border-radius:6px;border-left:2px solid var(--wave)">'
     + '<span style="font-weight:600;color:var(--wave)">'+T('bio.polis_access')+'</span>'+avatarStage.polis
     + '</div>';
@@ -1679,7 +1842,7 @@ function Dashboard() {
       return {
         i: '✓',
         l: s.title || ('The Art of ' + s.art_name),
-        s: s.art_name + (mins ? ' · ' + mins + 'min' : '') + ' · +' + (s.xp_earned||0) + ' XP',
+        s: s.art_name + (mins ? ' · ' + mins + 'min' : ''),
         done: true,
       };
     });
@@ -1697,7 +1860,7 @@ function Dashboard() {
     }
   } else {
     // Fallback proxy while loading
-    var _sessionsDone = Math.floor((S.xp||0) / 18);
+    var _sessionsDone = (S.totalSessions||0);
     journeySteps = [
       {i:'✓', l:'First session',  s:'Explore an art',       done: _sessionsDone >= 1},
       {i:'▶', l:'Second wave',    s:'Deepen the practice',  done: _sessionsDone >= 2},
@@ -1747,8 +1910,8 @@ function Dashboard() {
       <!-- Stat bar, inline center -->
       <div class="stat-box" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:8px 6px">
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border)">
-          <span class="stat-v" style="color:var(--deep);font-size:17px;line-height:1">${S.xp||0}</span>
-          <span style="font-size:12px;font-weight:700;color:var(--text2)">${T('stat.points')}</span>
+          <span class="stat-v" style="color:var(--deep);font-size:17px;line-height:1">${_avatarStage.icon}</span>
+          <span style="font-size:12px;font-weight:700;color:var(--text2)">${_avatarStage.stage}</span>
         </div>
         <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border)">
           <span class="stat-v" style="color:var(--coral);font-size:17px;line-height:1">${hoursStr}</span>
@@ -1770,7 +1933,7 @@ function Dashboard() {
 
     <!-- ── 3-column grid ─────────────────────────────────────────
          LEFT (order-1):   Radar + Strongest Arts/Domains + Today's Journey
-         MIDDLE (order-2): Level/XP + Hours · Recommended Next · New Match
+         MIDDLE (order-2): Stage + Hours · Recommended Next · New Match
          RIGHT (order-3):  Where I Stand (Avatar · Bioregion)
          Responsive: columns stack in order 1→2→3 on narrow viewports
     ──────────────────────────────────────────────────────────── -->
@@ -2261,7 +2424,7 @@ function phaseBody(p) {
       </details>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px">
-      <div class="stat-box"><div class="stat-v" style="color:var(--wave)">+18 xp</div><div class="stat-l">${T('stat.this_session')}</div></div>
+      ${growthCountBox()}
       <div class="stat-box"><div class="stat-v" style="font-size:16px;color:var(--gold);font-family:var(--font-display)">${currentSession ? currentSession.art_name : T('common.grow')}</div><div class="stat-l">${T('stat.art_progressing')}</div></div>
     </div>
     <div id="complete-btn-wrap" style="display:${(S.selfScore!=null)?'block':'none'}"><button class="btn btn-wave btn-full" onclick="finishSession()">Complete session \u2192</button></div>`;
@@ -3222,7 +3385,7 @@ function Stoa() {
 
 // ══════════════════════════════════════════════════
 // PROGRESS PAGE
-// Three-tab view: XP Chart · Session History · Per-Art Skill Breakdown
+// Three-tab view: Growth chart · Session History · Per-Art Skill Breakdown
 // Data from GET /sessions/activity and GET /sessions/history
 // ══════════════════════════════════════════════════
 function Portfolio() {
@@ -3241,88 +3404,14 @@ function Portfolio() {
   const tab      = S.progressTab || 'chart';
 
   // ── Aggregate lifetime totals ──────────────────
-  const totalXP   = S.xp || 0;
-  const totalSess = history.length; // may be capped at 30, so use streak data for sessions count
+  const totalSess = history.length; // capped at 30; the lifetime count is S.totalSessions
   const totalMins = S.weekMinutes || 0;
 
   // ── Tab content builders ───────────────────────
 
-  // 1. XP CHART, 30-day bar chart (SVG, no library)
-  function xpChart() {
-    if (activity.length === 0) {
-      return `<div style="text-align:center;padding:48px 0;color:var(--text3)">
-        <div style="font-size:32px;margin-bottom:10px">🌊</div>
-        <div style="font-size:13px;line-height:1.7">No activity yet, complete a session to see your XP chart.</div>
-      </div>`;
-    }
-
-    // Build a dense 30-day map (oldest → newest), filling gaps with 0
-    var dayMap = {};
-    activity.forEach(function(r) { dayMap[r.date] = r; });
-    var days = [];
-    for (var i = 29; i >= 0; i--) {
-      var d = new Date(); d.setDate(d.getDate() - i);
-      var key = d.toISOString().slice(0, 10);
-      days.push({
-        date:    key,
-        label:   d.getDate() === 1 ? d.toLocaleString('default',{month:'short'}) : (i % 7 === 0 ? d.getDate() : ''),
-        xp:      (dayMap[key] && dayMap[key].xp_earned)     || 0,
-        sess:    (dayMap[key] && dayMap[key].sessions_done)  || 0,
-        mins:    (dayMap[key] && dayMap[key].minutes_spent)  || 0,
-      });
-    }
-    var maxXP = Math.max.apply(null, days.map(function(d){ return d.xp; })) || 1;
-
-    // SVG bar chart, 30 bars, responsive via viewBox
-    var W = 560, H = 130, PAD_L = 28, PAD_B = 22, barW = 13, gap = 5;
-    var chartW = days.length * (barW + gap) - gap;
-    var startX = PAD_L;
-
-    var bars = days.map(function(d, i) {
-      var barH = Math.max(2, Math.round((d.xp / maxXP) * (H - PAD_B - 8)));
-      var x    = startX + i * (barW + gap);
-      var y    = H - PAD_B - barH;
-      var fill = d.xp > 0 ? 'var(--wave)' : 'rgba(255,255,255,0.06)';
-      var tip  = d.date + ': ' + d.xp + ' XP · ' + d.sess + ' sess · ' + d.mins + 'min';
-      var lbl  = d.label ? '<text x="'+(x+barW/2)+'" y="'+(H-4)+'" text-anchor="middle" font-size="8" fill="rgba(255,255,255,0.35)" font-family="sans-serif">'+d.label+'</text>' : '';
-      return '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="'+barH
-        +'" fill="'+fill+'" rx="2" opacity="0.85"><title>'+tip+'</title></rect>'
-        + (d.xp > 0 ? '<rect x="'+x+'" y="'+y+'" width="'+barW+'" height="2" fill="rgba(0,229,200,0.9)" rx="2"/>' : '')
-        + lbl;
-    }).join('');
-
-    // Y-axis tick labels (3 ticks)
-    var ticks = [0, Math.round(maxXP / 2), maxXP].map(function(v) {
-      var ty = H - PAD_B - Math.round((v / maxXP) * (H - PAD_B - 8));
-      return '<text x="'+(PAD_L-4)+'" y="'+(ty+3)+'" text-anchor="end" font-size="8" fill="rgba(255,255,255,0.3)" font-family="sans-serif">'+v+'</text>'
-        + '<line x1="'+PAD_L+'" y1="'+ty+'" x2="'+(startX+chartW)+'" y2="'+ty+'" stroke="rgba(255,255,255,0.05)" stroke-width="0.7"/>';
-    }).join('');
-
-    var totalChartXP = activity.reduce(function(s, r){ return s + (r.xp_earned||0); }, 0);
-    var activeDays   = activity.filter(function(r){ return r.xp_earned > 0; }).length;
-    var avgXP        = activeDays > 0 ? Math.round(totalChartXP / activeDays) : 0;
-
-    return `
-    <div style="margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:90px">
-        <div style="font-size:20px;font-weight:700;color:var(--wave)">${totalChartXP}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.xp_month')}</div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:90px">
-        <div style="font-size:20px;font-weight:700;color:#6AB0FF">${activeDays}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.active_days')}</div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:90px">
-        <div style="font-size:20px;font-weight:700;color:var(--gold)">${avgXP}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.avg_xp_day')}</div>
-      </div>
-    </div>
-    <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 14px 6px;overflow:hidden">
-      <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${T('stat.xp_last_30_days')}</div>
-      <svg width="100%" viewBox="0 0 ${W} ${H}" style="overflow:visible;display:block;direction:ltr" dir="ltr">
-        ${ticks}${bars}
-      </svg>
-    </div>`;
+  // 1. GROWTH, the three families and the weakest Art over time (renderGrowthChart, above)
+  function growthChart() {
+    return renderGrowthChart(S.radarSnapshots, activity, T);
   }
 
   // 2. SESSION HISTORY, scrollable card list
@@ -3357,8 +3446,7 @@ function Portfolio() {
             <div style="font-size:11px;color:var(--text3);margin-top:3px">${s.art_name} · ${mins ? mins+'min' : ''}</div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:13px;font-weight:700;color:var(--wave)">+${s.xp_earned} XP</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px">${phaseDots}</div>
+            <div style="font-size:11px;color:var(--text3)">${phaseDots}</div>
             <div style="font-size:10px;color:var(--text3)">${dateStr} ${timeStr}</div>
           </div>
         </div>`;
@@ -3456,6 +3544,7 @@ function Portfolio() {
   }
 
   // ── Render ─────────────────────────────────────
+  const _pstage = computeAvatarStage(S.artScores || {});
   return `<div class="page">
     <div style="margin-bottom:20px">
       <h2 style="font-size:clamp(18px,3vw,26px)">${T('dash.progress')}</h2>
@@ -3465,12 +3554,12 @@ function Portfolio() {
     <!-- Lifetime stat row -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
       <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:var(--wave)">${totalXP}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.lifetime_xp')}</div>
+        <div style="font-size:22px;font-weight:700;color:var(--wave)">${_pstage.icon} ${_pstage.stage}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.stage')}</div>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:#6AB0FF">${S.streak||0}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.day_streak')}</div>
+        <div style="font-size:22px;font-weight:700;color:#6AB0FF">${S.totalSessions||0}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('agora.sessions')}</div>
       </div>
       <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
         <div style="font-size:22px;font-weight:700;color:var(--gold)">${Math.round((totalMins||0)/60*10)/10}h</div>
@@ -3484,14 +3573,14 @@ function Portfolio() {
 
     <!-- Tab switcher -->
     <div style="display:flex;gap:4px;margin-bottom:16px;background:var(--bg3);border-radius:10px;padding:4px;border:1px solid var(--border)">
-      ${[['chart','📊 XP Chart'],['history','🎓 Sessions'],['arts','🗺️ Arts & Skills']].map(function(t){
+      ${[['chart','📈 '+T('portfolio.tab_growth')],['history','🎓 Sessions'],['arts','🗺️ Arts & Skills']].map(function(t){
         var active = tab === t[0];
         return '<button onclick="set({progressTab:\''+t[0]+'\'})" style="flex:1;padding:7px 4px;font-size:12px;font-weight:'+(active?'700':'400')+';border-radius:7px;border:none;cursor:pointer;background:'+(active?'var(--card)':'transparent')+';color:'+(active?'var(--text1)':'var(--text3)')+';transition:all .15s;box-shadow:'+(active?'0 1px 6px rgba(0,0,0,0.3)':'none')+'">'+t[1]+'</button>';
       }).join('')}
     </div>
 
     <!-- Tab content -->
-    ${tab === 'chart'   ? xpChart()       : ''}
+    ${tab === 'chart'   ? growthChart()   : ''}
     ${tab === 'history' ? sessionHistory() : ''}
     ${tab === 'arts'    ? artBreakdown()   : ''}
 
@@ -3651,7 +3740,7 @@ window.toggleProgressArt = function(slug) {
 
 window.doLogout = function() {
   API.logout();
-  set({view:'login', authMode:'login', learner:null, streak:0, xp:0});
+  set({view:'login', authMode:'login', learner:null, totalSessions:0, radarSnapshots:null});
 };
 
 window.tapR = function(id, ok) {
@@ -4213,7 +4302,7 @@ window.finishSession = function() {
   S.assessCompanionResolved = false;
   S.assessCompanionScoreUpdate = null;
   S.assessCompanionSummary = null;
-  set({view:'dashboard', phase:0, answered:false, selfScore:null, xp: S.xp + 18, sessionStartTime: null});
+  set({view:'dashboard', phase:0, answered:false, selfScore:null, totalSessions: (S.totalSessions||0) + 1, sessionStartTime: null});
 };
 
 window.set = set;

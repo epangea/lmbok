@@ -421,16 +421,26 @@ echo ""
 # PART E, the reflect-screen hint is actually being served
 # ------------------------------------------------------------
 echo "-- E: frontend assets --"
-check_asset() {   # check_asset LABEL URL MIN_COUNT
+check_asset() {   # check_asset LABEL URL MIN_COUNT [PATTERN]   (PATTERN defaults to session.growth_hint)
+  local body count pat="${4:-session.growth_hint}"
+  body=$(curl -s --max-time 20 "$2" || true)
+  count=$({ echo "$body" | grep -o -F "$pat" | wc -l | tr -d ' '; } || true)
+  if [ "${count:-0}" -ge "$3" ]; then ok "$1 contains $pat (x${count})"
+  else bad "$1 does not contain $pat (found ${count:-0}, need >= $3). Did bump_asset_versions.sh run, and is the file deployed?"; fi
+}
+check_absent() {   # check_absent LABEL URL PATTERN : the served file must NOT contain PATTERN
   local body count
   body=$(curl -s --max-time 20 "$2" || true)
-  count=$({ echo "$body" | grep -o "session.growth_hint" | wc -l | tr -d ' '; } || true)
-  if [ "${count:-0}" -ge "$3" ]; then ok "$1 contains session.growth_hint (x${count})"
-  else bad "$1 does not contain session.growth_hint (found ${count:-0}, need >= $3), did bump_asset_versions.sh run, and is the file deployed?"; fi
+  count=$({ echo "$body" | grep -o -F "$3" | wc -l | tr -d ' '; } || true)
+  if [ "${count:-0}" -eq 0 ]; then ok "$1 no longer contains $3"
+  else bad "$1 still contains $3 (x${count}), the old XP/streak UI may still be deployed"; fi
 }
 check_asset "app.js"       "${API_BASE}/app.js"       2
 check_asset "lang/en.json" "${API_BASE}/lang/en.json" 1
 check_asset "lang/fr.json" "${API_BASE}/lang/fr.json" 1
+check_asset "app.js"       "${API_BASE}/app.js"       1 "computeStageProgress"
+check_asset "lang/en.json" "${API_BASE}/lang/en.json" 1 "stage.next"
+check_absent "lang/en.json" "${API_BASE}/lang/en.json" "stat.lifetime_xp"
 note "to see the hint itself: hard-refresh the app (Ctrl+Shift+R), open a session and go to the reflect phase"
 echo ""
 

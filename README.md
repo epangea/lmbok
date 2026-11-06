@@ -71,7 +71,7 @@ Rooted in permaculture ethics, Vygotsky's Zone of Proximal Development, self-rel
         gemini_generate.py     Gemini provider status endpoint
         groq_generate.py       Groq provider status endpoint
         ollama_generate.py     Ollama provider status endpoint
-        learners.py            Learner profile, preferences, streak and weekly-story endpoints
+        learners.py            Learner profile, preferences, activity totals and weekly-story endpoints
         matching.py            Learner/org challenge matching algorithm
         orgs.py                Organization accounts
         peripatos.py           Save-to-Peripatos feature
