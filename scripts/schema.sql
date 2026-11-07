@@ -16,7 +16,7 @@ SET NAMES utf8mb4;
 SET CHARACTER SET utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 DROP TABLE IF EXISTS messages, opportunity_matches, opportunity_listings,
-  organizations, radar_snapshots, reflections, activity_log, learner_streaks,
+  organizations, radar_snapshots, journey_entries, learner_profile_versions, reflections, activity_log, learner_streaks,
   sessions, skill_evidence, learner_skill_progress, learner_art_progress,
   learner_preferences, learners, skill_prerequisites, arts_skills, skills,
   leckos, arts, arts_group, dev_phases, refresh_tokens;
@@ -279,6 +279,37 @@ CREATE TABLE radar_snapshots (
     FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE,
     INDEX idx_snapshots (learner_id, created_at)
 ) ENGINE=InnoDB;
+
+-- ── Journey log (2026-11-06, scripts/2026-11-06-journey-log.sql) ──
+CREATE TABLE journey_entries (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    learner_id  INT UNSIGNED      NOT NULL,
+    kind        ENUM('session','milestone') NOT NULL,
+    milestone   ENUM('first_in_art','level_up','stage_change','all_families') NULL DEFAULT NULL,
+    session_id  INT UNSIGNED      NULL DEFAULT NULL,
+    art_id      TINYINT UNSIGNED  NULL DEFAULT NULL,
+    skill_id    SMALLINT UNSIGNED NULL DEFAULT NULL,
+    title       VARCHAR(200)      NOT NULL,
+    excerpt     VARCHAR(400)      NULL DEFAULT NULL,
+    payload     JSON              NULL DEFAULT NULL,
+    created_at  DATETIME          DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE SET NULL,
+    FOREIGN KEY (art_id)     REFERENCES arts(id)     ON DELETE SET NULL,
+    FOREIGN KEY (skill_id)   REFERENCES skills(id)   ON DELETE SET NULL,
+    INDEX idx_journey_learner_time (learner_id, created_at),
+    INDEX idx_journey_milestone    (learner_id, milestone, art_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE learner_profile_versions (
+    id          BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    learner_id  INT UNSIGNED NOT NULL,
+    profile     TEXT         NOT NULL,
+    source      ENUM('session','sandbox','bioregion','backfill') NOT NULL,
+    created_at  DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (learner_id) REFERENCES learners(id) ON DELETE CASCADE,
+    INDEX idx_profile_versions (learner_id, created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- ── Reflections (the Stoa) ────────────────────────────────────
 CREATE TABLE reflections (

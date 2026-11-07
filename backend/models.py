@@ -6,7 +6,7 @@
 from datetime import datetime, date
 from typing import Optional
 from sqlalchemy import (
-    Integer, SmallInteger, String, Text, Boolean, DateTime, Date,
+    BigInteger, Integer, SmallInteger, String, Text, Boolean, DateTime, Date,
     JSON, ForeignKey, UniqueConstraint, func
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -274,6 +274,45 @@ class WeeklyStory(Base):
     paragraph:  Mapped[str]      = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
     learner: Mapped["Learner"] = relationship(back_populates="weekly_stories")
+
+
+# BIGINT ids need the sqlite variant so autoincrement works in sqlite tests;
+# on MariaDB this is a plain BIGINT.
+_BigId = BigInteger().with_variant(Integer, "sqlite")
+
+
+class JourneyEntry(Base):
+    """Journey log (2026-11-06, scripts/2026-11-06-journey-log.sql). One row
+    per completed session (kind='session') and per milestone
+    (kind='milestone'). `milestone` is one of first_in_art, level_up,
+    stage_change, all_families, and NULL for sessions. title is capped at 200
+    and excerpt at 400 characters by the column types (strict sql_mode rejects
+    longer text), so writers must truncate."""
+    __tablename__ = "journey_entries"
+    id:         Mapped[int]               = mapped_column(_BigId, primary_key=True, autoincrement=True)
+    learner_id: Mapped[int]               = mapped_column(ForeignKey("learners.id", ondelete="CASCADE"), nullable=False)
+    kind:       Mapped[str]               = mapped_column(String(10), nullable=False)
+    milestone:  Mapped[Optional[str]]     = mapped_column(String(20))
+    session_id: Mapped[Optional[int]]     = mapped_column(ForeignKey("sessions.id", ondelete="SET NULL"))
+    art_id:     Mapped[Optional[int]]     = mapped_column(ForeignKey("arts.id", ondelete="SET NULL"))
+    skill_id:   Mapped[Optional[int]]     = mapped_column(ForeignKey("skills.id", ondelete="SET NULL"))
+    title:      Mapped[str]               = mapped_column(String(200), nullable=False)
+    excerpt:    Mapped[Optional[str]]     = mapped_column(String(400))
+    payload:    Mapped[Optional[dict]]    = mapped_column(JSON)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
+
+
+class LearnerProfileVersion(Base):
+    """One row per distinct My Story text (2026-11-06). Written only by
+    routes/generate.py::update_learner_profile, which is also the only code
+    that writes learners.learner_profile. source is one of session, sandbox,
+    bioregion, backfill."""
+    __tablename__ = "learner_profile_versions"
+    id:         Mapped[int]               = mapped_column(_BigId, primary_key=True, autoincrement=True)
+    learner_id: Mapped[int]               = mapped_column(ForeignKey("learners.id", ondelete="CASCADE"), nullable=False)
+    profile:    Mapped[str]               = mapped_column(Text, nullable=False)
+    source:     Mapped[str]               = mapped_column(String(10), nullable=False)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=func.now())
 
 
 class Reflection(Base):

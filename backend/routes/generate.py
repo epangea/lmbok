@@ -15,6 +15,7 @@
 # ============================================================
 
 import json
+import logging
 import random
 import re
 from datetime import datetime, timezone
@@ -25,11 +26,13 @@ from pydantic import BaseModel
 from db import get_db
 # FIX: ArtsSkills added here, it was missing from this import,
 # causing NameError in the reuse branch before the inline import was reached.
-from models import Session, Arts, DevPhase, Skill, Learner, Lecko, ArtsSkills
+from models import Session, Arts, DevPhase, Skill, Learner, Lecko, ArtsSkills, LearnerProfileVersion
 from utils import get_session_config
 from routes.auth import get_current_learner
 from prior_session_context import get_prior_session_context, build_portfolio_block
 import ai_client
+
+log = logging.getLogger("generate")
 
 router = APIRouter()
 
@@ -1056,6 +1059,39 @@ class ProfileUpdateRequest(BaseModel):
     messages:        list[ScaffoldMessage]   # the sandbox conversation to distil
     existing_profile: str | None = None      # current learner_profile text
     bioregion_note:   str | None = None      # optional, direct bioregion line to upsert, no AI call needed
+    # Which flow triggered the distillation: "session" (a completed session's
+    # answers) or anything else / omitted = "sandbox" (companion chats,
+    # onboarding). Only labels the profile version row; ignored otherwise.
+    source:           str | None = None
+
+
+async def record_profile_version(db: AsyncSession, learner_id: int, profile: str, source: str) -> bool:
+    """Keep a history of My Story (learner_profile_versions, 2026-11-06).
+
+    Called right after each UPDATE learners SET learner_profile, the only two
+    places that column is written. Skips the insert when the text equals the
+    learner's latest version. Runs in a SAVEPOINT and swallows its own errors
+    (logged), so a history failure, for example the migration not yet run,
+    can never block or roll back the profile update itself. Returns True when
+    a row was inserted."""
+    profile = (profile or "").strip()
+    if not profile:
+        return False
+    try:
+        async with db.begin_nested():
+            latest = (await db.execute(
+                select(LearnerProfileVersion.profile)
+                .where(LearnerProfileVersion.learner_id == learner_id)
+                .order_by(LearnerProfileVersion.created_at.desc(), LearnerProfileVersion.id.desc())
+                .limit(1)
+            )).scalar_one_or_none()
+            if latest is not None and latest.strip() == profile:
+                return False
+            db.add(LearnerProfileVersion(learner_id=learner_id, profile=profile, source=source))
+        return True
+    except Exception:
+        log.exception("profile version not recorded (learner %s, source %s)", learner_id, source)
+        return False
 
 
 @router.post("/profile-update")
@@ -1081,6 +1117,7 @@ async def update_learner_profile(
             sql_text("UPDATE learners SET learner_profile = :profile WHERE id = :id"),
             {"profile": new_profile, "id": learner.id},
         )
+        await record_profile_version(db, learner.id, new_profile, "bioregion")
         await db.commit()
         return {"status": "ok", "profile_length": len(new_profile)}
 
@@ -1139,6 +1176,9 @@ Return ONLY the updated profile text. No preamble, no explanation."""
     await db.execute(
         sql_text("UPDATE learners SET learner_profile = :profile WHERE id = :id"),
         {"profile": new_profile.strip(), "id": learner.id},
+    )
+    await record_profile_version(
+        db, learner.id, new_profile, "session" if req.source == "session" else "sandbox"
     )
     await db.commit()
 

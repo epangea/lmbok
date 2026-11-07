@@ -37,6 +37,12 @@
 #                      the new reflect-screen hint. A script cannot see the
 #                      screen: hard-refresh a browser to confirm it visually
 #                      (the service worker caches the app shell).
+#   F  Journey log     (2026-11-06, Phase 2) Read-only. Both journey tables
+#                      exist (scripts/2026-11-06-journey-log.sql was run) and
+#                      the served app.js labels session distillations
+#                      source=session. Reports the test learner's profile
+#                      version count (informational: it grows as My Story is
+#                      updated, never as a result of this script).
 #
 # Requires in backend/.env (same as e2e_org_polis.sh):
 #   ADMIN_KEY, TEST_LEARNER_EMAIL / TEST_LEARNER_PASSWORD
@@ -442,6 +448,24 @@ check_asset "app.js"       "${API_BASE}/app.js"       1 "computeStageProgress"
 check_asset "lang/en.json" "${API_BASE}/lang/en.json" 1 "stage.next"
 check_absent "lang/en.json" "${API_BASE}/lang/en.json" "stat.lifetime_xp"
 note "to see the hint itself: hard-refresh the app (Ctrl+Shift+R), open a session and go to the reflect phase"
+echo ""
+
+# ------------------------------------------------------------
+# PART F, journey log (Phase 2). Read-only.
+# ------------------------------------------------------------
+echo "-- F: journey log --"
+if [ -z "$MYSQL_BIN" ]; then
+  warn "mysql/mariadb CLI not found, skipping the Part F database checks"
+else
+  F_TABLES=$(db_query "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name IN ('journey_entries','learner_profile_versions')")
+  if [ "$F_TABLES" = "2" ]; then ok "journey_entries and learner_profile_versions exist"
+  else bad "journey tables missing (found ${F_TABLES:-0} of 2). Run: mysql ${DB_NAME} < scripts/2026-11-06-journey-log.sql"; fi
+  if [ "$F_TABLES" = "2" ] && [ -n "$LEARNER_ID" ]; then
+    F_VERS=$(db_query "SELECT COUNT(*) FROM learner_profile_versions WHERE learner_id = ${LEARNER_ID}")
+    note "profile versions recorded for learner ${LEARNER_ID}: ${F_VERS:-0} (grows when My Story changes; 0 is normal right after the migration)"
+  fi
+fi
+check_asset "app.js" "${API_BASE}/app.js" 1 "source:           'session'"
 echo ""
 
 call POST "${API_BASE}/api/auth/logout" "$LJAR" "$LCSRF" || true

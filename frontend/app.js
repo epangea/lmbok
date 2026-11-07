@@ -2833,6 +2833,7 @@ function triggerSessionStoryUpdate(session, challengeText, reflectText, companio
   API.post('/generate/profile-update', {
     messages:         msgs,
     existing_profile: S.learnerProfile || null,
+    source:           'session',
   }).then(function(res){
     if (res && res.status === 'ok') _reloadProfileAndGuidingStar();
   }).catch(function(){});
