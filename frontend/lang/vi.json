@@ -57,6 +57,8 @@
   "bio.explore_local": "để khám phá vùng sinh thái địa phương",
   "bio.locate": "Xác định vùng sinh thái của tôi",
   "bio.locating": "Đang xác định vùng sinh thái của bạn…",
+  "bio.refresh_failed": "Không thể cập nhật vị trí của bạn nên vị trí trước đó được giữ nguyên.",
+  "bio.you_here": "Bạn ở đây",
   "bio.location_declined": "Đã từ chối quyền truy cập vị trí, không sao cả. Bạn có thể mô tả vùng sinh thái của mình bên dưới khi hồ sơ học viên được mở.",
   "bio.make_it_yours": "Biến nó thành của bạn",
   "bio.name_label": "Tên vùng sinh thái",

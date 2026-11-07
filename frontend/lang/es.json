@@ -57,6 +57,8 @@
   "bio.explore_local": "para explorar una biorregión local",
   "bio.locate": "Ubicar mi biorregión",
   "bio.locating": "Ubicando tu biorregión…",
+  "bio.refresh_failed": "No se pudo actualizar tu ubicación, así que se mantiene la anterior.",
+  "bio.you_here": "Estás aquí",
   "bio.location_declined": "Acceso a la ubicación rechazado, no hay problema. Podrás describir tu biorregión abajo cuando se habiliten los perfiles de aprendiz.",
   "bio.make_it_yours": "Hazlo tuyo",
   "bio.name_label": "Nombre de la biorregión",

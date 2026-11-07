@@ -57,6 +57,8 @@
   "bio.explore_local": "以探索当地的生物区",
   "bio.locate": "定位我的生物区",
   "bio.locating": "正在定位您的生物区…",
+  "bio.refresh_failed": "无法更新您的位置，已保留之前的位置。",
+  "bio.you_here": "您在这里",
   "bio.location_declined": "已拒绝位置访问权限，没关系。学员档案开放后，您可以在下方描述您的生物区。",
   "bio.make_it_yours": "让它成为您的专属",
   "bio.name_label": "生物区名称",

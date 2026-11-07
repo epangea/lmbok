@@ -57,6 +57,8 @@
   "bio.explore_local": "um eine lokale Bioregion zu erkunden",
   "bio.locate": "Meine Bioregion finden",
   "bio.locating": "Deine Bioregion wird ermittelt…",
+  "bio.refresh_failed": "Dein Standort konnte nicht aktualisiert werden, der bisherige bleibt erhalten.",
+  "bio.you_here": "Du bist hier",
   "bio.location_declined": "Standortzugriff abgelehnt, kein Problem. Du kannst deine Bioregion unten beschreiben, sobald Lernenden-Profile verfügbar sind.",
   "bio.make_it_yours": "Mach es zu deinem",
   "bio.name_label": "Bioregion-Name",

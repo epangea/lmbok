@@ -45,6 +45,11 @@ async def get_me(
             "color": current_phase.color,
         } if current_phase else None,
         "language":     learner.language or "en",
+        # app.js's boot sync only adopts the account language for an
+        # already-onboarded learner (me.onboarding_complete); without this key
+        # that condition was never true and a new device or browser kept its
+        # own default language instead of the account's.
+        "onboarding_complete": bool(learner.onboarding_complete),
         "created_at":   learner.created_at,
         # 2026-08-23d: surfaced here (not a new endpoint) since Preferences'
         # single PATCH/GET pair already round-trips everything else the

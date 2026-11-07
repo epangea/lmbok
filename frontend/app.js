@@ -922,6 +922,8 @@ const LANG = {  // Only English ships inline; other languages load
     'bio.explore_local':'to explore a local bioregion',
     'bio.locate':'Locate my bioregion',
     'bio.locating':'Locating your bioregion…',
+    'bio.refresh_failed':'Could not update your location, so your previous one is kept.',
+    'bio.you_here':'You are here',
     'bio.location_declined':'Location access declined, that’s fine. You can describe your bioregion below when learner profiles open up.',
     'bio.make_it_yours':'Make it yours',
     'bio.name_label':'Bioregion name',
@@ -1668,21 +1670,57 @@ function _saveBioregionToProfile() {
   }).catch(function(){});
 }
 
-function initBioregion() {
+// Set when a refresh could not get a new fix; the previous location is kept.
+var _bioRefreshFailed = false;
+
+// A new fix invalidates everything that was fetched for the old coordinates:
+// the portraits list (distance-sorted from the old spot), any draft portrait
+// and the map (rebuilt from the new state the next time the page opens).
+function _resetBioregionPageData() {
+  destroyBioMap();
+  set({ bioregionPortraits: null, bioregionDraft: null,
+        bioregionDraftLoading: false, bioregionDraftAccepted: null });
+}
+
+// isRefresh === true comes from the dashboard's Refresh button: always take a
+// fresh fix (no cached position) and, if it fails, put the last good location
+// back instead of dropping the learner into the "declined" state.
+function initBioregion(isRefresh) {
   if (_bioregionState.status === 'loading') return;
+  var refresh = (isRefresh === true);
+  var prev = (refresh && _bioregionState.status === 'done')
+    ? { status: 'done', lat: _bioregionState.lat, lng: _bioregionState.lng,
+        placeName: _bioregionState.placeName, profile: _bioregionState.profile }
+    : null;
+  _bioRefreshFailed = false;
   _bioregionState.status = 'loading';
   draw();
-  if (!navigator.geolocation) {
-    _bioregionState.status = 'denied';
+
+  function fail() {
+    if (prev) {
+      _bioregionState = prev;
+      _bioRefreshFailed = true;
+    } else {
+      _bioregionState.status = 'denied';
+    }
     _saveBioregion();
-    draw(); return;
+    draw();
   }
+  function finish() {
+    _bioregionState.status = 'done';
+    _saveBioregion();
+    _saveBioregionToProfile();
+    _resetBioregionPageData();   // set() redraws
+  }
+
+  if (!navigator.geolocation) { fail(); return; }
   navigator.geolocation.getCurrentPosition(
     function(pos) {
       var lat = Math.round(pos.coords.latitude  * 10) / 10;  // ~11km precision only
       var lng = Math.round(pos.coords.longitude * 10) / 10;
       _bioregionState.lat = lat;
       _bioregionState.lng = lng;
+      _bioregionState.placeName = null;   // never carry the old city onto new coordinates
       _bioregionState.profile = getBioregionProfile(lat, lng);
       // Reverse geocode, city level only, no street
       fetch('https://nominatim.openstreetmap.org/reverse?lat='+lat+'&lon='+lng+'&zoom=10&format=json')
@@ -1690,24 +1728,12 @@ function initBioregion() {
         .then(function(d){
           var a = d.address || {};
           _bioregionState.placeName = [a.city||a.town||a.village, a.country].filter(Boolean).join(', ');
-          _bioregionState.status = 'done';
-          _saveBioregion();
-          _saveBioregionToProfile();
-          draw();
+          finish();
         })
-        .catch(function(){
-          _bioregionState.status = 'done';
-          _saveBioregion();
-          _saveBioregionToProfile();
-          draw();
-        });
+        .catch(finish);
     },
-    function() {
-      _bioregionState.status = 'denied';
-      _saveBioregion();
-      draw();
-    },
-    { enableHighAccuracy: false, timeout: 8000, maximumAge: 3600000 }
+    fail,
+    { enableHighAccuracy: false, timeout: refresh ? 15000 : 8000, maximumAge: refresh ? 0 : 3600000 }
   );
 }
 
@@ -1784,7 +1810,7 @@ function renderBioregionCard(avatarStage) {
         + T('bio.no_seed_profile') + ' '
         + T('bio.you_know_land_desc') + ' '
         + '<span onclick="loadBioregionPage()" style="color:var(--wave);cursor:pointer;text-decoration:underline">'+T('bio.add_voice')+'</span>'
-        + '<div style="font-size:10px;color:var(--text3);margin-top:6px">~'+bs.lat+'° N, '+Math.abs(bs.lng)+'° '+(bs.lng>=0?'E':'W')+'</div>'
+        + '<div style="font-size:10px;color:var(--text3);margin-top:6px">~'+Math.abs(bs.lat)+'° '+(bs.lat>=0?'N':'S')+', '+Math.abs(bs.lng)+'° '+(bs.lng>=0?'E':'W')+'</div>'
         + _refreshBtn()
         + '</div>';
     }
@@ -1808,8 +1834,11 @@ function _bioRow(icon, label, value, valueColor) {
 }
 
 function _refreshBtn() {
-  return '<div style="text-align:right;margin-top:10px">'
-    + '<button onclick="resetBioregion()" style="font-size:10px;padding:4px 12px;background:transparent;border:1px solid var(--border2);color:var(--text3);border-radius:20px;cursor:pointer">↺ Refresh my bioregion</button>'
+  return (_bioRefreshFailed
+      ? '<div style="font-size:10px;color:var(--text3);text-align:right;margin-top:8px;line-height:1.5">'+T('bio.refresh_failed')+'</div>'
+      : '')
+    + '<div style="text-align:right;margin-top:10px">'
+    + '<button onclick="initBioregion(true)" style="font-size:10px;padding:4px 12px;background:transparent;border:1px solid var(--border2);color:var(--text3);border-radius:20px;cursor:pointer">↺ Refresh my bioregion</button>'
     + '</div>';
 }
 
@@ -3679,6 +3708,7 @@ window.doLogin = async function() {
     set({authLoading:false, view: learnerData?.onboarding_complete ? 'dashboard' : 'onboard',
          onboardStep: learnerData?.onboarding_complete ? S.onboardStep : 0, learner:learnerData});
     if (learnerData?.onboarding_complete) loadDashboard();
+    API.get('/learners/me').then(_applyLearnerMe).catch(function(){});
   } catch(e) {
     var msg = 'Something went wrong, please try again';
     if (e.message) {
@@ -4764,8 +4794,12 @@ function _fetchBioregionDraft() {
   set({bioregionDraftLoading:true});
   var placeName = (bs.profile && bs.profile.name) ? bs.profile.name
     : (bs.placeName || '');
+  var _lat = bs.lat, _lng = bs.lng;
+  // A reply for coordinates the learner has since moved away from is dropped.
+  function _stale() { return _bioregionState.lat !== _lat || _bioregionState.lng !== _lng; }
   API.post('/bioregions/draft', {lat: bs.lat, lng: bs.lng, place_name: placeName})
     .then(function(data) {
+      if (_stale()) return;
       if (data && data.draft) {
         set({bioregionDraft: data.draft, bioregionDraftLoading: false,
              bioregionDraftAccepted: {summary:false, watershed:false, climate:false,
@@ -4776,6 +4810,7 @@ function _fetchBioregionDraft() {
       }
     })
     .catch(function() {
+      if (_stale()) return;
       set({bioregionDraft: false, bioregionDraftLoading: false});
     });
 }
@@ -5172,11 +5207,17 @@ function _buildBioMap(portraits) {
   if (!container || _bioMap) return;
   _bioMapPortraits = portraits;
 
+  // Start on the learner's own location when it is known; otherwise the
+  // world overview. (It used to always open on the overview, and a click
+  // anywhere then jumped to the nearest portrait, wherever on Earth it was.)
+  var _u = _bioregionState;
+  var _hasFix = !!(_u && _u.status === 'done' && _u.lat != null && _u.lng != null);
+
   _bioMap = new maplibregl.Map({
     container: 'bio-map-canvas',
     style:     'https://tiles.openfreemap.org/styles/liberty',
-    center:    [20, 15],
-    zoom:      1.6,
+    center:    _hasFix ? [+_u.lng, +_u.lat] : [20, 15],
+    zoom:      _hasFix ? 4 : 1.6,
     minZoom:   1,
     maxZoom:   14,
   });
@@ -5207,9 +5248,23 @@ function _buildBioMap(portraits) {
       _bioMarkers.push(marker);
     });
 
+    // "You are here", from the same city-level (0.1 degree) fix the dashboard
+    // card uses; drawn only in this browser.
+    var _me = _bioregionState;
+    if (_me && _me.status === 'done' && _me.lat != null && _me.lng != null) {
+      var meEl = document.createElement('div');
+      meEl.className = 'bio-marker-you';
+      meEl.title = T('bio.you_here');
+      meEl.setAttribute('aria-label', T('bio.you_here'));
+      _bioMarkers.push(new maplibregl.Marker({ element: meEl, anchor: 'center' })
+        .setLngLat([+_me.lng, +_me.lat])
+        .addTo(_bioMap));
+    }
+
     _bioMap.on('click', function(e) {
       var nearest = _bioNearest(e.lngLat.lat, e.lngLat.lng, _bioMapPortraits);
-      if (nearest) _bioFlyAndOpen(nearest);
+      if (nearest && _bioClickIsNear(e.lngLat.lat, e.lngLat.lng, nearest)) _bioFlyAndOpen(nearest);
+      else _bioOpenEmptyPanel(e.lngLat.lat, e.lngLat.lng);
     });
     _bioMap.getCanvas().style.cursor = 'crosshair';
   });
@@ -5245,6 +5300,41 @@ function initBioregionMap(portraits) {
 }
 
 // ── Panel ─────────────────────────────────────────────────────────────────────
+
+// A click only selects a portrait when it lands within that portrait's radius
+// (at least 100 km, the same distance the draft-portrait check uses). Further
+// away there is no portrait for that place yet, so say so instead of flying to
+// a portrait on another continent.
+function _bioClickIsNear(lat, lng, p) {
+  var reach = Math.max(+p.radius_km || 0, 100);
+  return _bioDist(lat, lng, +p.center_lat, +p.center_lng) <= reach;
+}
+
+function _bioOpenEmptyPanel(lat, lng) {
+  var panel = document.getElementById('bio-map-panel');
+  if (!panel) return;
+  _bioPanelPortraitId  = null;   // ignore any version-history reply still in flight
+  _bioPanelCurrentData = null;
+  if (_bioMap) {
+    _bioMap.flyTo({ center: [lng, lat], zoom: Math.max(_bioMap.getZoom ? _bioMap.getZoom() : 4, 4), duration: 900, essential: true });
+  }
+  var bs = _bioregionState;
+  var atMe = !!(bs && bs.status === 'done' && bs.placeName && bs.lat != null &&
+                _bioDist(lat, lng, +bs.lat, +bs.lng) <= 50);
+  var name = atMe ? bs.placeName : (_bioFmtCoords(lat, lng) || '');
+  panel.innerHTML = '<div class="bio-panel-head">'
+    + '<div class="bio-panel-head-text">'
+    + '<div class="bio-panel-name-row"><span class="bio-panel-name">'+_esc(name)+'</span></div>'
+    + (atMe ? '<div class="bio-panel-coords">\ud83d\udccd '+_esc(_bioFmtCoords(lat, lng) || '')+'</div>' : '')
+    + '</div>'
+    + '<button class="bio-panel-close" onclick="document.getElementById(\'bio-map-panel\').classList.remove(\'bio-panel-open\')" aria-label="Close">\u2715</button>'
+    + '</div>'
+    + '<div class="bio-panel-body">'
+    + '<p class="bio-panel-summary-empty">'+T('avatar.no_portrait_yet')+'</p>'
+    + '<p class="bio-panel-summary-text">'+T('bio.you_know_land_desc')+'</p>'
+    + '</div>';
+  panel.classList.add('bio-panel-open');
+}
 
 function _bioFlyAndOpen(p) {
   if (_bioMap && p.center_lat != null) {
@@ -5776,6 +5866,45 @@ function draw() {
 }
 
 // ── Boot ──────────────────────────────────────────
+// Adopt the server's copy of the learner (account language, preferences, My
+// Story). Runs at boot AND right after a fresh login: a login in a new browser
+// (or a private window) has no cached copy, and without this the Preferences
+// modal showed defaults and the profile stayed empty until the next page load.
+function _applyLearnerMe(me) {
+  if (me) {
+    // Load learner_profile into state so sandbox companion has memory from day one
+    if (me.learner_profile) S.learnerProfile = me.learner_profile;
+    // Restore cached Guiding Star (regenerated after each profile update)
+    try {
+      var _gs = localStorage.getItem('fl_guiding_star');
+      if (_gs) S.guidingStar = _gs;
+    } catch(e) {}
+    // If bioregion already located but not yet in profile, write it now (e.g. returning user, new account)
+    if (_bioregionState.status === 'done' && _bioregionState.profile) {
+      var _existingProfile = me.learner_profile || '';
+      if (_existingProfile.indexOf('BIOREGION:') === -1) {
+        _saveBioregionToProfile();
+      }
+    }
+    // Sync S.language from the server ONLY for an already-onboarded
+    // learner (e.g. they changed it via Preferences on another device --
+    // this reload should pick that up). For a learner still IN onboarding,
+    // this fetch is a background, unawaited promise that can resolve at
+    // any time relative to the user's own actions -- including *after*
+    // they've already picked a language on onboarding's new step 0. Syncing
+    // unconditionally here would silently revert that live pick back to
+    // whatever was stored at registration, right before the first AI
+    // session fires with S.language -- this was very likely the actual
+    // mechanism behind sessions generating in the wrong language even
+    // though the learner had already made a selection. (Fixed 2026-07-22.)
+    if (me.language && me.language !== S.language && (me.onboarding_complete || (S.learner && S.learner.onboarding_complete))) {
+      set({language: me.language, learner: Object.assign({}, S.learner||{}, me)});
+    } else {
+      set({learner: Object.assign({}, S.learner||{}, me)});
+    }
+  }
+}
+
 async function boot() {
   // Fire off the saved UI-language pack fetch in the background (no-op if
   // it's English). Doesn't block first paint -- draw() below renders
@@ -5857,40 +5986,7 @@ async function boot() {
   // Load bioregion seed profiles (populates the ecological detail in the Where I Stand card)
   loadBioregionProfiles();
   // Load learner profile (includes language preference)
-  API.get('/learners/me').then(function(me) {
-    if (me) {
-      // Load learner_profile into state so sandbox companion has memory from day one
-      if (me.learner_profile) S.learnerProfile = me.learner_profile;
-      // Restore cached Guiding Star (regenerated after each profile update)
-      try {
-        var _gs = localStorage.getItem('fl_guiding_star');
-        if (_gs) S.guidingStar = _gs;
-      } catch(e) {}
-      // If bioregion already located but not yet in profile, write it now (e.g. returning user, new account)
-      if (_bioregionState.status === 'done' && _bioregionState.profile) {
-        var _existingProfile = me.learner_profile || '';
-        if (_existingProfile.indexOf('BIOREGION:') === -1) {
-          _saveBioregionToProfile();
-        }
-      }
-      // Sync S.language from the server ONLY for an already-onboarded
-      // learner (e.g. they changed it via Preferences on another device --
-      // this reload should pick that up). For a learner still IN onboarding,
-      // this fetch is a background, unawaited promise that can resolve at
-      // any time relative to the user's own actions -- including *after*
-      // they've already picked a language on onboarding's new step 0. Syncing
-      // unconditionally here would silently revert that live pick back to
-      // whatever was stored at registration, right before the first AI
-      // session fires with S.language -- this was very likely the actual
-      // mechanism behind sessions generating in the wrong language even
-      // though the learner had already made a selection. (Fixed 2026-07-22.)
-      if (me.language && me.language !== S.language && me.onboarding_complete) {
-        set({language: me.language, learner: Object.assign({}, S.learner||{}, me)});
-      } else {
-        set({learner: Object.assign({}, S.learner||{}, me)});
-      }
-    }
-  }).catch(function(){});
+  API.get('/learners/me').then(_applyLearnerMe).catch(function(){});
   loadDashboard();
 }
 

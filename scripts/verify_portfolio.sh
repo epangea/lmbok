@@ -37,6 +37,8 @@
 #                      the new reflect-screen hint. A script cannot see the
 #                      screen: hard-refresh a browser to confirm it visually
 #                      (the service worker caches the app shell).
+#                      Also (2026-11-07): the Refresh bioregion button and the
+#                      map's "you are here" strings are deployed.
 #   F  Journey log     (2026-11-06, Phase 2) Read-only. Both journey tables
 #                      exist (scripts/2026-11-06-journey-log.sql was run) and
 #                      the served app.js labels session distillations
@@ -259,6 +261,9 @@ PY
     LEG=$(getv continuity_legacy_len); JOU=$(getv continuity_journey_len)
     if [ "${PROFILE_LEN:-0}" -gt 0 ]; then
       note "learner has a My Story profile (${PROFILE_LEN} chars)"
+      if [ "${PROFILE_LEN}" -lt 120 ]; then
+        warn "My Story is only ${PROFILE_LEN} chars. A short profile that is just a BIOREGION line usually means an older build overwrote it from an empty browser copy (fixed 2026-11-07). Compare with the latest rows of learner_profile_versions and with a database backup."
+      fi
       if [ "${PB_LEN:-0}" -gt 0 ]; then ok "portfolio block builds from the profile (${PB_LEN} chars)"; else bad "profile is non-empty but the portfolio block is empty"; fi
     else
       warn "this learner has NO My Story yet, the portfolio block is empty for this account, so the main change cannot be exercised here. Finish a session with a written reflection first, or set VERIFY_LEARNER_EMAIL to a learner who has one."
@@ -296,6 +301,16 @@ try:
 except Exception:
     print(0)
 " 2>/dev/null || echo 0)
+ME_HAS_ONBOARD=$(echo "$HTTP_BODY" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    print(1 if 'onboarding_complete' in d and 'newsletter_opt_out' in d and 'language' in d else 0)
+except Exception:
+    print(0)
+" 2>/dev/null || echo 0)
+if [ "$ME_HAS_ONBOARD" = "1" ]; then ok "/api/learners/me returns onboarding_complete, language and the newsletter flag (what a fresh login or private window needs)"
+else bad "/api/learners/me is missing onboarding_complete / language / newsletter_opt_out (backend/routes/learners.py get_me; restart freqlearn after deploying)"; fi
 if [ "${PROFILE_LEN:-0}" -gt 0 ]; then
   if [ "${ME_PROFILE_LEN:-0}" -gt 0 ]; then
     ok "/api/learners/me returns learner_profile (${ME_PROFILE_LEN} chars), the My Story card has data to show"
@@ -447,6 +462,11 @@ check_asset "lang/fr.json" "${API_BASE}/lang/fr.json" 1
 check_asset "app.js"       "${API_BASE}/app.js"       1 "computeStageProgress"
 check_asset "lang/en.json" "${API_BASE}/lang/en.json" 1 "stage.next"
 check_absent "lang/en.json" "${API_BASE}/lang/en.json" "stat.lifetime_xp"
+check_asset "app.js"       "${API_BASE}/app.js"       1 "initBioregion(true)"
+check_asset "app.js"       "${API_BASE}/app.js"       2 "_applyLearnerMe"
+check_asset "app.js"       "${API_BASE}/app.js"       1 "_bioClickIsNear"
+check_asset "lang/en.json" "${API_BASE}/lang/en.json" 1 "bio.you_here"
+check_asset "lang/vi.json" "${API_BASE}/lang/vi.json" 1 "bio.refresh_failed"
 note "to see the hint itself: hard-refresh the app (Ctrl+Shift+R), open a session and go to the reflect phase"
 echo ""
 

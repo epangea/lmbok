@@ -604,6 +604,13 @@ textarea:focus{border-color:var(--wave);box-shadow:0 0 0 3px rgba(0,229,200,0.08
   animation:bio-pulse 2.8s ease-out infinite;
   animation-delay:var(--pulse-delay,0s);z-index:1;
 }
+/* "You are here" marker: static, white-filled, so it never reads as a portrait */
+.bio-marker-you{
+  width:16px;height:16px;border-radius:50%;
+  background:#fff;border:3px solid var(--wave);
+  box-shadow:0 0 0 4px rgba(0,229,200,.25),0 1px 6px rgba(0,0,0,.45);
+  pointer-events:none;
+}
 @keyframes bio-pulse{
   0%  {transform:translate(-50%,-50%) scale(.4);opacity:.9}
   100%{transform:translate(-50%,-50%) scale(2.6);opacity:0}

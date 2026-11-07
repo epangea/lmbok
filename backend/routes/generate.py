@@ -1102,9 +1102,18 @@ async def update_learner_profile(
 ):
     from sqlalchemy import text as sql_text
 
+    # My Story is merged into what the SERVER has stored, never into whatever
+    # the browser sends. A fresh login or a second device can hold an empty or
+    # stale copy, and merging into that used to overwrite the stored profile
+    # (a Locate/Refresh click with an empty copy replaced a 1206-character My
+    # Story with just the BIOREGION line). The browser's copy is only a
+    # fallback for a learner with nothing stored yet.
+    stored_profile = (learner.learner_profile or "").strip()
+    base_profile = stored_profile or (req.existing_profile or "").strip()
+
     # ── Bioregion-only update, no AI call, direct upsert into profile ──
     if req.bioregion_note and (not req.messages or len(req.messages) < 2):
-        existing = (req.existing_profile or "").strip()
+        existing = base_profile
         note_line = f"BIOREGION: {req.bioregion_note}"
         # Replace existing BIOREGION line if present, otherwise prepend
         import re
@@ -1128,7 +1137,7 @@ async def update_learner_profile(
     transcript = "\n".join(
         f"{m.role.upper()}: {m.content}" for m in req.messages
     )
-    existing = req.existing_profile or "(no profile yet)"
+    existing = base_profile or "(no profile yet)"
 
     prompt = f"""You maintain a compact learner profile, a living 1–2 page "life CV", for a learner on the Surfing the Frequencies platform. The profile captures who this person is as a learner and a human: their curiosities, interests, loves, fears, desires, recurring themes, what energises or drains them, how they think and express themselves.
 
