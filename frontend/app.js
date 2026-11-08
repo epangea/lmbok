@@ -32,7 +32,7 @@
 // bump doesn't cover them -- bump THIS constant whenever any file under
 // lang/ changes content, same deploy discipline as app.html's ASSET_VERSION
 // for app.js/app.css.
-const LANG_ASSET_VERSION = '20260817b';
+const LANG_ASSET_VERSION = '20261107a';
 
 
 
@@ -365,7 +365,11 @@ const S = {
   progressActivity: null,  // [{date,sessions_done,xp_earned,minutes_spent}], last 30 days
   progressLoading:  false,
   progressArt:      null,  // slug of expanded art in the skill breakdown, or null
-  progressTab:      'chart', // 'chart' | 'history' | 'arts'
+  progressTab:      'chart', // 'chart' | 'history' | 'arts' | 'journey'
+  journeyEntries:   null,  // Journey tab, newest first: [{id,kind,milestone,art_name,title,excerpt,payload,created_at}]
+  journeyLoading:   false,
+  journeyMore:      false, // true when another page may exist
+  journeyFailed:    false,
 
   // ── Bioregion page ────────────────────────────────────────────
   bioregionPortraits:     null,   // [{id, cluster_label, contributor_count, summary}]
@@ -559,6 +563,31 @@ async function loadProgress() {
     set({progressLoading: false, progressHistory: [], progressActivity: [], verifiedSkills: [], weeklyStories: [], radarSnapshots: []});
   }
 }
+
+// ── Journey tab (Phase 2 patch C, 2026-11-07) ─────────────────────
+// Reloaded every time the tab is opened (the other Portfolio data is loaded
+// once per page load, so a session completed since would not show up).
+// more=true appends the next page, using the oldest id received as before_id.
+var JOURNEY_PAGE = 30;
+async function loadJourney(more) {
+  if (!API.isLoggedIn() || S.journeyLoading) return;
+  var have   = (more && S.journeyEntries) ? S.journeyEntries : [];
+  var before = have.length ? have[have.length - 1].id : null;
+  set({journeyLoading: true, journeyFailed: false});
+  try {
+    var rows = await API.get('/learners/me/journey?limit=' + JOURNEY_PAGE + (before ? '&before_id=' + before : ''));
+    if (!Array.isArray(rows)) throw new Error('unexpected response');
+    set({journeyEntries: have.concat(rows), journeyMore: rows.length === JOURNEY_PAGE, journeyLoading: false});
+  } catch (e) {
+    console.log('Journey load:', e.message);
+    set({journeyEntries: have, journeyMore: false, journeyLoading: false, journeyFailed: true});
+  }
+}
+window.loadJourney = loadJourney;
+window.openProgressTab = function(tab) {
+  set({progressTab: tab});
+  if (tab === 'journey') loadJourney(false);
+};
 
 
 // ══════════════════════════════════════════════════
@@ -1154,6 +1183,15 @@ const LANG = {  // Only English ships inline; other languages load
     'stat.sessions_month':'sessions, last 30 days',
     'stat.minutes_month':'minutes, last 30 days',
     'portfolio.tab_growth':'Growth',
+    'portfolio.tab_journey':'Journey',
+    'journey.empty':'Your journey will appear here as you complete sessions.',
+    'journey.load_failed':'Could not load your journey right now. Please try again later.',
+    'journey.more':'Show older',
+    'journey.not_counted':'did not count toward growth',
+    'journey.first_in_art':'First steps in {art}',
+    'journey.level_up':'{skill} reached level {level}',
+    'journey.stage_change':'Your avatar grew into {stage}',
+    'journey.all_families':'You have now explored Being, Becoming and Connecting',
     'growth.title':'Your growth over time',
     'growth.empty':'Complete a few sessions to see your growth over time.',
     'growth.weakest':'Weakest Art',
@@ -3573,6 +3611,61 @@ function Portfolio() {
     </div>`;
   }
 
+  // 4. JOURNEY, a timeline of completed sessions and milestones, newest first.
+  // Milestones are visually stronger; sessions that did not count toward
+  // growth are muted. Everything that came from the server is escaped.
+  function journeyTimeline() {
+    var rows = S.journeyEntries;
+    if (rows === null || (S.journeyLoading && !rows.length)) {
+      return `<div style="text-align:center;padding:40px 0;color:var(--text3)"><div class="spinner" style="margin:0 auto"></div></div>`;
+    }
+    if (!rows.length) {
+      return `<div style="text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;line-height:1.7">${_esc(S.journeyFailed ? T('journey.load_failed') : T('journey.empty'))}</div>`;
+    }
+    var STAGES = {seed:'🫘 Seed', sprout:'🌱 Sprout', sapling:'🌿 Sapling', grove:'🌳 Grove', forest:'🌲 Forest', ecosystem:'🌍 Ecosystem'};
+    var MS_ICON = {first_in_art:'✦', level_up:'▲', stage_change:'🌱', all_families:'◎'};
+    function when(iso) {
+      var d = iso ? new Date(iso) : null;
+      return (d && !isNaN(d)) ? d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : '';
+    }
+    function milestoneText(e) {
+      var pl = e.payload || {};
+      if (e.milestone === 'first_in_art')  return T('journey.first_in_art',  {art: e.art_name || e.title});
+      if (e.milestone === 'level_up')      return T('journey.level_up',      {skill: pl.skill || e.skill_name || e.title, level: pl.to});
+      if (e.milestone === 'stage_change')  return T('journey.stage_change',  {stage: STAGES[pl.to] || e.title});
+      if (e.milestone === 'all_families')  return T('journey.all_families');
+      return e.title;
+    }
+    var items = rows.map(function(e) {
+      var date = _esc(when(e.created_at));
+      if (e.kind === 'milestone') {
+        var icon = MS_ICON[e.milestone] || '✦';
+        return '<div style="position:relative;margin:0 0 12px 0">'
+          + '<div style="position:absolute;left:-30px;top:8px;width:22px;height:22px;border-radius:50%;background:var(--bg2);border:2px solid var(--gold);color:var(--gold);font-size:11px;line-height:18px;text-align:center">' + icon + '</div>'
+          + '<div style="background:linear-gradient(135deg,rgba(255,200,80,0.10),rgba(0,229,200,0.06));border:1px solid rgba(255,200,80,0.35);border-radius:10px;padding:10px 14px">'
+          + '<div style="font-size:13px;font-weight:700;color:var(--text1);overflow-wrap:anywhere">' + _esc(milestoneText(e)) + '</div>'
+          + '<div style="font-size:10px;color:var(--text3);margin-top:3px">' + date + '</div>'
+          + '</div></div>';
+      }
+      var counted = !(e.payload && e.payload.counted === false);
+      return '<div style="position:relative;margin:0 0 12px 0;' + (counted ? '' : 'opacity:.6;') + '">'
+        + '<div style="position:absolute;left:-24px;top:14px;width:10px;height:10px;border-radius:50%;background:' + (counted ? 'var(--wave)' : 'var(--text3)') + '"></div>'
+        + '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px">'
+        + '<div style="font-weight:600;font-size:14px;color:var(--text1);overflow-wrap:anywhere">' + _esc(e.title) + '</div>'
+        + '<div style="font-size:11px;color:var(--text3);margin-top:3px">' + _esc(e.art_name || '') + (e.art_name && date ? ' · ' : '') + date
+        + (counted ? '' : ' · ' + _esc(T('journey.not_counted'))) + '</div>'
+        + (e.excerpt ? '<div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.6;font-style:italic;overflow-wrap:anywhere">“' + _esc(e.excerpt) + '”</div>' : '')
+        + '</div></div>';
+    }).join('');
+    var more = S.journeyMore
+      ? '<div style="text-align:center;padding:4px 0 8px"><button class="btn btn-sm" ' + (S.journeyLoading ? 'disabled ' : '') + 'onclick="loadJourney(true)">' + _esc(T('journey.more')) + '</button></div>'
+      : '';
+    var failed = S.journeyFailed
+      ? '<div style="text-align:center;padding:8px 0;font-size:12px;color:var(--text3)">' + _esc(T('journey.load_failed')) + '</div>'
+      : '';
+    return '<div style="position:relative;margin-left:30px;border-left:2px solid var(--border)"><div style="padding-left:14px">' + items + '</div></div>' + more + failed;
+  }
+
   // ── Render ─────────────────────────────────────
   const _pstage = computeAvatarStage(S.artScores || {});
   return `<div class="page">
@@ -3603,9 +3696,9 @@ function Portfolio() {
 
     <!-- Tab switcher -->
     <div style="display:flex;gap:4px;margin-bottom:16px;background:var(--bg3);border-radius:10px;padding:4px;border:1px solid var(--border)">
-      ${[['chart','📈 '+T('portfolio.tab_growth')],['history','🎓 Sessions'],['arts','🗺️ Arts & Skills']].map(function(t){
+      ${[['chart','📈 '+T('portfolio.tab_growth')],['history','🎓 Sessions'],['arts','🗺️ Arts & Skills'],['journey','🧭 '+T('portfolio.tab_journey')]].map(function(t){
         var active = tab === t[0];
-        return '<button onclick="set({progressTab:\''+t[0]+'\'})" style="flex:1;padding:7px 4px;font-size:12px;font-weight:'+(active?'700':'400')+';border-radius:7px;border:none;cursor:pointer;background:'+(active?'var(--card)':'transparent')+';color:'+(active?'var(--text1)':'var(--text3)')+';transition:all .15s;box-shadow:'+(active?'0 1px 6px rgba(0,0,0,0.3)':'none')+'">'+t[1]+'</button>';
+        return '<button onclick="openProgressTab(\''+t[0]+'\')" style="flex:1;min-width:0;padding:7px 4px;font-size:12px;font-weight:'+(active?'700':'400')+';border-radius:7px;border:none;cursor:pointer;background:'+(active?'var(--card)':'transparent')+';color:'+(active?'var(--text1)':'var(--text3)')+';transition:all .15s;box-shadow:'+(active?'0 1px 6px rgba(0,0,0,0.3)':'none')+'">'+t[1]+'</button>';
       }).join('')}
     </div>
 
@@ -3613,6 +3706,7 @@ function Portfolio() {
     ${tab === 'chart'   ? growthChart()   : ''}
     ${tab === 'history' ? sessionHistory() : ''}
     ${tab === 'arts'    ? artBreakdown()   : ''}
+    ${tab === 'journey' ? journeyTimeline() : ''}
 
     <!-- ══ MY STORY ══ -->
     <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">

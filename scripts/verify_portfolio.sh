@@ -45,6 +45,11 @@
 #                      source=session. Reports the test learner's profile
 #                      version count (informational: it grows as My Story is
 #                      updated, never as a result of this script).
+#                      (2026-11-07, patch C) Also GET /api/learners/me/journey and
+#                      /me/profile-history return 200, the Journey tab strings
+#                      are deployed (app.js, en/fr), and with VERIFY_WRITES=1 the
+#                      session Part D completed has exactly one journey entry in
+#                      the database and in the API response.
 #
 # Requires in backend/.env (same as e2e_org_polis.sh):
 #   ADMIN_KEY, TEST_LEARNER_EMAIL / TEST_LEARNER_PASSWORD
@@ -486,6 +491,32 @@ else
   fi
 fi
 check_asset "app.js" "${API_BASE}/app.js" 1 "source:           'session'"
+
+# F (patch C, 2026-11-07): the learner's own journey and profile-history APIs,
+# the Journey tab strings, and (VERIFY_WRITES=1) the entry Part D just created.
+call GET "${API_BASE}/api/learners/me/journey?limit=5" "$LJAR"
+pass "GET /api/learners/me/journey" "$HTTP_CODE" "200"
+if [ "$HTTP_CODE" = "200" ]; then
+  if echo "$HTTP_BODY" | python3 -c "import json,sys; assert isinstance(json.load(sys.stdin), list)" 2>/dev/null; then ok "journey response is a list"; else bad "journey response is not a JSON list"; fi
+fi
+call GET "${API_BASE}/api/learners/me/profile-history?limit=5" "$LJAR"
+pass "GET /api/learners/me/profile-history" "$HTTP_CODE" "200"
+check_asset "app.js"  "${API_BASE}/app.js"           1 "journey.first_in_art"
+check_asset "en.json" "${API_BASE}/lang/en.json"     1 "portfolio.tab_journey"
+check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "portfolio.tab_journey"
+if [ "$VERIFY_WRITES" = "1" ] && [ -n "${SESSION2_ID:-}" ]; then
+  F_ROW=$(db_query "SELECT COUNT(*) FROM journey_entries WHERE learner_id=${LEARNER_ID} AND session_id=${SESSION2_ID} AND kind='session'")
+  if [ "$F_ROW" = "1" ]; then ok "completing session ${SESSION2_ID} wrote one journey 'session' entry"; else bad "journey entries for session ${SESSION2_ID}: ${F_ROW:-none} (expected 1; is the new sessions.py running?)"; fi
+  call GET "${API_BASE}/api/learners/me/journey?limit=20" "$LJAR"
+  if echo "$HTTP_BODY" | python3 -c "
+import json,sys
+rows=json.load(sys.stdin)
+sys.exit(0 if any(r.get('session_id')==int(sys.argv[1]) and r.get('kind')=='session' for r in rows) else 1)" "${SESSION2_ID}" 2>/dev/null; then
+    ok "the API returns that entry to its learner"
+  else bad "session ${SESSION2_ID}'s entry is not in GET /api/learners/me/journey"; fi
+else
+  note "write check skipped (needs VERIFY_WRITES=1 and the session Part D completed)"
+fi
 echo ""
 
 call POST "${API_BASE}/api/auth/logout" "$LJAR" "$LCSRF" || true

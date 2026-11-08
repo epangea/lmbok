@@ -16,6 +16,7 @@ from models import (
 )
 from routes.auth import get_current_learner
 from engine import RecommendationEngine
+from journey import record_session_journey
 
 router = APIRouter()
 eng = RecommendationEngine()
@@ -245,6 +246,7 @@ async def complete_session(
         progress.recall_count   = (progress.recall_count   or 0) + 1
         progress.evidence_count = (progress.evidence_count or 0) + 1
     progress.current_level    = (progress.current_level  or 0)
+    level_before = progress.current_level   # journey log: detect a level-up below
     progress.last_practiced_at = datetime.now(timezone.utc)
 
     # Spaced repetition, next_review_at driven by self-rating (assess_score):
@@ -384,6 +386,13 @@ async def complete_session(
 
     # Radar snapshot
     radar_data = await eng.compute_radar(learner.id, db)
+    # Journey log: read the PREVIOUS snapshot before the new one is added, so a
+    # stage change can be detected (autoflush would otherwise return the new row).
+    prev_snap = (await db.execute(
+        select(RadarSnapshot.art_scores)
+        .where(RadarSnapshot.learner_id == learner.id)
+        .order_by(desc(RadarSnapshot.id)).limit(1)
+    )).scalar_one_or_none()
     db.add(RadarSnapshot(
         learner_id=learner.id,
         score_being=radar_data["group_scores"].get("being", 0.0),
@@ -392,6 +401,13 @@ async def complete_session(
         art_scores=radar_data["art_scores"],
         triggered_by="session_complete"
     ))
+    # Journey log (2026-11-07): own savepoint, failure is logged and never
+    # blocks completing the session.
+    await record_session_journey(
+        db, learner_id=learner.id, session=session, counted=counted,
+        level_before=level_before, level_after=progress.current_level or 0,
+        prev_art_scores=prev_snap, new_art_scores=radar_data["art_scores"],
+    )
     await db.commit()
 
     next_session = await eng.recommend_next(learner.id, db)

@@ -1,7 +1,7 @@
 # FreqLearn, routes/learners.py
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, or_, and_
 from db import get_db
 from models import Learner, LearnerStreak, LearnerPreferences
 from routes.auth import get_current_learner
@@ -297,6 +297,86 @@ async def get_my_weekly_stories(
             "created_at": ws.created_at.isoformat() if ws.created_at else None,
         }
         for ws in rows
+    ]
+
+
+# ── Journey log and My Story history, learner's own view ─────────────
+# Added 2026-11-07 (Phase 2 patch C). Both endpoints return ONLY the caller's
+# rows (the where-clause is learner.id from the auth cookie, never a request
+# parameter). journey_entries is written by journey.py (called from
+# sessions.py::complete_session); learner_profile_versions by
+# generate.py::record_profile_version.
+@router.get("/me/journey")
+async def get_my_journey(
+    limit: int = 50,
+    before_id: Optional[int] = None,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Newest first (by date, then id). Page with before_id = the id of the last entry received."""
+    from models import JourneyEntry, Arts, Skill
+    limit = max(1, min(int(limit), 100))
+    q = (
+        select(JourneyEntry, Arts.slug, Arts.name, Skill.name)
+        .outerjoin(Arts, Arts.id == JourneyEntry.art_id)
+        .outerjoin(Skill, Skill.id == JourneyEntry.skill_id)
+        .where(JourneyEntry.learner_id == learner.id)
+    )
+    if before_id is not None:
+        # Cursor on (created_at, id): rows added later by scripts/backfill_journey.py
+        # carry the date of the session they describe, so id alone is not time order.
+        ref = (await db.execute(
+            select(JourneyEntry.created_at).where(
+                JourneyEntry.id == before_id, JourneyEntry.learner_id == learner.id)
+        )).first()
+        if ref is None:
+            return []
+        q = q.where(or_(JourneyEntry.created_at < ref[0],
+                        and_(JourneyEntry.created_at == ref[0], JourneyEntry.id < before_id)))
+    rows = (await db.execute(
+        q.order_by(JourneyEntry.created_at.desc(), JourneyEntry.id.desc()).limit(limit)
+    )).all()
+    return [
+        {
+            "id":         e.id,
+            "kind":       e.kind,
+            "milestone":  e.milestone,
+            "session_id": e.session_id,
+            "art_slug":   art_slug,
+            "art_name":   art_name,
+            "skill_name": skill_name,
+            "title":      e.title,
+            "excerpt":    e.excerpt,
+            "payload":    e.payload,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e, art_slug, art_name, skill_name in rows
+    ]
+
+
+@router.get("/me/profile-history")
+async def get_my_profile_history(
+    limit: int = 20,
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Previous versions of My Story, newest first."""
+    from models import LearnerProfileVersion
+    limit = max(1, min(int(limit), 50))
+    rows = (await db.execute(
+        select(LearnerProfileVersion)
+        .where(LearnerProfileVersion.learner_id == learner.id)
+        .order_by(LearnerProfileVersion.id.desc())
+        .limit(limit)
+    )).scalars().all()
+    return [
+        {
+            "id":         v.id,
+            "profile":    v.profile,
+            "source":     v.source,
+            "created_at": v.created_at.isoformat() if v.created_at else None,
+        }
+        for v in rows
     ]
 
 
