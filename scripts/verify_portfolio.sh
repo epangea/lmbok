@@ -504,6 +504,10 @@ pass "GET /api/learners/me/profile-history" "$HTTP_CODE" "200"
 check_asset "app.js"  "${API_BASE}/app.js"           1 "journey.first_in_art"
 check_asset "en.json" "${API_BASE}/lang/en.json"     1 "portfolio.tab_journey"
 check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "portfolio.tab_journey"
+# Phase 3 (2026-11-08): the Story and Skills tabs, "then and now", Weekly Story inline in the Journey.
+check_asset "app.js"  "${API_BASE}/app.js"           1 "loadProfileHistory"
+check_asset "en.json" "${API_BASE}/lang/en.json"     1 "portfolio.tab_story"
+check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "portfolio.then_now"
 if [ "$VERIFY_WRITES" = "1" ] && [ -n "${SESSION2_ID:-}" ]; then
   F_ROW=$(db_query "SELECT COUNT(*) FROM journey_entries WHERE learner_id=${LEARNER_ID} AND session_id=${SESSION2_ID} AND kind='session'")
   if [ "$F_ROW" = "1" ]; then ok "completing session ${SESSION2_ID} wrote one journey 'session' entry"; else bad "journey entries for session ${SESSION2_ID}: ${F_ROW:-none} (expected 1; is the new sessions.py running?)"; fi

@@ -32,7 +32,7 @@
 // bump doesn't cover them -- bump THIS constant whenever any file under
 // lang/ changes content, same deploy discipline as app.html's ASSET_VERSION
 // for app.js/app.css.
-const LANG_ASSET_VERSION = '20261107a';
+const LANG_ASSET_VERSION = '20261108a';
 
 
 
@@ -365,11 +365,13 @@ const S = {
   progressActivity: null,  // [{date,sessions_done,xp_earned,minutes_spent}], last 30 days
   progressLoading:  false,
   progressArt:      null,  // slug of expanded art in the skill breakdown, or null
-  progressTab:      'chart', // 'chart' | 'history' | 'arts' | 'journey'
+  progressTab:      'growth', // 'story' | 'growth' | 'journey' | 'skills' (old 'chart', 'history', 'arts' still map)
   journeyEntries:   null,  // Journey tab, newest first: [{id,kind,milestone,art_name,title,excerpt,payload,created_at}]
   journeyLoading:   false,
   journeyMore:      false, // true when another page may exist
   journeyFailed:    false,
+  profileHistory:   null,  // Story tab, newest first: [{id,profile,source,created_at}] (from /learners/me/profile-history)
+  profileHistoryLoading: false,
 
   // ── Bioregion page ────────────────────────────────────────────
   bioregionPortraits:     null,   // [{id, cluster_label, contributor_count, summary}]
@@ -584,9 +586,27 @@ async function loadJourney(more) {
   }
 }
 window.loadJourney = loadJourney;
+
+// ── Story tab: "then and now" (Phase 3, 2026-11-08) ───────────────
+// Reloaded every time the tab is opened, like the Journey. A failure just
+// leaves the "then" card out; nothing else on the tab depends on it.
+async function loadProfileHistory() {
+  if (!API.isLoggedIn() || S.profileHistoryLoading) return;
+  set({profileHistoryLoading: true});
+  try {
+    var rows = await API.get('/learners/me/profile-history?limit=50');
+    set({profileHistory: Array.isArray(rows) ? rows : (S.profileHistory || null), profileHistoryLoading: false});
+  } catch (e) {
+    console.log('Profile history load:', e.message);
+    set({profileHistoryLoading: false});
+  }
+}
+window.loadProfileHistory = loadProfileHistory;
 window.openProgressTab = function(tab) {
+  tab = PORTFOLIO_TAB_ALIAS[tab] || tab;
   set({progressTab: tab});
   if (tab === 'journey') loadJourney(false);
+  if (tab === 'story')   loadProfileHistory();
 };
 
 
@@ -1192,6 +1212,15 @@ const LANG = {  // Only English ships inline; other languages load
     'journey.level_up':'{skill} reached level {level}',
     'journey.stage_change':'Your avatar grew into {stage}',
     'journey.all_families':'You have now explored Being, Becoming and Connecting',
+    'portfolio.tab_story':'Story',
+    'portfolio.tab_skills':'Skills',
+    'portfolio.story_blurb':'What the platform has learned about you through your sessions and companion conversations. It grows quietly in the background each time you complete a session or talk with the companion.',
+    'portfolio.companion_hint':'Ask about what your story reveals: patterns, strengths, blind spots. This conversation doesn’t change your profile.',
+    'portfolio.then_now':'Then and now',
+    'portfolio.then_on':'How your story read on {date}',
+    'portfolio.then_earlier':'How your story read earlier',
+    'portfolio.verified_skills':'Org-verified skills',
+    'portfolio.week_of':'Week of {date}',
     'growth.title':'Your growth over time',
     'growth.empty':'Complete a few sessions to see your growth over time.',
     'growth.weakest':'Weakest Art',
@@ -1537,7 +1566,7 @@ function renderGrowthChart(snapsNewestFirst, activity, t) {
   };
   var maxV = Math.max.apply(null, [].concat(series.being, series.becoming, series.connecting));
   var yMax = Math.min(1, Math.max(0.2, Math.ceil(maxV * 10) / 10 + 0.05));
-  var W = 560, H = 190, PL = 34, PR = 34, PT = 10, PB = 20;
+  var W = 560, H = 190, PL = 34, PR = 60, PT = 10, PB = 20;
   var n = snaps.length;
   var X = function(i){ return PL + (n === 1 ? 0 : i / (n - 1)) * (W - PL - PR); };
   var Y = function(v){ return PT + (1 - Math.min(v, yMax) / yMax) * (H - PT - PB); };
@@ -1548,8 +1577,8 @@ function renderGrowthChart(snapsNewestFirst, activity, t) {
   };
   var guides = STAGE_STEPS.filter(function(st){ return st.min <= yMax; }).map(function(st) {
     var y = Y(st.min);
-    return '<line x1="' + PL + '" y1="' + y.toFixed(1) + '" x2="' + (W - PR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(255,255,255,0.07)" stroke-width="0.8"/>'
-      + '<text x="' + (W - PR + 6) + '" y="' + (y + 4).toFixed(1) + '" font-size="11">' + st.icon + '</text>';
+    return '<line x1="' + PL + '" y1="' + y.toFixed(1) + '" x2="' + (W - PR) + '" y2="' + y.toFixed(1) + '" stroke="rgba(255,255,255,0.14)" stroke-width="0.8" stroke-dasharray="3 3"/>'
+      + '<text x="' + (W - PR + 6) + '" y="' + (y + 4).toFixed(1) + '" font-size="10" fill="rgba(255,255,255,0.45)" font-family="sans-serif">' + st.icon + ' ' + Math.round(st.min * 100) + '%</text>';
   }).join('');
   var ticks = [0, yMax / 2, yMax].map(function(v) {
     return '<text x="' + (PL - 5) + '" y="' + (Y(v) + 3).toFixed(1) + '" text-anchor="end" font-size="8" fill="rgba(255,255,255,0.3)" font-family="sans-serif">' + Math.round(v * 100) + '%</text>';
@@ -3456,6 +3485,36 @@ function Stoa() {
 // Three-tab view: Growth chart · Session History · Per-Art Skill Breakdown
 // Data from GET /sessions/activity and GET /sessions/history
 // ══════════════════════════════════════════════════
+// ══════════════════════════════════════════════════
+// PORTFOLIO (Phase 3, 2026-11-08)
+// Avatar header and four tabs: Story, Growth, Journey, Skills.
+// The old tab names (chart, history, arts) still map onto the new ones.
+// Everything that came from the server is escaped with _esc().
+// ══════════════════════════════════════════════════
+var PORTFOLIO_ARTS = [
+  {slug:'move',label:'Move',emoji:'🏃',group:'being'},
+  {slug:'eat',label:'Eat',emoji:'🍎',group:'being'},
+  {slug:'feel',label:'Feel',emoji:'💙',group:'being'},
+  {slug:'notice',label:'Notice',emoji:'👁️',group:'being'},
+  {slug:'express',label:'Express',emoji:'🎨',group:'being'},
+  {slug:'live',label:'Live',emoji:'🌍',group:'becoming'},
+  {slug:'listen',label:'Listen',emoji:'👂',group:'becoming'},
+  {slug:'give',label:'Give',emoji:'🎁',group:'becoming'},
+  {slug:'receive',label:'Receive',emoji:'📥',group:'becoming'},
+  {slug:'collaborate',label:'Collaborate',emoji:'🤝',group:'becoming'},
+  {slug:'understand',label:'Understand',emoji:'🔍',group:'connecting'},
+  {slug:'respect',label:'Respect',emoji:'🙏',group:'connecting'},
+  {slug:'build',label:'Build',emoji:'🔨',group:'connecting'},
+  {slug:'grow',label:'Grow',emoji:'🌱',group:'connecting'},
+  {slug:'consume',label:'Consume',emoji:'📚',group:'connecting'},
+];
+var PORTFOLIO_GROUPS = {
+  being:      {color:'var(--wave)',  label:'Being'},
+  becoming:   {color:'#6AB0FF',      label:'Becoming'},
+  connecting: {color:'var(--gold)',  label:'Connecting'},
+};
+var PORTFOLIO_TAB_ALIAS = {chart:'growth', history:'journey', arts:'skills'};
+
 function Portfolio() {
   // ── Loading state ─────────────────────────────
   if (S.progressLoading || S.progressHistory === null) {
@@ -3467,167 +3526,134 @@ function Portfolio() {
     </div>`;
   }
 
-  const history  = S.progressHistory  || [];
-  const activity = S.progressActivity || [];
-  const tab      = S.progressTab || 'chart';
-
-  // ── Aggregate lifetime totals ──────────────────
-  const totalSess = history.length; // capped at 30; the lifetime count is S.totalSessions
+  const activity  = S.progressActivity || [];
+  const tab       = PORTFOLIO_TAB_ALIAS[S.progressTab] || S.progressTab || 'growth';
   const totalMins = S.weekMinutes || 0;
+  const artScores = S.artScores || {};
 
-  // ── Tab content builders ───────────────────────
-
-  // 1. GROWTH, the three families and the weakest Art over time (renderGrowthChart, above)
-  function growthChart() {
-    return renderGrowthChart(S.radarSnapshots, activity, T);
+  function when(iso) {
+    var d = iso ? new Date(iso) : null;
+    return (d && !isNaN(d)) ? d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : '';
+  }
+  function statCard(value, color, label) {
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
+        <div style="font-size:22px;font-weight:700;color:${color}">${value}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">${_esc(label)}</div>
+      </div>`;
+  }
+  function sectionCard(labelHtml, bodyHtml) {
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">${labelHtml}</div>
+        ${bodyHtml}
+      </div>`;
   }
 
-  // 2. SESSION HISTORY, scrollable card list
-  function sessionHistory() {
-    if (history.length === 0) {
-      return `<div style="text-align:center;padding:48px 0;color:var(--text3)">
-        <div style="font-size:32px;margin-bottom:10px">🎓</div>
-        <div style="font-size:13px;line-height:1.7">${T('session.no_completed_yet')}<br>${T('session.head_to_academy')}</div>
-        <button class="btn btn-wave btn-sm" style="margin-top:14px" onclick="set({view:'session',phase:0,answered:false})">Go to Academy →</button>
-      </div>`;
+  // 1. STORY: Guiding Star, My Story, then and now, companion
+  function storyTab() {
+    var current = (S.learnerProfile || '').trim();
+
+    // "Then and now": the oldest recorded version of My Story, if it differs
+    // from the current text. A version written by the backfill script has the
+    // date the script ran, not the date the text was written, so it is shown
+    // without a date.
+    var thenHtml = '';
+    var ph = S.profileHistory;
+    if (current && Array.isArray(ph) && ph.length) {
+      var oldest = ph[ph.length - 1];
+      if (oldest && oldest.profile && oldest.profile.trim() !== current) {
+        var d = oldest.source === 'backfill' ? '' : when(oldest.created_at);
+        thenHtml = sectionCard(
+          _esc(T('portfolio.then_now')),
+          '<div style="font-size:11px;color:var(--text3);margin-bottom:10px">' + _esc(d ? T('portfolio.then_on', {date: d}) : T('portfolio.then_earlier')) + '</div>'
+          + '<div style="font-size:13px;color:var(--text2);line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere;opacity:.85">' + _esc(oldest.profile.trim()) + '</div>'
+        );
+      }
     }
 
-    var _artEmojis = {
-      move:'🏃', eat:'🍎', feel:'💙', notice:'👁️', express:'🎨',
-      live:'🌍', listen:'👂', give:'🎁', receive:'📥', collaborate:'🤝',
-      understand:'🔍', respect:'🙏', build:'🔨', grow:'🌱', consume:'📚',
-    };
+    return `<div>
+      <div style="margin-bottom:20px">
+        <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${T('peripatos.my_story')}</h2>
+        <p style="font-size:13px;color:var(--text3);line-height:1.6">${_esc(T('portfolio.story_blurb'))}</p>
+      </div>
 
-    return `<div style="display:flex;flex-direction:column;gap:8px">
-      ${history.map(function(s) {
-        var dt   = s.completed_at ? new Date(s.completed_at) : null;
-        var dateStr = dt ? dt.toLocaleDateString('default',{month:'short',day:'numeric'}) : '';
-        var timeStr = dt ? dt.toLocaleTimeString('default',{hour:'2-digit',minute:'2-digit'}) : '';
-        var mins    = s.duration_seconds ? Math.round(s.duration_seconds / 60) : 0;
-        var emoji   = _artEmojis[s.art_slug] || '🌊';
-        var phases  = ['','●','●●','●●●','●●●●','●●●●●'];
-        var phaseDots = phases[Math.min(s.phase_reached||0, 5)] || '';
-        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px">
-          <div style="font-size:24px;flex-shrink:0">${emoji}</div>
+      ${S.guidingStar ? `
+      <div style="text-align:center;padding:24px 16px;margin-bottom:20px;background:linear-gradient(135deg,rgba(0,229,200,0.06),rgba(61,123,255,0.06));border:1px solid rgba(0,229,200,0.2);border-radius:var(--r)">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">${T('agora.guiding_star')}</div>
+        <div style="font-size:22px;font-style:italic;color:var(--wave);font-family:var(--font-display);line-height:1.4;overflow-wrap:anywhere">✦ ${_esc(S.guidingStar)}</div>
+      </div>` : ''}
+
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
+        ${current ? `
+        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">${T('agora.life_profile')}</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere">${_esc(current)}</div>
+        ` : `
+        <div style="text-align:center;padding:24px 0;color:var(--text3)">
+          <div style="font-size:28px;margin-bottom:10px">🌱</div>
+          <div style="font-size:13px;line-height:1.7">${T('peripatos.story_not_started_full')}</div>
+        </div>
+        `}
+      </div>
+
+      ${thenHtml}
+
+      <div style="background:var(--bg2);border:1px solid rgba(0,229,200,0.2);border-radius:var(--r);padding:18px">
+        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px">${T('peripatos.companion_my_story')}</div>
+        <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">${_esc(T('portfolio.companion_hint'))}</div>
+        ${renderPortfolioThread()}
+      </div>
+    </div>`;
+  }
+
+  // 2. GROWTH: the chart, then the 15 Arts as read-only bars (the one place
+  // the per-Art percentages live; the Skills tab only groups skills by Art)
+  function artBars() {
+    var sorted = PORTFOLIO_ARTS.slice().sort(function(a, b) {
+      return (artScores[b.slug] || 0) - (artScores[a.slug] || 0);
+    });
+    return `<div style="font-size:11px;color:var(--text3);margin:22px 0 10px">${_esc(T('stat.arts'))}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+      ${sorted.map(function(art) {
+        var pct = Math.round((artScores[art.slug] || 0) * 100);
+        var gc  = PORTFOLIO_GROUPS[art.group];
+        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px;padding:10px 14px">
+          <div style="font-size:20px;flex-shrink:0">${art.emoji}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-weight:600;font-size:14px;color:var(--text1);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${s.title}</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:3px">${s.art_name} · ${mins ? mins+'min' : ''}</div>
+            <div style="font-size:13px;font-weight:600;color:var(--text1)">${art.label}</div>
+            <div style="margin-top:5px;background:rgba(255,255,255,0.07);border-radius:4px;height:4px;overflow:hidden">
+              <div style="height:4px;border-radius:4px;background:${gc.color};width:${pct}%"></div>
+            </div>
           </div>
           <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:11px;color:var(--text3)">${phaseDots}</div>
-            <div style="font-size:10px;color:var(--text3)">${dateStr} ${timeStr}</div>
+            <div style="font-size:13px;font-weight:700;color:${gc.color}">${pct}%</div>
+            <div style="font-size:9px;color:var(--text3);margin-top:2px">${gc.label}</div>
           </div>
         </div>`;
       }).join('')}
-      <div style="text-align:center;padding:8px 0;font-size:11px;color:var(--text3)">Showing last ${history.length} sessions</div>
-    </div>`;
+      </div>`;
+  }
+  function growthTab() {
+    return renderGrowthChart(S.radarSnapshots, activity, T) + artBars();
   }
 
-  // 3. PER-ART SKILL BREAKDOWN, arts list; click to expand skill levels
-  function artBreakdown() {
-    // Arts ordered by score descending (touched first, then alphabetical)
-    var _artScores = S.artScores || {};
-    var ARTS_META = [
-      {slug:'move',label:'Move',emoji:'🏃',group:'being'},
-      {slug:'eat',label:'Eat',emoji:'🍎',group:'being'},
-      {slug:'feel',label:'Feel',emoji:'💙',group:'being'},
-      {slug:'notice',label:'Notice',emoji:'👁️',group:'being'},
-      {slug:'express',label:'Express',emoji:'🎨',group:'being'},
-      {slug:'live',label:'Live',emoji:'🌍',group:'becoming'},
-      {slug:'listen',label:'Listen',emoji:'👂',group:'becoming'},
-      {slug:'give',label:'Give',emoji:'🎁',group:'becoming'},
-      {slug:'receive',label:'Receive',emoji:'📥',group:'becoming'},
-      {slug:'collaborate',label:'Collaborate',emoji:'🤝',group:'becoming'},
-      {slug:'understand',label:'Understand',emoji:'🔍',group:'connecting'},
-      {slug:'respect',label:'Respect',emoji:'🙏',group:'connecting'},
-      {slug:'build',label:'Build',emoji:'🔨',group:'connecting'},
-      {slug:'grow',label:'Grow',emoji:'🌱',group:'connecting'},
-      {slug:'consume',label:'Consume',emoji:'📚',group:'connecting'},
-    ];
-    var GC = {
-      being:      {color:'var(--wave)',    label:'Being'},
-      becoming:   {color:'#6AB0FF',       label:'Becoming'},
-      connecting: {color:'var(--gold)',   label:'Connecting'},
-    };
+  // 3. JOURNEY: sessions and milestones, newest first, with each Weekly Story
+  // paragraph above the entries of its week. A story covers week_start up to
+  // week_start + 7 days (weekly_report.py WINDOW_DAYS), so it sits just above
+  // the first entry older than that window's end.
+  function journeyTab() {
+    var rows    = S.journeyEntries;
+    var stories = (S.weeklyStories || []).map(function(w) {
+      return {w: w, end: Date.parse(w.week_start + 'T00:00:00Z') + 7 * 86400000};
+    }).filter(function(x) { return !isNaN(x.end); })
+      .sort(function(a, b) { return b.end - a.end; });
 
-    // Build per-art skill list from SKILL_ART_WEIGHTS (skills that contribute to each art)
-    var artSkillMap = {};
-    Object.keys(SKILL_ART_WEIGHTS).forEach(function(skill) {
-      var weights = SKILL_ART_WEIGHTS[skill];
-      Object.keys(weights).forEach(function(slug) {
-        if (!artSkillMap[slug]) artSkillMap[slug] = [];
-        artSkillMap[slug].push({skill: skill, weight: weights[slug]});
-      });
-    });
-    // Sort each art's skills by weight descending
-    Object.keys(artSkillMap).forEach(function(slug) {
-      artSkillMap[slug].sort(function(a,b){ return b.weight-a.weight; });
-    });
-
-    var sorted = ARTS_META.slice().sort(function(a,b){
-      return (_artScores[b.slug]||0) - (_artScores[a.slug]||0);
-    });
-
-    return `<div style="display:flex;flex-direction:column;gap:6px">
-      ${sorted.map(function(art) {
-        var score    = _artScores[art.slug] || 0;
-        var pct      = Math.round(score * 100);
-        var isOpen   = S.progressArt === art.slug;
-        var gc       = GC[art.group];
-        var skills   = artSkillMap[art.slug] || [];
-        var skillRows = isOpen ? skills.slice(0,8).map(function(sk) {
-          // Rough skill score, art score * weight, mapped to 0–4 levels
-          var rawLevel = score * sk.weight * 20; // scale to 0–4 range
-          var lv = Math.min(4, Math.floor(rawLevel));
-          var lvColors = ['var(--text3)','#5B8DD9','#6DB97A','var(--gold)','var(--wave)'];
-          var lvLabels = ['Untouched','Lv 1','Lv 2','Lv 3','Lv 4'];
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:12px;color:var(--text2)">${sk.skill}</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <div style="font-size:10px;font-weight:600;color:${lvColors[lv]};background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${lvLabels[lv]}</div>
-              <button onclick="startSkillSession('${sk.skill.replace(/'/g,"\\'")}')" style="font-size:10px;background:rgba(0,229,200,0.1);border:1px solid rgba(0,229,200,0.3);color:var(--wave);border-radius:4px;padding:2px 7px;cursor:pointer">Practice →</button>
-            </div>
-          </div>`;
-        }).join('') : '';
-
-        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-          <div onclick="toggleProgressArt('${art.slug}')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none">
-            <div style="font-size:20px;flex-shrink:0">${art.emoji}</div>
-            <div style="flex:1">
-              <div style="font-size:13px;font-weight:600;color:var(--text1)">${art.label}</div>
-              <div style="margin-top:5px;background:rgba(255,255,255,0.07);border-radius:4px;height:4px;overflow:hidden">
-                <div style="height:4px;border-radius:4px;background:${gc.color};width:${pct}%;transition:width .4s ease"></div>
-              </div>
-            </div>
-            <div style="text-align:right;flex-shrink:0">
-              <div style="font-size:13px;font-weight:700;color:${gc.color}">${pct}%</div>
-              <div style="font-size:9px;color:var(--text3);margin-top:2px">${gc.label}</div>
-            </div>
-            <div style="color:var(--text3);font-size:12px;margin-left:4px">${isOpen ? '▲' : '▼'}</div>
-          </div>
-          ${isOpen ? `<div style="padding:4px 14px 12px;border-top:1px solid var(--border)">${skillRows}</div>` : ''}
-        </div>`;
-      }).join('')}
-    </div>`;
-  }
-
-  // 4. JOURNEY, a timeline of completed sessions and milestones, newest first.
-  // Milestones are visually stronger; sessions that did not count toward
-  // growth are muted. Everything that came from the server is escaped.
-  function journeyTimeline() {
-    var rows = S.journeyEntries;
     if (rows === null || (S.journeyLoading && !rows.length)) {
       return `<div style="text-align:center;padding:40px 0;color:var(--text3)"><div class="spinner" style="margin:0 auto"></div></div>`;
     }
-    if (!rows.length) {
+    if (!rows.length && !stories.length) {
       return `<div style="text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;line-height:1.7">${_esc(S.journeyFailed ? T('journey.load_failed') : T('journey.empty'))}</div>`;
     }
     var STAGES = {seed:'🫘 Seed', sprout:'🌱 Sprout', sapling:'🌿 Sapling', grove:'🌳 Grove', forest:'🌲 Forest', ecosystem:'🌍 Ecosystem'};
     var MS_ICON = {first_in_art:'✦', level_up:'▲', stage_change:'🌱', all_families:'◎'};
-    function when(iso) {
-      var d = iso ? new Date(iso) : null;
-      return (d && !isNaN(d)) ? d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : '';
-    }
     function milestoneText(e) {
       var pl = e.payload || {};
       if (e.milestone === 'first_in_art')  return T('journey.first_in_art',  {art: e.art_name || e.title});
@@ -3636,7 +3662,7 @@ function Portfolio() {
       if (e.milestone === 'all_families')  return T('journey.all_families');
       return e.title;
     }
-    var items = rows.map(function(e) {
+    function entryHtml(e) {
       var date = _esc(when(e.created_at));
       if (e.kind === 'milestone') {
         var icon = MS_ICON[e.milestone] || '✦';
@@ -3656,132 +3682,136 @@ function Portfolio() {
         + (counted ? '' : ' · ' + _esc(T('journey.not_counted'))) + '</div>'
         + (e.excerpt ? '<div style="font-size:12px;color:var(--text2);margin-top:8px;line-height:1.6;font-style:italic;overflow-wrap:anywhere">“' + _esc(e.excerpt) + '”</div>' : '')
         + '</div></div>';
-    }).join('');
+    }
+    function weeklyHtml(w) {
+      var d = new Date(w.week_start + 'T00:00:00');
+      var label = isNaN(d) ? String(w.week_start) : d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+      return '<div style="position:relative;margin:0 0 12px 0">'
+        + '<div style="position:absolute;left:-26px;top:12px;width:14px;height:14px;border-radius:3px;background:var(--bg2);border:2px solid var(--text3)"></div>'
+        + '<div style="background:var(--bg2);border:1px dashed var(--border);border-radius:10px;padding:10px 14px">'
+        + '<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">📜 ' + _esc(T('portfolio.week_of', {date: label})) + '</div>'
+        + '<div style="font-size:13px;color:var(--text2);line-height:1.7;overflow-wrap:anywhere">' + _esc(w.paragraph) + '</div>'
+        + '</div></div>';
+    }
+
+    var out = [], si = 0;
+    rows.forEach(function(e) {
+      var t = Date.parse(e.created_at);
+      while (si < stories.length && !isNaN(t) && t < stories[si].end) { out.push(weeklyHtml(stories[si].w)); si++; }
+      out.push(entryHtml(e));
+    });
+    // Nothing older is left to load, so any remaining stories are older than every entry.
+    if (!S.journeyMore) { while (si < stories.length) { out.push(weeklyHtml(stories[si].w)); si++; } }
+
     var more = S.journeyMore
       ? '<div style="text-align:center;padding:4px 0 8px"><button class="btn btn-sm" ' + (S.journeyLoading ? 'disabled ' : '') + 'onclick="loadJourney(true)">' + _esc(T('journey.more')) + '</button></div>'
       : '';
     var failed = S.journeyFailed
       ? '<div style="text-align:center;padding:8px 0;font-size:12px;color:var(--text3)">' + _esc(T('journey.load_failed')) + '</div>'
       : '';
-    return '<div style="position:relative;margin-left:30px;border-left:2px solid var(--border)"><div style="padding-left:14px">' + items + '</div></div>' + more + failed;
+    return '<div style="position:relative;margin-left:30px;border-left:2px solid var(--border)"><div style="padding-left:14px">' + out.join('') + '</div></div>' + more + failed;
+  }
+
+  // 4. SKILLS: Arts grouped with their skills (click an Art to expand), then
+  // org-verified skills. Per-Art percentages are on the Growth tab, not here.
+  function skillsTab() {
+    var artSkillMap = {};
+    Object.keys(SKILL_ART_WEIGHTS).forEach(function(skill) {
+      var weights = SKILL_ART_WEIGHTS[skill];
+      Object.keys(weights).forEach(function(slug) {
+        if (!artSkillMap[slug]) artSkillMap[slug] = [];
+        artSkillMap[slug].push({skill: skill, weight: weights[slug]});
+      });
+    });
+    Object.keys(artSkillMap).forEach(function(slug) {
+      artSkillMap[slug].sort(function(a, b) { return b.weight - a.weight; });
+    });
+
+    var artList = `<div style="display:flex;flex-direction:column;gap:6px">
+      ${PORTFOLIO_ARTS.map(function(art) {
+        var score  = artScores[art.slug] || 0;
+        var isOpen = S.progressArt === art.slug;
+        var gc     = PORTFOLIO_GROUPS[art.group];
+        var skills = artSkillMap[art.slug] || [];
+        var skillRows = isOpen ? skills.slice(0,8).map(function(sk) {
+          // Rough skill score, art score * weight, mapped to 0–4 levels
+          var rawLevel = score * sk.weight * 20; // scale to 0–4 range
+          var lv = Math.min(4, Math.floor(rawLevel));
+          var lvColors = ['var(--text3)','#5B8DD9','#6DB97A','var(--gold)','var(--wave)'];
+          var lvLabels = ['Untouched','Lv 1','Lv 2','Lv 3','Lv 4'];
+          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+            <div style="font-size:12px;color:var(--text2)">${sk.skill}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <div style="font-size:10px;font-weight:600;color:${lvColors[lv]};background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${lvLabels[lv]}</div>
+              <button onclick="startSkillSession('${sk.skill.replace(/'/g,"\\'")}')" style="font-size:10px;background:rgba(0,229,200,0.1);border:1px solid rgba(0,229,200,0.3);color:var(--wave);border-radius:4px;padding:2px 7px;cursor:pointer">Practice →</button>
+            </div>
+          </div>`;
+        }).join('') : '';
+        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div onclick="toggleProgressArt('${art.slug}')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none">
+            <div style="font-size:20px;flex-shrink:0">${art.emoji}</div>
+            <div style="flex:1;font-size:13px;font-weight:600;color:var(--text1)">${art.label}</div>
+            <div style="font-size:9px;color:${gc.color}">${gc.label}</div>
+            <div style="color:var(--text3);font-size:12px;margin-left:4px">${isOpen ? '▲' : '▼'}</div>
+          </div>
+          ${isOpen ? `<div style="padding:4px 14px 12px;border-top:1px solid var(--border)">${skillRows}</div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+    var verified = '';
+    if (S.verifiedSkills && S.verifiedSkills.length) {
+      // P8: read-only credentials an org rep confirmed while working with this
+      // learner on a Need. Kept apart from the self-paced Arts above: these are
+      // org-vouched, not platform-computed.
+      verified = '<div style="margin-top:24px">' + sectionCard('✅ ' + _esc(T('portfolio.verified_skills')),
+        S.verifiedSkills.map(function(v) {
+          var lvlColor = v.level === 'master' ? 'var(--wave)' : v.level === 'proficient' ? '#6AB0FF' : 'var(--text3)';
+          return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">'
+            + '<div style="min-width:0"><div style="font-size:13px;font-weight:600;overflow-wrap:anywhere">' + _esc(v.skill_name) + '</div>'
+            + '<div style="font-size:11px;color:var(--text3);margin-top:2px;overflow-wrap:anywhere">' + _esc(v.org_name) + ' · ' + _esc(v.listing_title) + '</div></div>'
+            + '<span style="font-size:11px;font-weight:700;text-transform:capitalize;flex-shrink:0;color:' + lvlColor + '">' + _esc(v.level) + '</span>'
+            + '</div>';
+        }).join('')) + '</div>';
+    }
+    return artList + verified;
   }
 
   // ── Render ─────────────────────────────────────
-  const _pstage = computeAvatarStage(S.artScores || {});
+  const _pstage = computeAvatarStage(artScores);
+  const TABS = [
+    ['story',   '📖 ' + T('portfolio.tab_story')],
+    ['growth',  '📈 ' + T('portfolio.tab_growth')],
+    ['journey', '🧭 ' + T('portfolio.tab_journey')],
+    ['skills',  '🗺️ ' + T('portfolio.tab_skills')],
+  ];
   return `<div class="page">
     <div style="margin-bottom:20px">
       <h2 style="font-size:clamp(18px,3vw,26px)">${T('dash.progress')}</h2>
       <p style="margin-top:4px;font-size:13px;color:var(--text2)">${T('dash.progress_tagline')}</p>
     </div>
 
-    <!-- Lifetime stat row -->
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px">
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:var(--wave)">${_pstage.icon} ${_pstage.stage}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.stage')}</div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:#6AB0FF">${S.totalSessions||0}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('agora.sessions')}</div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:var(--gold)">${Math.round((totalMins||0)/60*10)/10}h</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.time_invested')}</div>
-      </div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:#E88080">${S.skillsTouched||0}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${T('stat.skills_touched')}</div>
-      </div>
+    <!-- Avatar header: stage, sessions, hours, progress to the next stage -->
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      ${statCard(_pstage.icon + ' ' + _pstage.stage, 'var(--wave)', T('stat.stage'))}
+      ${statCard(S.totalSessions || 0, '#6AB0FF', T('agora.sessions'))}
+      ${statCard(Math.round((totalMins || 0) / 60 * 10) / 10 + 'h', 'var(--gold)', T('stat.time_invested'))}
     </div>
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px 2px;margin-bottom:20px">${stageProgressHtml()}</div>
 
     <!-- Tab switcher -->
     <div style="display:flex;gap:4px;margin-bottom:16px;background:var(--bg3);border-radius:10px;padding:4px;border:1px solid var(--border)">
-      ${[['chart','📈 '+T('portfolio.tab_growth')],['history','🎓 Sessions'],['arts','🗺️ Arts & Skills'],['journey','🧭 '+T('portfolio.tab_journey')]].map(function(t){
+      ${TABS.map(function(t){
         var active = tab === t[0];
-        return '<button onclick="openProgressTab(\''+t[0]+'\')" style="flex:1;min-width:0;padding:7px 4px;font-size:12px;font-weight:'+(active?'700':'400')+';border-radius:7px;border:none;cursor:pointer;background:'+(active?'var(--card)':'transparent')+';color:'+(active?'var(--text1)':'var(--text3)')+';transition:all .15s;box-shadow:'+(active?'0 1px 6px rgba(0,0,0,0.3)':'none')+'">'+t[1]+'</button>';
+        return '<button onclick="openProgressTab(\''+t[0]+'\')" style="flex:1;min-width:0;padding:7px 4px;font-size:12px;font-weight:'+(active?'700':'400')+';border-radius:7px;border:none;cursor:pointer;background:'+(active?'var(--card)':'transparent')+';color:'+(active?'var(--text1)':'var(--text3)')+';transition:all .15s;box-shadow:'+(active?'0 1px 6px rgba(0,0,0,0.3)':'none')+'">'+_esc(t[1])+'</button>';
       }).join('')}
     </div>
 
     <!-- Tab content -->
-    ${tab === 'chart'   ? growthChart()   : ''}
-    ${tab === 'history' ? sessionHistory() : ''}
-    ${tab === 'arts'    ? artBreakdown()   : ''}
-    ${tab === 'journey' ? journeyTimeline() : ''}
-
-    <!-- ══ MY STORY ══ -->
-    <div style="margin-top:32px;padding-top:24px;border-top:1px solid var(--border)">
-
-      <!-- Section header -->
-      <div style="margin-bottom:20px">
-        <h2 style="font-size:20px;font-weight:700;margin-bottom:4px">${T('peripatos.my_story')}</h2>
-        <p style="font-size:13px;color:var(--text3);line-height:1.6">What the platform has learned about you through your sessions and companion conversations. This grows quietly in the background every time you complete a session or talk with the companion.</p>
-      </div>
-
-      <!-- Guiding Star -->
-      ${S.guidingStar ? `
-      <div style="text-align:center;padding:24px 16px;margin-bottom:20px;background:linear-gradient(135deg,rgba(0,229,200,0.06),rgba(61,123,255,0.06));border:1px solid rgba(0,229,200,0.2);border-radius:var(--r)">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);margin-bottom:10px">${T('agora.guiding_star')}</div>
-        <div style="font-size:22px;font-style:italic;color:var(--wave);font-family:var(--font-display);line-height:1.4">✦ ${S.guidingStar}</div>
-      </div>` : ''}
-
-      <!-- Life-CV card -->
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
-        ${S.learnerProfile ? `
-        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">${T('agora.life_profile')}</div>
-        <div style="font-size:13px;color:var(--text2);line-height:1.8;white-space:pre-wrap">${S.learnerProfile.trim()}</div>
-        ` : `
-        <div style="text-align:center;padding:24px 0;color:var(--text3)">
-          <div style="font-size:28px;margin-bottom:10px">🌱</div>
-          <div style="font-size:13px;line-height:1.7">${T('peripatos.story_not_started_full')}</div>
-        </div>
-        `}
-      </div>
-
-      <!-- P8: Org-Verified Skills, read-only credentials an org rep confirmed
-           while working with this learner on a Need. Deliberately shown as its
-           own card, separate from self-paced skill progress above, since these
-           are org-vouched, not platform-computed. Only rendered when non-empty. -->
-      ${(S.verifiedSkills && S.verifiedSkills.length) ? `
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">✅ Org-Verified Skills</div>
-        ${S.verifiedSkills.map(function(v) {
-          var lvlColor = v.level === 'master' ? 'var(--wave)' : v.level === 'proficient' ? '#6AB0FF' : 'var(--text3)';
-          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">'
-            + '<div><div style="font-size:13px;font-weight:600">' + v.skill_name + '</div>'
-            + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + v.org_name + ' · ' + v.listing_title + '</div></div>'
-            + '<span style="font-size:11px;font-weight:700;text-transform:capitalize;color:' + lvlColor + '">' + v.level + '</span>'
-            + '</div>';
-        }).join('')}
-      </div>` : ''}
-
-      <!-- Weekly Story, reverse-chronological history of weekly_report.py's
-           "this week's growth" paragraphs (2026-09-02). Bank-statement style:
-           each entry is a persisted snapshot, unlike the Life-CV card above
-           which merges/compresses into one current profile with no history
-           of its own. Only rendered when non-empty; hardcoded English label
-           to match this section's existing Org-Verified Skills convention
-           (not routed through T()). -->
-      ${(S.weeklyStories && S.weeklyStories.length) ? `
-      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:20px;margin-bottom:20px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:14px">📜 Weekly Story</div>
-        ${S.weeklyStories.map(function(w) {
-          var d = new Date(w.week_start + 'T00:00:00');
-          var label = isNaN(d) ? w.week_start : d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
-          return '<div style="padding:12px 0;border-bottom:1px solid var(--border)">'
-            + '<div style="font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text3);margin-bottom:6px">Week of ' + label + '</div>'
-            + '<div style="font-size:13px;color:var(--text2);line-height:1.7">' + w.paragraph + '</div>'
-            + '</div>';
-        }).join('')}
-      </div>` : ''}
-
-      <!-- Portfolio companion -->
-      <div style="background:var(--bg2);border:1px solid rgba(0,229,200,0.2);border-radius:var(--r);padding:18px">
-        <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-bottom:4px">${T('peripatos.companion_my_story')}</div>
-        <div style="font-size:12px;color:var(--text3);margin-bottom:14px;line-height:1.5">Ask about what your story reveals, patterns, strengths, blind spots. This conversation doesn't change your profile.</div>
-        ${renderPortfolioThread()}
-      </div>
-
-    </div>
+    ${tab === 'story'   ? storyTab()   : ''}
+    ${tab === 'growth'  ? growthTab()  : ''}
+    ${tab === 'journey' ? journeyTab() : ''}
+    ${tab === 'skills'  ? skillsTab()  : ''}
   </div>`;
 }
 
