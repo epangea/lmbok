@@ -358,7 +358,6 @@ const S = {
   artScores: (function(){ try { return JSON.parse(localStorage.getItem('fl_artScores')||'{}'); } catch(e){ return {}; } })(),
   matchLoaded: _dc && _dc.topMatch ? true : false,   // true once /matching/listings/top resolves
   radarTab: 'avatar',   // 'avatar' (15-art) | 'domains' (8-domain)
-  domainTab: 'arts', // 'arts' | 'domains'
 
   // ── Progress page ─────────────────────────────────────────────
   progressHistory:  null,  // [{id,title,art_name,art_slug,xp_earned,duration_seconds,phase_reached,completed_at}]
@@ -1917,18 +1916,6 @@ function Dashboard() {
   const learner = S.learner || {};
   const name    = learner.display_name || 'Learner';
 
-  // Skills touched, from backend /sessions/skills-touched; falls back to client-side estimate
-  const skillsTouched = S.skillsTouched != null
-    ? S.skillsTouched
-    : Object.keys(SKILL_ART_WEIGHTS || {}).filter(function(sk){ return computeSkillScore(sk, S.artScores||{}) > 0; }).length;
-
-  // Arts touched, arts with score > 0.05
-  const artsTouched = Object.values(S.artScores||{}).filter(function(v){ return v > 0.05; }).length;
-
-  // Hours, total_minutes from backend (via weekMinutes state field)
-  const _hoursRaw = Math.round((S.weekMinutes||0) / 60);
-  const hoursStr  = _hoursRaw > 0 ? _hoursRaw + 'h' : '0h';
-
   // Today's journey, real session data from /sessions/today
   var _td = S.todaySessions;
   var journeySteps;
@@ -1942,17 +1929,8 @@ function Dashboard() {
         done: true,
       };
     });
-    // Append next recommended session as the upcoming step
-    if (S.nextRec) {
-      journeySteps.push({
-        i: String(journeySteps.length + 1),
-        l: S.nextRec.title || ('The Art of ' + S.nextRec.art_name),
-        s: (S.nextRec.subcategory || S.nextRec.skill_name || '') + ' · ~' + (S.nextRec.duration_min||15) + 'min',
-        done: false,
-      });
-    }
     if (journeySteps.length === 0) {
-      journeySteps.push({i:'①', l:'Start your first wave', s:'Pick any art to begin', done: false});
+      journeySteps.push({i:'①', l:'Start today’s first wave', s:'Pick any art to begin', done: false});
     }
   } else {
     // Fallback proxy while loading
@@ -1964,78 +1942,31 @@ function Dashboard() {
     ];
   }
 
-  // Strongest 4 domains for bar chart
-  const _domScores = computeDomainScores(S.artScores||{});
-  const _domEntries = Object.keys(_domScores)
-    .map(function(k){ return [k, _domScores[k]]; })
-    .sort(function(a,b){ return b[1]-a[1]; })
-    .slice(0,4);
-  const _domColors = {
-    cognitive:'#5B8DD9', creative:'#E8A87C', physical:'#6DB97A', social:'#9B8EC4',
-    language:'#4FC3C3',  emotional:'#E88080', meta:'#D4C14A',   technical:'#7BADB8',
-  };
-  const _domLabels = {
-    cognitive:'Cognitive & Intellectual', creative:'Creative & Artistic', physical:'Physical & Motor', social:'Social & Relational',
-    language:'Language & Communication', emotional:'Emotional & Psychological', meta:'Meta-Learning', technical:'Technical & Digital',
-  };
-
-  // Strongest Arts, for the domains/arts toggle (reuses _domColors/_domLabels above)
-  const _artEmojis = {
-    move:'🏃', eat:'🍎', feel:'💙', notice:'👁️', express:'🎨',
-    live:'🌍', listen:'👂', give:'🎁', receive:'📥', collaborate:'🤝',
-    understand:'🔍', respect:'🙏', build:'🔨', grow:'🌱', consume:'📚',
-  };
-  const _topArts = Object.keys(S.artScores||{})
-    .filter(function(k){ return (S.artScores[k]||0) > 0; })
-    .sort(function(a,b){ return (S.artScores[b]||0)-(S.artScores[a]||0); })
-    .slice(0,5);
-
   // Avatar stage, computed from the weakest of the 15 Arts
   const _avatarStage = computeAvatarStage(S.artScores || {});
 
   return `
   <div class="page">
-    <!-- ── Page header, title | stat bar | paddle in ──────────────────────── -->
-    <div class="dash-header" style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
+    <!-- ── Page header, title | paddle in ──────────────────────── -->
+    <div class="dash-header" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:14px">
       <div style="flex-shrink:0">
         <h1 style="font-size:clamp(18px,2.5vw,30px);line-height:1.2">${name}'s Waves</h1>
         <p style="margin-top:4px;font-size:12px;color:var(--text2)">
           <span onclick="showLMBoKInfo()" style="color:var(--wave);cursor:pointer;border-bottom:1px dashed rgba(0,229,200,0.5);white-space:nowrap" title="${T('dash.click_learn_more')}">${T('dash.lmbok_title')}</span>
         </p>
       </div>
-      <!-- Stat bar, inline center -->
-      <div class="stat-box" style="flex:1;display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:8px 6px">
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border)">
-          <span class="stat-v" style="color:var(--deep);font-size:17px;line-height:1">${_avatarStage.icon}</span>
-          <span style="font-size:12px;font-weight:700;color:var(--text2)">${_avatarStage.stage}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-right:1px solid var(--border)">
-          <span class="stat-v" style="color:var(--coral);font-size:17px;line-height:1">${hoursStr}</span>
-          <span style="font-size:12px;font-weight:700;color:var(--text2)">${T('stat.learning')}</span>
-        </div>
-        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:3px 0">
-          <div style="display:flex;align-items:center;gap:6px">
-            <span class="stat-v" style="color:var(--wave);font-size:17px;line-height:1">${artsTouched}</span>
-            <span style="font-size:12px;font-weight:700;color:var(--text2)">${T('stat.arts')}</span>
-          </div>
-          <div style="display:flex;align-items:center;gap:6px">
-            <span class="stat-v" style="color:var(--wave);font-size:17px;line-height:1">${skillsTouched}</span>
-            <span style="font-size:12px;font-weight:700;color:var(--text2)">${T('stat.skills')}</span>
-          </div>
-        </div>
-      </div>
       <button class="btn btn-wave btn-lg" style="flex-shrink:0" onclick="startRecommendedSession()">▶ Paddle in</button>
     </div>
 
     <!-- ── 3-column grid ─────────────────────────────────────────
-         LEFT (order-1):   Radar + Strongest Arts/Domains + Today's Journey
+         LEFT (order-1):   Radar (Arts or Domains)
          MIDDLE (order-2): Stage + Hours · Recommended Next · New Match
          RIGHT (order-3):  Where I Stand (Avatar · Bioregion)
          Responsive: columns stack in order 1→2→3 on narrow viewports
     ──────────────────────────────────────────────────────────── -->
     <div class="dash-grid" style="display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr) minmax(0,0.88fr);gap:14px;align-items:start">
 
-      <!-- ══ COL 1: Radar → Strongest Domains/Arts ══ -->
+      <!-- ══ COL 1: Radar (Arts or Domains) ══ -->
       <div class="dash-col-1" style="display:flex;flex-direction:column;gap:12px;order:1">
 
         <!-- Radar, entire card navigates to Mouseion; toggles stop propagation -->
@@ -2055,57 +1986,6 @@ function Dashboard() {
           <div style="display:flex;justify-content:center">
             ${S.radarTab==='avatar' ? radarArts(S.artScores||{}) : radarDomains(computeDomainScores(S.artScores||{}))}
           </div>
-        </div>
-
-        <!-- Strongest Arts / Domains, tabbed toggle -->
-        <div class="dash-card-domains card">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-            <h4>${S.domainTab==='domains' ? T('dash.strongest_domains') : T('dash.strongest_arts')}</h4>
-            <div style="display:flex;gap:3px">
-              <button onclick="set({domainTab:'arts'})"
-                style="padding:2px 8px;border-radius:10px;border:1px solid ${S.domainTab!=='domains'?'var(--wave)':'var(--border2)'};background:${S.domainTab!=='domains'?'rgba(0,229,200,0.12)':'transparent'};color:${S.domainTab!=='domains'?'var(--wave)':'var(--text3)'};font-size:10px;cursor:pointer;font-family:var(--font-body)">${T('stat.arts')}</button>
-              <button onclick="set({domainTab:'domains'})"
-                style="padding:2px 8px;border-radius:10px;border:1px solid ${S.domainTab==='domains'?'var(--wave)':'var(--border2)'};background:${S.domainTab==='domains'?'rgba(0,229,200,0.12)':'transparent'};color:${S.domainTab==='domains'?'var(--wave)':'var(--text3)'};font-size:10px;cursor:pointer;font-family:var(--font-body)">${T('dash.domain_tab')}</button>
-            </div>
-          </div>
-          ${(function(){
-            if (S.domainTab === 'arts') {
-              if (_topArts.length === 0) return '<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px 0">'+T('session.unlock_arts')+'</div>';
-              return _topArts.map(function(slug){
-                var score = S.artScores[slug]||0;
-                var pct   = Math.round(score*100);
-                var datum = (ARTS_DATA||[]).find(function(x){return x.slug===slug;});
-                var lbl   = datum ? datum.name : (slug.charAt(0).toUpperCase()+slug.slice(1));
-                var emoji = (_artEmojis||{})[slug]||'🌊';
-                var col   = datum && datum.group==='Being' ? 'var(--wave)' : datum && datum.group==='Becoming' ? 'var(--deep)' : 'var(--gold)';
-                return '<div style="margin-bottom:10px">'
-                  +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;align-items:center">'
-                  +'<span style="font-size:12px;color:var(--text2)">'+emoji+' '+lbl+'</span>'
-                  +'<span style="font-size:12px;font-weight:600;color:'+col+'">'+pct+'%</span>'
-                  +'</div>'
-                  +'<div class="bar-bg" style="height:4px">'
-                  +'<div class="bar-f" style="width:'+Math.max(pct,3)+'%;background:'+col+'"></div>'
-                  +'</div></div>';
-              }).join('');
-            }
-            // Domains tab (default)
-            if (_domEntries.every(function(e){return e[1]===0;}))
-              return '<div style="font-size:12px;color:var(--text3);text-align:center;padding:8px 0">'+T('session.unlock_domains')+'</div>';
-            return _domEntries.map(function(entry){
-              var key=entry[0], val=entry[1];
-              var col = _domColors[key]||'var(--wave)';
-              var lbl = _domLabels[key]||key;
-              var pct = Math.round(val*100);
-              return '<div style="margin-bottom:10px">'
-                +'<div style="display:flex;justify-content:space-between;margin-bottom:4px">'
-                +'<span style="font-size:12px;color:var(--text2)">'+lbl+'</span>'
-                +'<span style="font-size:12px;font-weight:600;color:'+col+'">'+pct+'%</span>'
-                +'</div>'
-                +'<div class="bar-bg" style="height:4px">'
-                +'<div class="bar-f" style="width:'+Math.max(pct,3)+'%;background:'+col+'"></div>'
-                +'</div></div>';
-            }).join('');
-          })()}
         </div>
 
       </div>
@@ -3530,6 +3410,10 @@ function Portfolio() {
   const tab       = PORTFOLIO_TAB_ALIAS[S.progressTab] || S.progressTab || 'growth';
   const totalMins = S.weekMinutes || 0;
   const artScores = S.artScores || {};
+  // Skills touched, from /sessions/skills-touched; falls back to a client-side estimate
+  const skillsTouched = S.skillsTouched != null
+    ? S.skillsTouched
+    : Object.keys(SKILL_ART_WEIGHTS || {}).filter(function(sk){ return computeSkillScore(sk, artScores) > 0; }).length;
 
   function when(iso) {
     var d = iso ? new Date(iso) : null;
@@ -3727,7 +3611,8 @@ function Portfolio() {
       artSkillMap[slug].sort(function(a, b) { return b.weight - a.weight; });
     });
 
-    var artList = `<div style="display:flex;flex-direction:column;gap:6px">
+    var artList = `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${skillsTouched} ${_esc(T('stat.skills_touched'))}</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
       ${PORTFOLIO_ARTS.map(function(art) {
         var score  = artScores[art.slug] || 0;
         var isOpen = S.progressArt === art.slug;
