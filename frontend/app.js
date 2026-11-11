@@ -1027,7 +1027,7 @@ const LANG = {  // Only English ships inline; other languages load
     'dash.learning_domains':'Learning Domains',
     'dash.lmbok_title':'Your Very Own Life Management Body of Knowledge (LMBoK)',
     'dash.progress':'Your Progress',
-    'dash.progress_tagline':'Avatar stage · sessions completed · skills growing',
+    'dash.progress_tagline':'Your Digital Avatar · A partial footprint of your growth & personal development',
     'dash.strongest_arts':'Strongest arts',
     'dash.strongest_domains':'Strongest domains',
     'lang.toggle_ui':'Toggle UI language',
@@ -1327,10 +1327,10 @@ function Footer() {
 function Nav() {
   const tabs = [
     {id:'dashboard', label:T('nav.agora'),    icon:'✦',  action:"set({view:'dashboard',phase:0,answered:false})"},
-    {id:'session',   label:T('nav.academy'),  icon:'🎓', action:"(currentSession||S.sessionLoading)?set({view:'session',phase:0,answered:false}):startRecommendedSession()"},
     {id:'skills',    label:T('nav.mouseion'), icon:'🗺️', action:"set({view:'skills',phase:0,answered:false})"},
-    {id:'reflect',   label:T('nav.stoa'),     icon:'✍️', action:"set({view:'reflect',phase:0,answered:false})"},
+    {id:'session',   label:T('nav.academy'),  icon:'🎓', action:"(currentSession||S.sessionLoading)?set({view:'session',phase:0,answered:false}):startRecommendedSession()"},
     {id:'portfolio', label:T('nav.portfolio'), icon:'🧭', action:"set({view:'portfolio',phase:0,answered:false})"},
+    {id:'reflect',   label:T('nav.stoa'),     icon:'✍️', action:"set({view:'reflect',phase:0,answered:false})"},
     {id:'bioregion',  label:T('nav.bioregion'), icon:'🌍', action:"loadBioregionPage()"},
     {id:'contribute',label:T('nav.syneisfero'), icon:'📖', href:'/contribute'},
     {id:'ekklesia',  label:T('nav.ekklesia'),  icon:'🪏', href:'/org'},
