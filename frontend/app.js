@@ -1541,11 +1541,11 @@ function renderGrowthChart(snapsNewestFirst, activity, t) {
   var mins30 = activity.reduce(function(s, r){ return s + (r.minutes_spent || 0); }, 0);
   var activeDays = activity.filter(function(r){ return (r.sessions_done || 0) > 0; }).length;
   var card = function(v, color, label) {
-    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;min-width:90px">'
-      + '<div style="font-size:20px;font-weight:700;color:' + color + '">' + v + '</div>'
-      + '<div style="font-size:11px;color:var(--text3);margin-top:2px">' + label + '</div></div>';
+    return '<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 8px;text-align:center;min-width:0">'
+      + '<div style="font-size:clamp(18px,4.5vw,24px);font-weight:700;line-height:1.15;color:' + color + '">' + v + '</div>'
+      + '<div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.35">' + label + '</div></div>';
   };
-  var head = '<div style="margin-bottom:10px;display:flex;gap:20px;flex-wrap:wrap">'
+  var head = '<div style="margin-bottom:14px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px">'
     + card(sess30, 'var(--wave)', t('stat.sessions_month'))
     + card(activeDays, '#6AB0FF', t('stat.active_days'))
     + card(mins30, 'var(--gold)', t('stat.minutes_month')) + '</div>';
@@ -1966,7 +1966,7 @@ function Dashboard() {
     ──────────────────────────────────────────────────────────── -->
     <div class="dash-grid" style="display:grid;grid-template-columns:minmax(0,1.08fr) minmax(0,1fr) minmax(0,0.88fr);gap:14px;align-items:start">
 
-      <!-- ══ COL 1: Radar (Arts or Domains) ══ -->
+      <!-- ══ COL 1: Radar (Arts or Domains) → Today's Journey ══ -->
       <div class="dash-col-1" style="display:flex;flex-direction:column;gap:12px;order:1">
 
         <!-- Radar, entire card navigates to Mouseion; toggles stop propagation -->
@@ -1988,9 +1988,25 @@ function Dashboard() {
           </div>
         </div>
 
+        <!-- Today's journey -->
+        <div class="dash-card-journey card">
+          <h4 style="margin-bottom:12px">${T('session.today_journey')}</h4>
+          ${journeySteps.map(t=>`
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);opacity:${t.done?0.5:1}">
+            <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;
+              background:${t.done?'var(--wave-dim)':'var(--bg4)'};
+              display:flex;align-items:center;justify-content:center;
+              color:${t.done?'var(--wave)':'var(--text3)'};font-size:11px">${t.i}</div>
+            <div style="flex:1">
+              <div style="font-size:13px;font-weight:${!t.done?600:400};color:var(--text)">${t.l}</div>
+              <div style="font-size:11px;color:var(--text3)">${t.s}</div>
+            </div>
+          </div>`).join('')}
+        </div>
+
       </div>
 
-      <!-- ══ COL 2: Recommended Next → Today's Journey → New Match ══ -->
+      <!-- ══ COL 2: Recommended Next → New Match ══ -->
       <div class="dash-col-2" style="display:flex;flex-direction:column;gap:12px;order:2">
 
         <!-- Recommended next, entire card clickable, no Start button -->
@@ -2011,22 +2027,6 @@ function Dashboard() {
             <span class="pill pgr">~${S.nextRec ? S.nextRec.duration_min : 20} min</span>
             ${S.nextRec ? `<span class="pill pgr">Lv ${S.nextRec.current_level}→${S.nextRec.target_level}</span>` : ''}
           </div>
-        </div>
-
-        <!-- Today's journey -->
-        <div class="dash-card-journey card">
-          <h4 style="margin-bottom:12px">${T('session.today_journey')}</h4>
-          ${journeySteps.map(t=>`
-          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);opacity:${t.done?0.5:1}">
-            <div style="width:28px;height:28px;border-radius:50%;flex-shrink:0;
-              background:${t.done?'var(--wave-dim)':'var(--bg4)'};
-              display:flex;align-items:center;justify-content:center;
-              color:${t.done?'var(--wave)':'var(--text3)'};font-size:11px">${t.i}</div>
-            <div style="flex:1">
-              <div style="font-size:13px;font-weight:${!t.done?600:400};color:var(--text)">${t.l}</div>
-              <div style="font-size:11px;color:var(--text3)">${t.s}</div>
-            </div>
-          </div>`).join('')}
         </div>
 
         <!-- New Match ✦ -->
@@ -3113,7 +3113,28 @@ function Mouseion() {
       <p style="margin-top:4px">${T('mouseion.subtitle')}</p>
     </div>
 
-    <div class="card card-wave" style="margin-bottom:20px">
+    <div style="margin-bottom:10px">
+      <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">${T('dash.avatar_tab')}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:20px">
+      ${groups.map(g => `
+        <div class="card" style="border-left:3px solid ${g.color}">
+          <h3 style="color:${g.color};font-family:var(--font-display);margin-bottom:12px">${g.label}</h3>
+          ${g.arts.map(([slug, label, emoji]) => {
+            const score = S.artScores && S.artScores[slug] ? S.artScores[slug] : 0;
+            return `
+            <div class="art-row" onclick="startDirectSession('${slug}')">
+              <span style="font-size:16px;width:22px;text-align:center;flex-shrink:0">${emoji}</span>
+              <div style="flex:1;font-size:13px;color:var(--text)">${label}</div>
+              <div class="bar-bg" style="width:60px;height:4px">
+                <div class="bar-f" style="width:${score*100}%;background:${g.color}"></div>
+              </div>
+              <span style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">${Math.round(score*100)}%</span>
+            </div>`;
+          }).join('')}
+        </div>`).join('')}
+    </div>
+    <div class="card card-wave" style="margin-bottom:28px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
         <span style="font-size:18px">🌊</span>
         <span style="font-family:var(--font-display);font-size:14px;font-weight:700;color:var(--wave)">${T('peripatos.the_companion')}</span>
@@ -3137,30 +3158,9 @@ function Mouseion() {
       </details>
     </div>
 
-    <div style="margin-bottom:10px">
-      <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">${T('dash.avatar_tab')}</span>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;margin-bottom:28px">
-      ${groups.map(g => `
-        <div class="card" style="border-left:3px solid ${g.color}">
-          <h3 style="color:${g.color};font-family:var(--font-display);margin-bottom:12px">${g.label}</h3>
-          ${g.arts.map(([slug, label, emoji]) => {
-            const score = S.artScores && S.artScores[slug] ? S.artScores[slug] : 0;
-            return `
-            <div class="art-row" onclick="startDirectSession('${slug}')">
-              <span style="font-size:16px;width:22px;text-align:center;flex-shrink:0">${emoji}</span>
-              <div style="flex:1;font-size:13px;color:var(--text)">${label}</div>
-              <div class="bar-bg" style="width:60px;height:4px">
-                <div class="bar-f" style="width:${score*100}%;background:${g.color}"></div>
-              </div>
-              <span style="font-size:11px;color:var(--text3);min-width:28px;text-align:right">${Math.round(score*100)}%</span>
-            </div>`;
-          }).join('')}
-        </div>`).join('')}
-    </div>
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:14px">
       <span style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3)">${T('dash.learning_domains')}</span>
-      <span style="font-size:11px;color:var(--text3)">· how your arts translate into universal competencies</span>
+      <span style="font-size:11px;color:var(--text3)">· if human arts are confusing, explore these universal competencies instead</span>
     </div>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-bottom:24px">
       ${_DOMS.map(function(_d){
@@ -3420,9 +3420,9 @@ function Portfolio() {
     return (d && !isNaN(d)) ? d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : '';
   }
   function statCard(value, color, label) {
-    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;flex:1;min-width:80px">
-        <div style="font-size:22px;font-weight:700;color:${color}">${value}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">${_esc(label)}</div>
+    return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 8px;text-align:center;min-width:0">
+        <div style="font-size:clamp(18px,4.5vw,24px);font-weight:700;line-height:1.15;color:${color}">${value}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;line-height:1.35">${_esc(label)}</div>
       </div>`;
   }
   function sectionCard(labelHtml, bodyHtml) {
@@ -3677,7 +3677,7 @@ function Portfolio() {
     </div>
 
     <!-- Avatar header: stage, sessions, hours, progress to the next stage -->
-    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px">
       ${statCard(_pstage.icon + ' ' + _pstage.stage, 'var(--wave)', T('stat.stage'))}
       ${statCard(S.totalSessions || 0, '#6AB0FF', T('agora.sessions'))}
       ${statCard(Math.round((totalMins || 0) / 60 * 10) / 10 + 'h', 'var(--gold)', T('stat.time_invested'))}
