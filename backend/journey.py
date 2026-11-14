@@ -14,7 +14,8 @@ import re
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models import Arts, JourneyEntry, Skill
+from models import Arts, JourneyEntry, Learner, Skill
+from models import Session as SessionRow
 from utils import compute_avatar_stage
 
 log = logging.getLogger(__name__)
@@ -35,6 +36,31 @@ def make_excerpt(reflect: str | None, challenge: str | None) -> str | None:
     if not text:
         return None
     return text if len(text) <= EXCERPT_MAX else text[:EXCERPT_MAX].rstrip() + "\u2026"
+
+
+async def _arts_before_clear(db: AsyncSession, learner_id: int, session_id) -> set:
+    """Arts in which the learner had a completed session before they deleted
+    their journey (learners.journey_cleared_at), or an empty set when they never
+    did. Deleting the journey removes the first_in_art and all_families rows this
+    module reads, so without this the next session in every Art would fire
+    'first steps' again. Any completed session counts here, counted toward growth
+    or not: the 'counted' flag only lived in the deleted rows, and recomputing
+    it is not worth the code for a milestone card."""
+    cleared_at = (await db.execute(
+        select(Learner.journey_cleared_at).where(Learner.id == learner_id)
+    )).scalar_one_or_none()
+    if cleared_at is None:
+        return set()
+    q = select(SessionRow.art_id).where(
+        SessionRow.learner_id == learner_id,
+        SessionRow.status == "completed",
+        SessionRow.completed_at.is_not(None),
+        SessionRow.completed_at < cleared_at,
+        SessionRow.art_id.is_not(None),
+    )
+    if session_id is not None:
+        q = q.where(SessionRow.id != session_id)
+    return set((await db.execute(q.distinct())).scalars().all())
 
 
 async def record_session_journey(
@@ -77,7 +103,8 @@ async def record_session_journey(
                     JourneyEntry.art_id.is_not(None),
                 )
             )).scalars().all())
-            if session.art_id not in earlier_arts:
+            pre_arts = await _arts_before_clear(db, learner_id, session.id)
+            if session.art_id not in earlier_arts and session.art_id not in pre_arts:
                 db.add(JourneyEntry(
                     learner_id=learner_id, kind="milestone", milestone="first_in_art",
                     session_id=session.id, art_id=session.art_id,
@@ -91,9 +118,15 @@ async def record_session_journey(
                         JourneyEntry.milestone == "all_families",
                     ).limit(1)
                 )).first()
-                if not have_all:
+                # After a journey delete, the families the learner had already
+                # covered before it count too, and if that was all three the
+                # milestone was reached back then and does not fire again.
+                pre_groups = set((await db.execute(
+                    select(Arts.group_id).where(Arts.id.in_(pre_arts))
+                )).scalars().all()) if pre_arts else set()
+                if not have_all and len(pre_groups) < FAMILIES:
                     groups = set((await db.execute(
-                        select(Arts.group_id).where(Arts.id.in_(earlier_arts | {session.art_id}))
+                        select(Arts.group_id).where(Arts.id.in_(earlier_arts | pre_arts | {session.art_id}))
                     )).scalars().all())
                     if len(groups) >= FAMILIES:
                         db.add(JourneyEntry(

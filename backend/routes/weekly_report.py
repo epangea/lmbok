@@ -159,7 +159,7 @@ async def main() -> None:
         # their weekly_stories row so opting out of the email doesn't mean
         # opting out of having your own progress recorded.
         learners = (await conn.execute(text("""
-            SELECT l.id, l.username, l.display_name, l.email,
+            SELECT l.id, l.username, l.display_name, l.email, l.journey_cleared_at,
                    COALESCE(lp.weekly_report_opt_out, 0) AS opted_out
             FROM learners l
             JOIN learner_streaks ls ON ls.learner_id = l.id
@@ -206,14 +206,19 @@ async def main() -> None:
                 WHERE s.learner_id = :lid
                   AND s.status = 'completed'
                   AND s.created_at >= NOW() - INTERVAL :days DAY
+                  AND (:cleared IS NULL OR s.completed_at > :cleared)
                   AND (
                         (s.challenge_response IS NOT NULL AND s.challenge_response != '')
                      OR (s.reflect_response   IS NOT NULL AND s.reflect_response   != '')
                      OR s.assess_companion_verdict IS NOT NULL
                   )
                 ORDER BY s.created_at ASC
-            """), {"lid": lid, "days": WINDOW_DAYS})).mappings().all()
+            """), {"lid": lid, "days": WINDOW_DAYS,
+                    "cleared": row["journey_cleared_at"]})).mappings().all()
 
+            # A learner who deleted their journey (journey_cleared_at) must not
+            # get a new weekly story written from sessions they finished before
+            # the delete, so the query above only reads sessions completed after it.
             story_paragraph = await _weekly_story_paragraph(SessionLocal, name, story_rows)
 
             if story_paragraph:

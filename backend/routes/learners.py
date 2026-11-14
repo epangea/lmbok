@@ -380,6 +380,108 @@ async def get_my_profile_history(
     ]
 
 
+# ── Journey export and delete (work plan step 2, 2026-11-11) ──────────
+# Both act on the caller's own rows only (learner.id from the auth cookie).
+# Delete is a real delete: nothing is kept in place of the rows, and
+# learners.journey_cleared_at records WHEN, so that journey.py,
+# weekly_report.py and scripts/backfill_journey.py do not rebuild what was
+# deleted. It does NOT touch sessions (and what the learner wrote in them),
+# radar snapshots, skill progress or the current My Story.
+@router.get("/me/journey/export")
+async def export_my_journey(
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """The learner's journey log, earlier My Story versions and weekly stories
+    as one JSON file download (oldest first)."""
+    import json
+    from fastapi import Response
+    from models import JourneyEntry, LearnerProfileVersion, WeeklyStory, Arts, Skill
+    entries = (await db.execute(
+        select(JourneyEntry, Arts.slug, Arts.name, Skill.name)
+        .outerjoin(Arts, Arts.id == JourneyEntry.art_id)
+        .outerjoin(Skill, Skill.id == JourneyEntry.skill_id)
+        .where(JourneyEntry.learner_id == learner.id)
+        .order_by(JourneyEntry.created_at.asc(), JourneyEntry.id.asc())
+    )).all()
+    versions = (await db.execute(
+        select(LearnerProfileVersion)
+        .where(LearnerProfileVersion.learner_id == learner.id)
+        .order_by(LearnerProfileVersion.id.asc())
+    )).scalars().all()
+    stories = (await db.execute(
+        select(WeeklyStory)
+        .where(WeeklyStory.learner_id == learner.id)
+        .order_by(WeeklyStory.week_start.asc(), WeeklyStory.id.asc())
+    )).scalars().all()
+    cleared_at = (await db.execute(
+        select(Learner.journey_cleared_at).where(Learner.id == learner.id)
+    )).scalar_one_or_none()
+
+    def iso(d):
+        return d.isoformat() if d else None
+
+    now = datetime.now(timezone.utc)
+    doc = {
+        "format": "lmbok-journey-export",
+        "version": 1,
+        "exported_at": now.isoformat(),
+        "journey_cleared_at": iso(cleared_at),
+        "entries": [
+            {
+                "kind": e.kind, "milestone": e.milestone,
+                "art": art_name, "art_slug": art_slug, "skill": skill_name,
+                "title": e.title, "excerpt": e.excerpt, "payload": e.payload,
+                "created_at": iso(e.created_at),
+            }
+            for e, art_slug, art_name, skill_name in entries
+        ],
+        "profile_versions": [
+            {"profile": v.profile, "source": v.source, "created_at": iso(v.created_at)}
+            for v in versions
+        ],
+        "weekly_stories": [
+            {"week_start": w.week_start.isoformat() if w.week_start else None,
+             "paragraph": w.paragraph, "created_at": iso(w.created_at)}
+            for w in stories
+        ],
+    }
+    return Response(
+        content=json.dumps(doc, ensure_ascii=False, indent=2),
+        media_type="application/json",
+        headers={
+            "Content-Disposition": f'attachment; filename="lmbok-journey-{now:%Y%m%d}.json"',
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.delete("/me/journey")
+async def delete_my_journey(
+    learner: Learner = Depends(get_current_learner),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete the caller's journey log, earlier My Story versions and
+    weekly stories, and stamp learners.journey_cleared_at. One transaction.
+    Calling it again deletes nothing and moves the stamp."""
+    from sqlalchemy import delete as sa_delete
+    from models import JourneyEntry, LearnerProfileVersion, WeeklyStory
+    n_entries = (await db.execute(
+        sa_delete(JourneyEntry).where(JourneyEntry.learner_id == learner.id))).rowcount
+    n_versions = (await db.execute(
+        sa_delete(LearnerProfileVersion).where(LearnerProfileVersion.learner_id == learner.id))).rowcount
+    n_stories = (await db.execute(
+        sa_delete(WeeklyStory).where(WeeklyStory.learner_id == learner.id))).rowcount
+    cleared_at = datetime.now(timezone.utc)   # UTC, like sessions.completed_at
+    await db.execute(
+        update(Learner).where(Learner.id == learner.id).values(journey_cleared_at=cleared_at))
+    await db.commit()
+    return {
+        "deleted": {"entries": n_entries, "profile_versions": n_versions, "weekly_stories": n_stories},
+        "cleared_at": cleared_at.isoformat(),
+    }
+
+
 # ── Prosopon: seed initial skill signal from the 3-question onboarding card ──
 # Added 2026-08-20. Functional replacement for the retired being/becoming/
 # connecting familiarity self-assessment (which used to drive /me/seed-progress

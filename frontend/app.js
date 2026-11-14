@@ -203,7 +203,7 @@ const API = {
         }
       } catch(e) { /* fall through to logout */ }
       // Can't refresh, log out
-      API.logout();
+      API.logout(true);
       set({view:'login', authError:'Your session expired, please sign in again', learner:null});
       throw new Error('Session expired');
     }
@@ -232,11 +232,15 @@ const API = {
     return data;
   },
 
-  logout() {
+  logout(keepDraft) {
     API.post('/auth/logout').catch(() => {});
     localStorage.removeItem('fl_learner');
     localStorage.removeItem('fl_artScores');
     localStorage.removeItem('fl_dash_cache');
+    // A learner who signs out on purpose takes their unfinished session with them;
+    // an expired login (keepDraft) keeps it, the draft is tied to the learner id.
+    if (!keepDraft) { try { localStorage.removeItem('fl_session_draft'); } catch (e) {} }
+    S.skillProgress = null;
   },
 
   // fl_learner is just a display-info cache (id/name/onboarding flag), not a
@@ -364,6 +368,10 @@ const S = {
   progressActivity: null,  // [{date,sessions_done,xp_earned,minutes_spent}], last 30 days
   progressLoading:  false,
   progressArt:      null,  // slug of expanded art in the skill breakdown, or null
+  openSections:     {},    // Portfolio folds: {sectionId: true} while open; everything starts folded
+  skillProgress:     null,  // /progress/skills-by-art rows (null until loaded)
+  skillProgressLoading: false,
+  skillProgressFailed:  false,
   progressTab:      'growth', // 'story' | 'growth' | 'journey' | 'skills' (old 'chart', 'history', 'arts' still map)
   journeyEntries:   null,  // Journey tab, newest first: [{id,kind,milestone,art_name,title,excerpt,payload,created_at}]
   journeyLoading:   false,
@@ -371,6 +379,8 @@ const S = {
   journeyFailed:    false,
   profileHistory:   null,  // Story tab, newest first: [{id,profile,source,created_at}] (from /learners/me/profile-history)
   profileHistoryLoading: false,
+  journeyDeleteStep: 0,    // Journey tab footer: 0 = idle, 1 = asking to confirm, 2 = deleting
+  journeyDeleteNote: '',   // '' | 'done' | 'failed'
 
   // ── Bioregion page ────────────────────────────────────────────
   bioregionPortraits:     null,   // [{id, cluster_label, contributor_count, summary}]
@@ -433,6 +443,7 @@ function set(p) {
     S.sandboxMessages = [];
   }
   Object.assign(S, p);
+  if (currentSession && currentSession.session_id && S.view === 'session') scheduleSessionDraftSave();
   // ── Bioregion map: destroy when leaving map view or bioregion page
   if ((p.view && p.view !== 'bioregion') ||
       ('bioregionView' in p && p.bioregionView !== 'map')) {
@@ -445,6 +456,7 @@ function set(p) {
     S.stoaSessionId = currentSession && currentSession.session_id || null;
   }
   if (p.view === 'portfolio' && S.progressHistory === null && !S.progressLoading) loadProgress();
+  if (p.view === 'portfolio') loadSkillProgress();
   if ((p.peripatosTab === 'journal' || (p.view === 'reflect' && S.peripatosTab === 'journal')) && S.peripatosEntries === null && !S.peripatosEntriesLoading) loadPeripatosEntries();
   draw();
   // ── Bioregion map: init after draw() when map view is active
@@ -565,6 +577,24 @@ async function loadProgress() {
   }
 }
 
+// ── Skills by Art (2026-11-13) ────────────────────────────────────
+// The learner's skills with the Arts each one feeds, from the same arts_skills
+// mapping the Art scores use. Feeds the Growth tab's Art drill-down and the Skills
+// tab. Refreshed each time the Portfolio opens and after a session is finished.
+async function loadSkillProgress() {
+  if (!API.isLoggedIn() || S.skillProgressLoading) return;
+  set({skillProgressLoading: true});
+  try {
+    const rows = await API.get('/progress/skills-by-art');
+    if (!Array.isArray(rows)) throw new Error('unexpected response');
+    set({skillProgress: rows, skillProgressFailed: false, skillProgressLoading: false});
+  } catch (e) {
+    console.log('Skill progress load:', e.message);
+    set({skillProgressFailed: true, skillProgressLoading: false});
+  }
+}
+window.loadSkillProgress = loadSkillProgress;
+
 // ── Journey tab (Phase 2 patch C, 2026-11-07) ─────────────────────
 // Reloaded every time the tab is opened (the other Portfolio data is loaded
 // once per page load, so a session completed since would not show up).
@@ -601,11 +631,34 @@ async function loadProfileHistory() {
   }
 }
 window.loadProfileHistory = loadProfileHistory;
+
+// ── Journey export and delete (work plan step 2, 2026-11-11) ───────
+// Export is a plain same-origin link to GET /learners/me/journey/export (the
+// cookie authenticates it). Delete is DELETE /learners/me/journey, behind the
+// confirmation panel in the Journey tab footer. A real delete: on success the
+// three journey-derived lists are emptied here so nothing stale stays on screen.
+window.askDeleteJourney = function() { set({journeyDeleteStep: 1, journeyDeleteNote: ''}); };
+window.cancelDeleteJourney = function() { set({journeyDeleteStep: 0, journeyDeleteNote: ''}); };
+async function deleteJourney() {
+  if (!API.isLoggedIn() || S.journeyDeleteStep === 2) return;
+  set({journeyDeleteStep: 2, journeyDeleteNote: ''});
+  try {
+    await API.delete('/learners/me/journey');
+    set({journeyEntries: [], journeyMore: false, journeyFailed: false,
+         weeklyStories: [], profileHistory: [],
+         journeyDeleteStep: 0, journeyDeleteNote: 'done'});
+  } catch (e) {
+    console.log('Journey delete:', e.message);
+    set({journeyDeleteStep: 1, journeyDeleteNote: 'failed'});
+  }
+}
+window.deleteJourney = deleteJourney;
 window.openProgressTab = function(tab) {
   tab = PORTFOLIO_TAB_ALIAS[tab] || tab;
-  set({progressTab: tab});
+  set({progressTab: tab, journeyDeleteStep: 0, journeyDeleteNote: ''});
   if (tab === 'journey') loadJourney(false);
   if (tab === 'story')   loadProfileHistory();
+  if (tab === 'growth' || tab === 'skills') loadSkillProgress();
 };
 
 
@@ -1211,6 +1264,31 @@ const LANG = {  // Only English ships inline; other languages load
     'journey.level_up':'{skill} reached level {level}',
     'journey.stage_change':'Your avatar grew into {stage}',
     'journey.all_families':'You have now explored Being, Becoming and Connecting',
+    'journey.export':'Export my journey',
+    'journey.export_hint':'Download your journey log, the earlier versions of My Story and your weekly stories as a file.',
+    'journey.delete':'Delete my journey…',
+    'journey.delete_title':'Delete your journey?',
+    'journey.delete_body':'This permanently removes your journey log, your milestones, your weekly stories and the earlier versions of My Story. It cannot be undone, and nothing is kept in their place. Your current My Story, your progress in the Arts and skills, and the sessions you completed, including what you wrote in them, are not removed. Export your journey first if you want a copy.',
+    'journey.delete_confirm':'Delete permanently',
+    'journey.delete_working':'Deleting…',
+    'journey.delete_done':'Your journey was deleted.',
+    'journey.delete_failed':'Could not delete your journey. Please try again.',
+    'resume.title':'Continue where you left off?',
+    'resume.body':'You were working on “{title}”, last on {date}, and had reached step {step} of 5. Your answers are saved on this device.',
+    'resume.continue':'Continue',
+    'resume.begin':'Begin again',
+    'resume.gone':'That session can no longer be resumed, so we are starting a new one.',
+    'portfolio.skill_count':'Skills: {n}',
+    'portfolio.art_no_skills':'No skills practiced for this Art yet. Start a session to build it.',
+    'portfolio.art_seed_note':'This score also includes your starting point from when you joined.',
+    'portfolio.skills_practiced':'Skills practiced: {n}',
+    'portfolio.skill_level':'Lv {n}',
+    'portfolio.skill_last':'Last practiced {date}',
+    'portfolio.skill_practice':'Practice',
+    'portfolio.skill_builds':'Builds',
+    'portfolio.skills_empty':'Skills you practice will appear here, with the Arts they help grow.',
+    'portfolio.skills_load_failed':'Could not load your skills right now. Please try again later.',
+    'portfolio.journey_log':'Journey log',
     'portfolio.tab_story':'Story',
     'portfolio.tab_skills':'Skills',
     'portfolio.story_blurb':'What the platform has learned about you through your sessions and companion conversations. It grows quietly in the background each time you complete a session or talk with the companion.',
@@ -1328,7 +1406,7 @@ function Nav() {
   const tabs = [
     {id:'dashboard', label:T('nav.agora'),    icon:'✦',  action:"set({view:'dashboard',phase:0,answered:false})"},
     {id:'skills',    label:T('nav.mouseion'), icon:'🗺️', action:"set({view:'skills',phase:0,answered:false})"},
-    {id:'session',   label:T('nav.academy'),  icon:'🎓', action:"(currentSession||S.sessionLoading)?set({view:'session',phase:0,answered:false}):startRecommendedSession()"},
+    {id:'session',   label:T('nav.academy'),  icon:'🎓', action:"(currentSession||S.sessionLoading)?set({view:'session'}):startRecommendedSession()"},
     {id:'portfolio', label:T('nav.portfolio'), icon:'🧭', action:"set({view:'portfolio',phase:0,answered:false})"},
     {id:'reflect',   label:T('nav.stoa'),     icon:'✍️', action:"set({view:'reflect',phase:0,answered:false})"},
     {id:'bioregion',  label:T('nav.bioregion'), icon:'🌍', action:"loadBioregionPage()"},
@@ -2294,7 +2372,7 @@ function phaseBody(p) {
     <div class="card">
       <p style="font-size:13px;color:var(--text2);margin-bottom:8px">${T('common.your_response')}</p>
       <textarea id="ctxt" rows="5"
-        placeholder="${T('session.placeholder_no_single_answer')}" oninput="S.challengeText=this.value"></textarea>
+        placeholder="${T('session.placeholder_no_single_answer')}" oninput="S.challengeText=this.value;scheduleSessionDraftSave()"></textarea>
       ${micButton('ctxt','challengeText')}
     </div>
     <div class="card" style="margin-top:12px;border-left:3px solid var(--wave)">
@@ -2324,7 +2402,7 @@ function phaseBody(p) {
       <p style="font-size:13px;color:var(--text2);margin-bottom:8px">Describe your growing space:</p>
       <textarea id="ctxt" rows="4"
         placeholder="e.g. A windowsill herb garden: basil, mint and chives together because..."
-        oninput="S.challengeText=this.value"></textarea>
+        oninput="S.challengeText=this.value;scheduleSessionDraftSave()"></textarea>
     </div>`;
 
   if(p===3) {
@@ -2343,7 +2421,7 @@ function phaseBody(p) {
     <div class="card">
       <p style="font-size:13px;font-weight:500;margin-bottom:11px">${reflectQ}</p>
       <textarea id="rtxt" rows="4"
-        placeholder="${T('session.placeholder_no_wrong_answer')}" oninput="S.reflectText=this.value"></textarea>
+        placeholder="${T('session.placeholder_no_wrong_answer')}" oninput="S.reflectText=this.value;scheduleSessionDraftSave()"></textarea>
       ${micButton('rtxt','reflectText')}
       <p style="font-size:12px;color:var(--text2);margin-top:8px">${T('session.growth_hint')}</p>
     </div>
@@ -2413,8 +2491,157 @@ var currentSession = null;  // stores generated session data
 var sessionLoading = false;
 var lastSessionArtSlug = null;  // saved for retry, preserves skill context on Groq failure
 
+// ── Session draft (work plan item 3, 2026-11-12) ─────────────────────
+// Browser-local only, nothing is sent to the server: one entry holding the
+// generated session, the step reached, the typed answers, the assess pick and
+// the elapsed time, so a reload or a later visit can offer to continue where the
+// learner left off. It is dropped when the session is finished (once the server
+// confirms), when a new session starts generating, on a deliberate sign-out, when
+// it belongs to another learner, and after 7 days. A repeated /complete cannot
+// double-credit (the server treats it as already completed).
+var SESSION_DRAFT_KEY = 'fl_session_draft';
+var SESSION_DRAFT_MAX_AGE_MS = 7 * 24 * 3600 * 1000;
+var SESSION_DRAFT_MAX_ELAPSED_MS = 3 * 3600 * 1000;   // idle time never inflates the recorded duration
+var _draftTimer = null;
+var _resumeProceed = null;
+
+function clearSessionDraft() {
+  if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }
+  try { localStorage.removeItem(SESSION_DRAFT_KEY); } catch (e) {}
+}
+function clearSessionDraftFor(sessionId) {
+  try {
+    var d = JSON.parse(localStorage.getItem(SESSION_DRAFT_KEY) || 'null');
+    if (d && d.session && String(d.session.session_id) === String(sessionId)) localStorage.removeItem(SESSION_DRAFT_KEY);
+  } catch (e) {}
+}
+function readSessionDraft() {
+  var d = null;
+  try { d = JSON.parse(localStorage.getItem(SESSION_DRAFT_KEY) || 'null'); } catch (e) { d = null; }
+  var L = API.getLearner();
+  var ok = d && d.v === 1 && d.session && d.session.session_id
+        && L && L.id && d.learner_id === L.id
+        && typeof d.saved_at === 'number' && (Date.now() - d.saved_at) <= SESSION_DRAFT_MAX_AGE_MS;
+  if (!ok) { if (d !== null || localStorage.getItem(SESSION_DRAFT_KEY) !== null) clearSessionDraft(); return null; }
+  return d;
+}
+function saveSessionDraft() {
+  _draftTimer = null;
+  if (!currentSession || !currentSession.session_id || !API.isLoggedIn()) return;
+  var L = API.getLearner();
+  if (!L || !L.id) return;
+  var d = {
+    v: 1, learner_id: L.id, saved_at: Date.now(),
+    session: currentSession,
+    phase: S.phase, answered: !!S.answered,
+    challengeText: S.challengeText || '', reflectText: S.reflectText || '',
+    selfScore: (S.selfScore == null) ? null : S.selfScore,
+    assessSelectedIndex: (typeof S.assessSelectedIndex === 'number') ? S.assessSelectedIndex : null,
+    companion: {
+      open: !!S.assessCompanionOpen, messages: S.assessCompanionMessages || [],
+      resolved: !!S.assessCompanionResolved,
+      scoreUpdate: (S.assessCompanionScoreUpdate == null) ? null : S.assessCompanionScoreUpdate,
+      summary: S.assessCompanionSummary || null,
+    },
+    elapsed_ms: Math.min(SESSION_DRAFT_MAX_ELAPSED_MS, S.sessionStartTime ? Math.max(0, Date.now() - S.sessionStartTime) : 0),
+    skillContext: S.skillContext || null, skillDomain: S.skillDomain || null, skillType: S.skillType || null,
+    artSlug: lastSessionArtSlug || null,
+  };
+  try { localStorage.setItem(SESSION_DRAFT_KEY, JSON.stringify(d)); } catch (e) {}   // full or blocked storage: skip quietly
+}
+function scheduleSessionDraftSave() {
+  if (!currentSession || !currentSession.session_id) return;
+  if (_draftTimer) clearTimeout(_draftTimer);
+  _draftTimer = setTimeout(saveSessionDraft, 600);
+}
+function flushSessionDraftSave() { if (_draftTimer) { clearTimeout(_draftTimer); saveSessionDraft(); } }
+document.addEventListener('visibilitychange', function() { if (document.visibilityState === 'hidden') flushSessionDraftSave(); });
+window.addEventListener('pagehide', flushSessionDraftSave);
+window.scheduleSessionDraftSave = scheduleSessionDraftSave;
+
+function restoreSessionDraft(d) {
+  currentSession = d.session;
+  lastSessionArtSlug = d.artSlug || lastSessionArtSlug;
+  voiceLastSpokenPhase = -1;
+  var c = d.companion || {};
+  S.assessSelectedIndex = (typeof d.assessSelectedIndex === 'number') ? d.assessSelectedIndex : null;
+  S.assessCompanionOpen = !!c.open;
+  S.assessCompanionMessages = Array.isArray(c.messages) ? c.messages : [];
+  S.assessCompanionLoading = false;
+  S.assessCompanionResolved = !!c.resolved;
+  S.assessCompanionScoreUpdate = (c.scoreUpdate == null) ? null : c.scoreUpdate;
+  S.assessCompanionSummary = c.summary || null;
+  var elapsed = Math.min(SESSION_DRAFT_MAX_ELAPSED_MS, Math.max(0, Number(d.elapsed_ms) || 0));
+  set({view: 'session', phase: Math.max(0, Math.min(4, parseInt(d.phase, 10) || 0)), answered: !!d.answered,
+       selfScore: (d.selfScore == null) ? null : d.selfScore, sessionLoading: false, sessionError: null,
+       sessionStartTime: Date.now() - elapsed,
+       challengeText: d.challengeText || '', reflectText: d.reflectText || '',
+       skillContext: d.skillContext || null, skillDomain: d.skillDomain || null, skillType: d.skillType || null});
+}
+
+// Offers to continue a saved draft instead of starting what the learner asked for.
+// `proceed` is that start; it runs on "Begin again". Returns true when it took over.
+function offerSessionResume(proceed) {
+  if (currentSession || S.sessionLoading || !API.isLoggedIn()) return false;
+  if (document.getElementById('resume-modal')) return true;   // already asking
+  var d = readSessionDraft();
+  if (!d) return false;
+  _resumeProceed = proceed;
+  var step = Math.max(0, Math.min(4, parseInt(d.phase, 10) || 0)) + 1;
+  var when;
+  try { when = new Date(d.saved_at).toLocaleDateString(S.language || undefined, {day: 'numeric', month: 'short'}); }
+  catch (e) { when = new Date(d.saved_at).toLocaleDateString(); }
+  var m = document.createElement('div');
+  m.id = 'resume-modal';
+  m.setAttribute('role', 'dialog');
+  m.setAttribute('aria-modal', 'true');
+  m.style.cssText = 'position:fixed;inset:0;background:rgba(8,12,20,0.93);z-index:999;display:flex;align-items:center;justify-content:center;padding:20px';
+  m.innerHTML = '<div style="max-width:400px;width:100%;background:var(--card);border:1px solid var(--border);border-radius:var(--r);padding:20px 18px;text-align:center">'
+    + '<h2 style="font-family:var(--font-display);color:var(--wave);margin-bottom:8px;font-size:20px">' + _esc(T('resume.title')) + '</h2>'
+    + '<p style="color:var(--text2);font-size:13px;line-height:1.7;margin-bottom:16px;overflow-wrap:anywhere">'
+    + T('resume.body', {title: _esc(d.session.title || ''), date: _esc(when), step: step}) + '</p>'
+    + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">'
+    + '<button id="resume-begin" class="btn btn-sm btn-ghost" onclick="resumeBeginAgain()">' + _esc(T('resume.begin')) + '</button>'
+    + '<button id="resume-continue" class="btn btn-sm btn-wave" onclick="resumeContinue()">' + _esc(T('resume.continue')) + '</button>'
+    + '</div></div>';
+  document.body.appendChild(m);
+  var cb = document.getElementById('resume-continue');
+  if (cb && cb.focus) cb.focus();
+  return true;
+}
+function _closeResumeModal() { var m = document.getElementById('resume-modal'); if (m) m.remove(); }
+function _runResumeProceed() { var go = _resumeProceed; _resumeProceed = null; if (go) go(); }
+
+window.resumeBeginAgain = function() {
+  _closeResumeModal();
+  clearSessionDraft();
+  _runResumeProceed();
+};
+
+window.resumeContinue = async function() {
+  var d = readSessionDraft();
+  if (!d) { _closeResumeModal(); _runResumeProceed(); return; }   // expired or removed meanwhile
+  ['resume-continue', 'resume-begin'].forEach(function(id) { var b = document.getElementById(id); if (b) b.disabled = true; });
+  // Is the session still open on the server? A finished one must not be resumed.
+  var usable = true;
+  try {
+    var rows = await API.get('/sessions/?limit=20');
+    if (Array.isArray(rows)) {
+      var sid = String(d.session.session_id);
+      var row = rows.find(function(r) { return r && String(r.id) === sid; });
+      usable = !!row && row.status !== 'completed';
+    }
+  } catch (e) { usable = true; }   // server unreachable: keep the learner's words, the server guards the credit
+  if (usable) { _closeResumeModal(); _resumeProceed = null; restoreSessionDraft(d); return; }
+  clearSessionDraft();
+  var box = document.querySelector('#resume-modal > div');
+  if (box) box.innerHTML = '<p style="color:var(--text2);font-size:13px;line-height:1.7;margin:4px 0">' + _esc(T('resume.gone')) + '</p>';
+  setTimeout(function() { _closeResumeModal(); _runResumeProceed(); }, 1600);
+};
+
 async function loadAISession(artSlug) {
   if (sessionLoading) return;
+  clearSessionDraft();   // a new session replaces any saved draft
   sessionLoading = true;
   set({sessionLoading: true});
 
@@ -3393,7 +3620,7 @@ var PORTFOLIO_GROUPS = {
   becoming:   {color:'#6AB0FF',      label:'Becoming'},
   connecting: {color:'var(--gold)',  label:'Connecting'},
 };
-var PORTFOLIO_TAB_ALIAS = {chart:'growth', history:'journey', arts:'skills'};
+var PORTFOLIO_TAB_ALIAS = {chart:'growth', history:'journey', arts:'growth'};   // the Arts live in Growth now
 
 function Portfolio() {
   // ── Loading state ─────────────────────────────
@@ -3410,14 +3637,54 @@ function Portfolio() {
   const tab       = PORTFOLIO_TAB_ALIAS[S.progressTab] || S.progressTab || 'growth';
   const totalMins = S.weekMinutes || 0;
   const artScores = S.artScores || {};
-  // Skills touched, from /sessions/skills-touched; falls back to a client-side estimate
-  const skillsTouched = S.skillsTouched != null
-    ? S.skillsTouched
-    : Object.keys(SKILL_ART_WEIGHTS || {}).filter(function(sk){ return computeSkillScore(sk, artScores) > 0; }).length;
+  // Skills the learner has progress on, from /progress/skills-by-art (null until loaded).
+  // The Art-skill mapping is the one the Art scores are computed from. 'practiced' means
+  // a completed session stamped the skill; the rest are starting points from onboarding.
+  const skillRows = Array.isArray(S.skillProgress) ? S.skillProgress : null;
+  function byRecent(a, b) {
+    return String(b.last_practiced_at || '').localeCompare(String(a.last_practiced_at || ''));
+  }
 
   function when(iso) {
     var d = iso ? new Date(iso) : null;
     return (d && !isNaN(d)) ? d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : '';
+  }
+  // A folded section: a tappable header (title, optional count, chevron) and a body
+  // that is only rendered while open. Titles arrive already escaped.
+  function foldable(id, titleHtml, badge, bodyHtml) {
+    var open = !!(S.openSections && S.openSections[id]);
+    return '<div style="margin-bottom:12px">'
+      + '<div onclick="toggleSection(\'' + id + '\')" onkeydown="sectionKey(event,\'' + id + '\')" role="button" tabindex="0" aria-expanded="' + open + '" '
+      + 'style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:var(--card);border:1px solid var(--border);border-radius:10px;cursor:pointer;user-select:none">'
+      + '<div style="display:flex;align-items:center;gap:8px;min-width:0">'
+      + '<span style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--text2);overflow-wrap:anywhere">' + titleHtml + '</span>'
+      + ((badge === '' || badge == null) ? '' : '<span style="font-size:10px;font-weight:700;color:var(--text3);background:rgba(255,255,255,0.07);padding:2px 8px;border-radius:10px;flex-shrink:0">' + _esc(String(badge)) + '</span>')
+      + '</div><span style="color:var(--text3);font-size:12px;flex-shrink:0">' + (open ? '▲' : '▼') + '</span></div>'
+      + (open ? '<div style="padding-top:10px">' + bodyHtml + '</div>' : '')
+      + '</div>';
+  }
+  function skillsForArt(slug) {
+    var practiced = [], seeded = 0;
+    (skillRows || []).forEach(function(r) {
+      if ((r.arts || []).indexOf(slug) === -1) return;
+      if (r.practiced) practiced.push(r); else seeded++;
+    });
+    practiced.sort(byRecent);
+    return {practiced: practiced, seeded: seeded};
+  }
+  function skillMeta(r) {
+    var parts = [_esc(T('portfolio.skill_level', {n: r.level || 0}))];
+    var d = when(r.last_practiced_at);
+    if (d) parts.push(_esc(T('portfolio.skill_last', {date: d})));
+    return parts.join(' · ');
+  }
+  function practiceBtn(name) {
+    return '<button data-skill="' + _esc(name) + '" onclick="startSkillSession(this.dataset.skill)" '
+      + 'style="flex-shrink:0;font-size:10px;background:rgba(0,229,200,0.1);border:1px solid rgba(0,229,200,0.3);color:var(--wave);border-radius:4px;padding:4px 10px;cursor:pointer">'
+      + _esc(T('portfolio.skill_practice')) + '</button>';
+  }
+  function skillsNote(text) {
+    return '<div style="font-size:12px;color:var(--text3);line-height:1.6;padding:8px 0;overflow-wrap:anywhere">' + _esc(text) + '</div>';
   }
   function statCard(value, color, label) {
     return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 8px;text-align:center;min-width:0">
@@ -3494,26 +3761,51 @@ function Portfolio() {
     var sorted = PORTFOLIO_ARTS.slice().sort(function(a, b) {
       return (artScores[b.slug] || 0) - (artScores[a.slug] || 0);
     });
-    return `<div style="font-size:11px;color:var(--text3);margin:22px 0 10px">${_esc(T('stat.arts'))}</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
+    var inner = `<div style="display:flex;flex-direction:column;gap:6px">
       ${sorted.map(function(art) {
-        var pct = Math.round((artScores[art.slug] || 0) * 100);
-        var gc  = PORTFOLIO_GROUPS[art.group];
-        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:center;gap:10px;padding:10px 14px">
-          <div style="font-size:20px;flex-shrink:0">${art.emoji}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px;font-weight:600;color:var(--text1)">${art.label}</div>
-            <div style="margin-top:5px;background:rgba(255,255,255,0.07);border-radius:4px;height:4px;overflow:hidden">
-              <div style="height:4px;border-radius:4px;background:${gc.color};width:${pct}%"></div>
+        var pct    = Math.round((artScores[art.slug] || 0) * 100);
+        var gc     = PORTFOLIO_GROUPS[art.group];
+        var isOpen = S.progressArt === art.slug;
+        var sk     = skillsForArt(art.slug);
+        var count  = skillRows ? `<div style="font-size:10px;color:var(--text3);margin-top:5px">${_esc(T('portfolio.skill_count', {n: sk.practiced.length}))}</div>` : '';
+        var detail = '';
+        if (isOpen) {
+          if (!skillRows) {
+            detail = skillsNote(T(S.skillProgressFailed ? 'portfolio.skills_load_failed' : 'portfolio.skills_empty'));
+          } else if (!sk.practiced.length) {
+            detail = skillsNote(T('portfolio.art_no_skills'));
+          } else {
+            detail = sk.practiced.map(function(r) {
+              return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+                <div style="min-width:0"><div style="font-size:12px;color:var(--text1);overflow-wrap:anywhere">${_esc(r.name)}</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:2px">${skillMeta(r)}</div></div>
+                ${practiceBtn(r.name)}</div>`;
+            }).join('');
+          }
+          if (skillRows && sk.seeded > 0) detail += skillsNote(T('portfolio.art_seed_note'));
+          detail = `<div style="padding:4px 14px 10px;border-top:1px solid var(--border)">${detail}</div>`;
+        }
+        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
+          <div onclick="toggleProgressArt('${art.slug}')" role="button" aria-expanded="${isOpen}" style="display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;user-select:none">
+            <div style="font-size:20px;flex-shrink:0">${art.emoji}</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:600;color:var(--text1)">${art.label}</div>
+              <div style="margin-top:5px;background:rgba(255,255,255,0.07);border-radius:4px;height:4px;overflow:hidden">
+                <div style="height:4px;border-radius:4px;background:${gc.color};width:${pct}%"></div>
+              </div>
+              ${count}
             </div>
+            <div style="text-align:right;flex-shrink:0">
+              <div style="font-size:13px;font-weight:700;color:${gc.color}">${pct}%</div>
+              <div style="font-size:9px;color:var(--text3);margin-top:2px">${gc.label}</div>
+            </div>
+            <div style="color:var(--text3);font-size:12px;flex-shrink:0">${isOpen ? '▲' : '▼'}</div>
           </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:13px;font-weight:700;color:${gc.color}">${pct}%</div>
-            <div style="font-size:9px;color:var(--text3);margin-top:2px">${gc.label}</div>
-          </div>
+          ${detail}
         </div>`;
       }).join('')}
       </div>`;
+    return '<div style="margin-top:22px">' + foldable('growth_arts', _esc(T('dash.avatar_tab')), '', inner) + '</div>';
   }
   function growthTab() {
     return renderGrowthChart(S.radarSnapshots, activity, T) + artBars();
@@ -3530,11 +3822,37 @@ function Portfolio() {
     }).filter(function(x) { return !isNaN(x.end); })
       .sort(function(a, b) { return b.end - a.end; });
 
+    // Footer: export link and the delete confirmation. Shown once the journey
+    // has loaded (also when it is empty, e.g. right after a delete).
+    function manageHtml() {
+      var step = S.journeyDeleteStep || 0;
+      var note = S.journeyDeleteNote === 'done' ? T('journey.delete_done')
+               : S.journeyDeleteNote === 'failed' ? T('journey.delete_failed') : '';
+      var noteHtml = note ? '<div style="font-size:12px;color:var(--text2);margin-bottom:10px">' + _esc(note) + '</div>' : '';
+      var exportLink = '<a class="btn btn-sm btn-ghost" style="text-decoration:none" href="/api/learners/me/journey/export" download>' + _esc(T('journey.export')) + '</a>';
+      var body;
+      if (step === 0) {
+        body = '<div style="font-size:12px;color:var(--text3);line-height:1.6;margin-bottom:10px;overflow-wrap:anywhere">' + _esc(T('journey.export_hint')) + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">' + exportLink
+          + '<button class="btn btn-sm btn-ghost" onclick="askDeleteJourney()">' + _esc(T('journey.delete')) + '</button></div>';
+      } else {
+        var busy = step === 2 ? 'disabled ' : '';
+        body = '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;background:var(--bg2);text-align:left">'
+          + '<div style="font-size:13px;font-weight:700;color:var(--text1);margin-bottom:6px">' + _esc(T('journey.delete_title')) + '</div>'
+          + '<div style="font-size:12px;color:var(--text2);line-height:1.7;overflow-wrap:anywhere;margin-bottom:12px">' + _esc(T('journey.delete_body')) + '</div>'
+          + '<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center">' + exportLink
+          + '<button class="btn btn-sm" ' + busy + 'onclick="cancelDeleteJourney()">' + _esc(T('common.cancel')) + '</button>'
+          + '<button class="btn btn-sm btn-ghost" style="color:#e5484d;border-color:#e5484d" ' + busy + 'onclick="deleteJourney()">'
+          + _esc(step === 2 ? T('journey.delete_working') : T('journey.delete_confirm')) + '</button></div></div>';
+      }
+      return '<div style="margin-top:28px;padding-top:16px;border-top:1px solid var(--border);text-align:center">' + noteHtml + body + '</div>';
+    }
+
     if (rows === null || (S.journeyLoading && !rows.length)) {
       return `<div style="text-align:center;padding:40px 0;color:var(--text3)"><div class="spinner" style="margin:0 auto"></div></div>`;
     }
     if (!rows.length && !stories.length) {
-      return `<div style="text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;line-height:1.7">${_esc(S.journeyFailed ? T('journey.load_failed') : T('journey.empty'))}</div>`;
+      return `<div style="text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;line-height:1.7">${_esc(S.journeyFailed ? T('journey.load_failed') : T('journey.empty'))}</div>` + (S.journeyFailed ? '' : manageHtml());
     }
     var STAGES = {seed:'🫘 Seed', sprout:'🌱 Sprout', sapling:'🌿 Sapling', grove:'🌳 Grove', forest:'🌲 Forest', ecosystem:'🌍 Ecosystem'};
     var MS_ICON = {first_in_art:'✦', level_up:'▲', stage_change:'🌱', all_families:'◎'};
@@ -3593,63 +3911,47 @@ function Portfolio() {
     var failed = S.journeyFailed
       ? '<div style="text-align:center;padding:8px 0;font-size:12px;color:var(--text3)">' + _esc(T('journey.load_failed')) + '</div>'
       : '';
-    return '<div style="position:relative;margin-left:30px;border-left:2px solid var(--border)"><div style="padding-left:14px">' + out.join('') + '</div></div>' + more + failed;
+    var logBody = '<div style="position:relative;margin-left:30px;border-left:2px solid var(--border)"><div style="padding-left:14px">' + out.join('') + '</div></div>' + more + failed;
+    return foldable('journey_log', _esc(T('portfolio.journey_log')), out.length + (S.journeyMore ? '+' : ''), logBody) + (S.journeyFailed ? '' : manageHtml());
   }
 
   // 4. SKILLS: Arts grouped with their skills (click an Art to expand), then
   // org-verified skills. Per-Art percentages are on the Growth tab, not here.
   function skillsTab() {
-    var artSkillMap = {};
-    Object.keys(SKILL_ART_WEIGHTS).forEach(function(skill) {
-      var weights = SKILL_ART_WEIGHTS[skill];
-      Object.keys(weights).forEach(function(slug) {
-        if (!artSkillMap[slug]) artSkillMap[slug] = [];
-        artSkillMap[slug].push({skill: skill, weight: weights[slug]});
-      });
-    });
-    Object.keys(artSkillMap).forEach(function(slug) {
-      artSkillMap[slug].sort(function(a, b) { return b.weight - a.weight; });
-    });
-
-    var artList = `<div style="font-size:11px;color:var(--text3);margin-bottom:10px">${skillsTouched} ${_esc(T('stat.skills_touched'))}</div>
-      <div style="display:flex;flex-direction:column;gap:6px">
-      ${PORTFOLIO_ARTS.map(function(art) {
-        var score  = artScores[art.slug] || 0;
-        var isOpen = S.progressArt === art.slug;
-        var gc     = PORTFOLIO_GROUPS[art.group];
-        var skills = artSkillMap[art.slug] || [];
-        var skillRows = isOpen ? skills.slice(0,8).map(function(sk) {
-          // Rough skill score, art score * weight, mapped to 0–4 levels
-          var rawLevel = score * sk.weight * 20; // scale to 0–4 range
-          var lv = Math.min(4, Math.floor(rawLevel));
-          var lvColors = ['var(--text3)','#5B8DD9','#6DB97A','var(--gold)','var(--wave)'];
-          var lvLabels = ['Untouched','Lv 1','Lv 2','Lv 3','Lv 4'];
-          return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
-            <div style="font-size:12px;color:var(--text2)">${sk.skill}</div>
-            <div style="display:flex;align-items:center;gap:6px">
-              <div style="font-size:10px;font-weight:600;color:${lvColors[lv]};background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px">${lvLabels[lv]}</div>
-              <button onclick="startSkillSession('${sk.skill.replace(/'/g,"\\'")}')" style="font-size:10px;background:rgba(0,229,200,0.1);border:1px solid rgba(0,229,200,0.3);color:var(--wave);border-radius:4px;padding:2px 7px;cursor:pointer">Practice →</button>
-            </div>
+    var list;
+    if (!skillRows) {
+      list = `<div style="text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;line-height:1.7">${S.skillProgressFailed ? _esc(T('portfolio.skills_load_failed')) : '<div class="spinner" style="margin:0 auto"></div>'}</div>`;
+    } else {
+      var practiced = skillRows.filter(function(r) { return r.practiced; }).sort(byRecent);
+      if (!practiced.length) {
+        list = `<div style="text-align:center;padding:40px 12px;color:var(--text3);font-size:13px;line-height:1.7">${_esc(T('portfolio.skills_empty'))}</div>`;
+      } else {
+        var listHtml = `<div style="display:flex;flex-direction:column;gap:6px">
+          ${practiced.map(function(r) {
+            var chips = (r.arts || []).map(function(slug) {
+              var a = PORTFOLIO_ARTS.filter(function(x) { return x.slug === slug; })[0];
+              return a ? `<span style="font-size:10px;color:var(--text2);background:rgba(255,255,255,0.06);padding:2px 7px;border-radius:10px">${a.emoji} ${a.label}</span>` : '';
+            }).join('');
+            return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 14px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+              <div style="min-width:0;flex:1">
+                <div style="font-size:13px;font-weight:600;color:var(--text1);overflow-wrap:anywhere">${_esc(r.name)}</div>
+                <div style="font-size:10px;color:var(--text3);margin-top:2px">${skillMeta(r)}</div>
+                ${chips ? `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:4px;margin-top:6px"><span style="font-size:10px;color:var(--text3)">${_esc(T('portfolio.skill_builds'))}</span>${chips}</div>` : ''}
+              </div>
+              ${practiceBtn(r.name)}
+            </div>`;
+          }).join('')}
           </div>`;
-        }).join('') : '';
-        return `<div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden">
-          <div onclick="toggleProgressArt('${art.slug}')" style="display:flex;align-items:center;gap:10px;padding:11px 14px;cursor:pointer;user-select:none">
-            <div style="font-size:20px;flex-shrink:0">${art.emoji}</div>
-            <div style="flex:1;font-size:13px;font-weight:600;color:var(--text1)">${art.label}</div>
-            <div style="font-size:9px;color:${gc.color}">${gc.label}</div>
-            <div style="color:var(--text3);font-size:12px;margin-left:4px">${isOpen ? '▲' : '▼'}</div>
-          </div>
-          ${isOpen ? `<div style="padding:4px 14px 12px;border-top:1px solid var(--border)">${skillRows}</div>` : ''}
-        </div>`;
-      }).join('')}
-    </div>`;
+        list = foldable('skills_practiced', _esc(T('portfolio.skills_practiced', {n: practiced.length})), '', listHtml);
+      }
+    }
 
     var verified = '';
     if (S.verifiedSkills && S.verifiedSkills.length) {
       // P8: read-only credentials an org rep confirmed while working with this
-      // learner on a Need. Kept apart from the self-paced Arts above: these are
+      // learner on a Need. Kept apart from the self-paced skills above: these are
       // org-vouched, not platform-computed.
-      verified = '<div style="margin-top:24px">' + sectionCard('✅ ' + _esc(T('portfolio.verified_skills')),
+      verified = '<div style="margin-top:12px">' + foldable('skills_verified', '✅ ' + _esc(T('portfolio.verified_skills')), S.verifiedSkills.length,
         S.verifiedSkills.map(function(v) {
           var lvlColor = v.level === 'master' ? 'var(--wave)' : v.level === 'proficient' ? '#6AB0FF' : 'var(--text3)';
           return '<div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">'
@@ -3659,7 +3961,7 @@ function Portfolio() {
             + '</div>';
         }).join('')) + '</div>';
     }
-    return artList + verified;
+    return list + verified;
   }
 
   // ── Render ─────────────────────────────────────
@@ -3773,6 +4075,14 @@ window.goHome = function() { set({view:'dashboard'}); };
 window.initBioregion = initBioregion;
 window.resetBioregion = resetBioregion;
 
+window.toggleSection = function(id) {
+  var o = Object.assign({}, S.openSections);
+  o[id] = !o[id];
+  set({openSections: o});
+};
+window.sectionKey = function(e, id) {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSection(id); }
+};
 window.toggleProgressArt = function(slug) {
   // Toggle: clicking the open art collapses it; clicking another opens it
   set({progressArt: S.progressArt === slug ? null : slug});
@@ -4000,6 +4310,7 @@ function renderAssessCompanionModal() {
 // Direct session start, skips interest pulse, goes straight to the art.
 // Used by Recommended Next Start and individual art row clicks.
 window.startDirectSession = function(artSlug) {
+  if (offerSessionResume(function() { window.startDirectSession(artSlug); })) return;
   currentSession = null;
   var slug = artSlug || (S.nextRec && S.nextRec.art_slug) || 'grow';
   set({view:'session', phase:0, answered:false, selfScore:null, sessionLoading:true,
@@ -4010,6 +4321,7 @@ window.startDirectSession = function(artSlug) {
 // Start a session focused on a specific learning skill, routed through its primary art.
 // The skill name is injected into learner_interests so the AI generates on-target challenges.
 window.startSkillSession = function(skillName, fallbackArt) {
+  if (offerSessionResume(function() { window.startSkillSession(skillName, fallbackArt); })) return;
   // Pick the art with the highest weight for this specific skill from SKILL_ART_WEIGHTS.
   // This ensures e.g. "Data Analysis" routes to 'understand' (0.45), not the domain's
   // blunt primaryArt 'build' which would produce bioconstruction sessions.
@@ -4030,6 +4342,7 @@ window.startSkillSession = function(skillName, fallbackArt) {
 };
 
 window.startRecommendedSession = async function() {
+  if (offerSessionResume(function() { window.startRecommendedSession(); })) return;
   SND.sessionStart();
   showInterestPulse();
 };
@@ -4257,7 +4570,9 @@ window.pickInterest = function(slug) {
 
 window.finishSession = function() {
   SND.sessionComplete();
+  if (_draftTimer) { clearTimeout(_draftTimer); _draftTimer = null; }   // no late save of a finished session
   if (API.isLoggedIn()) {
+    var finishedSessionId = currentSession && currentSession.session_id;
     // Use active session ID if we have one, otherwise start a new one
     var artId = 14; // default: grow
     var skillId = 1;
@@ -4309,6 +4624,8 @@ window.finishSession = function() {
         });
       })
       .then(function(result) {
+        clearSessionDraftFor(finishedSessionId);   // the server has it now; the saved draft is no longer needed
+        loadSkillProgress();   // the Portfolio's skills reflect the session just finished
         // Update radar from API response
         if (result && result.radar) {
           var updates = {};

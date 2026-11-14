@@ -11,6 +11,9 @@
 #     latest version is missing or differs from the stored profile
 # Level-ups cannot be reconstructed and are not written.
 #
+# A learner who deleted their journey (learners.journey_cleared_at is set) is
+# skipped entirely and listed as SKIP, so their deletion stays deleted.
+#
 # Safe to re-run: it only adds what is missing (sessions by session_id,
 # first_in_art by Art, all_families once, stage_change by stage, the profile
 # row only when it differs). Entries carry the DATE of what they describe
@@ -152,8 +155,15 @@ async def main():
         if a.learner:
             q = q.where(Learner.id == a.learner)
         learners = (await db.execute(q)).scalars().all()
+        # A learner who deleted their journey (learners.journey_cleared_at) is skipped
+        # entirely: backfilling would rebuild what they chose to delete.
+        cleared = {i for (i,) in (await db.execute(
+            select(Learner.id).where(Learner.journey_cleared_at.is_not(None)))).all()}
         total = dict(sessions=0, first_in_art=0, all_families=0, stage_change=0, profile_versions=0)
         for lr in learners:
+            if lr.id in cleared:
+                print(f"SKIP  learner {lr.id}: deleted their journey, not backfilled")
+                continue
             counts = dict.fromkeys(total, 0)
             try:
                 async with db.begin_nested():

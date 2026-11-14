@@ -7,7 +7,7 @@ from datetime import datetime, timezone, date
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc, func
+from sqlalchemy import select, desc, func, update, or_
 from db import get_db
 from models import (
     Session, LearnerSkillProgress, LearnerStreak,
@@ -186,6 +186,25 @@ async def start_session(
     return session
 
 
+async def _already_completed(db: AsyncSession, learner: Learner, session: Session) -> dict:
+    """Reply to a repeated /complete: the same shape as a fresh completion, built
+    from the saved state, crediting nothing."""
+    level = (await db.execute(
+        select(LearnerSkillProgress.current_level).where(
+            LearnerSkillProgress.learner_id == learner.id,
+            LearnerSkillProgress.skill_id == session.primary_skill_id,
+        )
+    )).scalar_one_or_none()
+    return {
+        "ok":                   True,
+        "already_completed":    True,
+        "level_up":             level or 0,
+        "counted_toward_growth": has_real_response(session.challenge_response, session.reflect_response),
+        "radar":                await eng.compute_radar(learner.id, db),
+        "next_session":         await eng.recommend_next(learner.id, db),
+    }
+
+
 @router.post("/{session_id}/complete")
 async def complete_session(
     session_id: int,
@@ -202,6 +221,22 @@ async def complete_session(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(404, "Session not found")
+
+    # 2026-11-12: completing a session is idempotent. A repeat of this call (a
+    # double tap, a network retry, a second tab, a resumed draft of a lesson that
+    # already finished) must not credit skill evidence, streak, Art progress, the
+    # radar snapshot or the journey log a second time, nor overwrite the saved
+    # answers. The UPDATE is the claim: only the request that flips the status
+    # proceeds. Its row lock makes a concurrent duplicate wait, then match no row.
+    claim = await db.execute(
+        update(Session)
+        .where(Session.id == session_id,
+               Session.learner_id == learner.id,
+               or_(Session.status.is_(None), Session.status != "completed"))
+        .values(status="completed")
+    )
+    if claim.rowcount == 0:
+        return await _already_completed(db, learner, session)
 
     # Update session
     session.status             = "completed"

@@ -113,6 +113,11 @@ class Learner(Base):
     email_verified:         Mapped[bool]               = mapped_column(Boolean, default=False)
     verification_token:     Mapped[Optional[str]]      = mapped_column(String(255))
     verification_expires:   Mapped[Optional[datetime]] = mapped_column(DateTime)
+    # Set (UTC) when the learner deletes their journey; see
+    # scripts/2026-11-11-journey-cleared-at.sql. deferred=True keeps it out of the
+    # default SELECT, so a database that has not had the migration yet only breaks
+    # the journey code that names the column, not every query that loads a Learner.
+    journey_cleared_at:     Mapped[Optional[datetime]] = mapped_column(DateTime, deferred=True)
 
     preferences:    Mapped[Optional["LearnerPreferences"]]     = relationship(back_populates="learner", uselist=False)
     skill_progress: Mapped[list["LearnerSkillProgress"]]       = relationship(back_populates="learner")

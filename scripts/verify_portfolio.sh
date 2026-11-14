@@ -501,6 +501,34 @@ if [ "$HTTP_CODE" = "200" ]; then
 fi
 call GET "${API_BASE}/api/learners/me/profile-history?limit=5" "$LJAR"
 pass "GET /api/learners/me/profile-history" "$HTTP_CODE" "200"
+# Journey export and delete (2026-11-11, work plan step 2). Only the GET is called here:
+# the DELETE would wipe this learner's real journey, so it is covered by the backend tests.
+call GET "${API_BASE}/api/learners/me/journey/export" "$LJAR"
+pass "GET /api/learners/me/journey/export" "$HTTP_CODE" "200"
+if [ "$HTTP_CODE" = "200" ]; then
+  if echo "$HTTP_BODY" | python3 -c "import json,sys; d=json.load(sys.stdin); assert d['format']=='lmbok-journey-export' and all(isinstance(d[k], list) for k in ('entries','profile_versions','weekly_stories'))" 2>/dev/null; then ok "journey export is the expected JSON (entries, profile_versions, weekly_stories)"; else bad "journey export is not the expected JSON"; fi
+fi
+check_asset "app.js"  "${API_BASE}/app.js"           1 "askDeleteJourney"
+check_asset "en.json" "${API_BASE}/lang/en.json"     1 "journey.delete_title"
+check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "journey.delete_title"
+# Academy resume (2026-11-12, work plan item 3): browser-local draft and the continue/begin-again prompt.
+check_asset "app.js"  "${API_BASE}/app.js"           1 "offerSessionResume"
+check_asset "en.json" "${API_BASE}/lang/en.json"     1 "resume.title"
+check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "resume.title"
+# Portfolio Growth/Skills split (2026-11-13): real per-skill progress with the Arts each skill feeds.
+call GET "${API_BASE}/api/progress/skills-by-art" "$LJAR"
+pass "GET /api/progress/skills-by-art" "$HTTP_CODE" "200"
+if [ "$HTTP_CODE" = "200" ]; then
+  SBA=$(echo "$HTTP_BODY" | python3 -c "import json,sys; d=json.load(sys.stdin); assert isinstance(d, list); need={'skill_id','name','domain','level','evidence','practiced','last_practiced_at','arts'}; assert all(set(x)==need for x in d); print(len(d), sum(1 for x in d if x['practiced']))" 2>/dev/null)
+  if [ -n "$SBA" ]; then ok "skills-by-art is a list with the documented keys (skills with progress: ${SBA% *}, practiced: ${SBA#* })"; else bad "skills-by-art is not the expected JSON list"; fi
+fi
+check_asset "app.js"  "${API_BASE}/app.js"           1 "skills-by-art"
+check_asset "en.json" "${API_BASE}/lang/en.json"     1 "portfolio.skill_count"
+check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "portfolio.skill_count"
+# Folded Portfolio sections (2026-11-14).
+check_asset "app.js"  "${API_BASE}/app.js"           1 "toggleSection"
+check_asset "en.json" "${API_BASE}/lang/en.json"     1 "portfolio.journey_log"
+check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "portfolio.journey_log"
 check_asset "app.js"  "${API_BASE}/app.js"           1 "journey.first_in_art"
 check_asset "en.json" "${API_BASE}/lang/en.json"     1 "portfolio.tab_journey"
 check_asset "fr.json" "${API_BASE}/lang/fr.json"     1 "portfolio.tab_journey"

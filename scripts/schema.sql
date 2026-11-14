@@ -150,6 +150,7 @@ CREATE TABLE learners (
     is_active       BOOLEAN DEFAULT TRUE,
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
     last_seen_at    DATETIME,
+    journey_cleared_at DATETIME DEFAULT NULL,
     FOREIGN KEY (phase_id) REFERENCES dev_phases(id),
     INDEX idx_email (email)
 ) ENGINE=InnoDB;
