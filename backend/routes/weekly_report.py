@@ -12,9 +12,11 @@ By hand, from the repo root (loads backend/.env itself):
     --dry-run       print the story input and paragraph; write and send nothing
 With neither flag it runs for every active learner and sends real emails.
 
-The weekly story paragraph is built from the learner's journey log
-(journey_entries) when the week has at least JOURNEY_MIN_ENTRIES counted
-session entries with an excerpt; otherwise from the raw session answers.
+The weekly story paragraph is written from the learner's journey log
+(journey_entries): the week's counted sessions that carry an excerpt, plus
+milestones. No excerpt, no story, and the raw session answers are never read.
+When the ai_include_learner_portfolio setting is off, no story is written for
+anyone and the stats email still goes out.
 
 Environment (from backend/.env or system env):
     DATABASE_URL, or DB_USER / DB_PASSWORD / DB_HOST / DB_PORT / DB_NAME
@@ -52,10 +54,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.getLogger("weekly_report")
 
 WINDOW_DAYS = 7
-# A week's story is built from journey entries only when it has at least this
-# many counted session entries that carry an excerpt; thinner weeks fall back to
-# the raw session answers.
-JOURNEY_MIN_ENTRIES = 2
 FROM = os.getenv("FREQLEARN_MAIL_FROM", "epangea.info@gmail.com")
 REPLY_TO = os.getenv("FREQLEARN_MAIL_REPLY_TO", "epangea.info@gmail.com")
 
@@ -114,41 +112,6 @@ def _load_db_url() -> str:
     raise RuntimeError("DATABASE_URL not set, weekly report cannot run")
 
 
-def _raw_story_prompt(name: str, story_rows) -> str | None:
-    """Prompt that distils this week's raw session challenge/reflect answers
-    (and any resolved companion verdicts) into a short "this week's growth"
-    paragraph for the email. Used for weeks too thin for the journey log (see
-    JOURNEY_MIN_ENTRIES). The paragraph is deliberately NOT persisted to
-    learners.learner_profile, that's My Story's own accumulated distillation
-    (see generate.py::update_learner_profile). Returns None when there is
-    nothing to say.
-    """
-    if not story_rows:
-        return None
-
-    lines = []
-    for r in story_rows:
-        if r["title"]:
-            lines.append(f"SESSION: {r['title']}")
-        if r["challenge_prompt"] and r["challenge_response"]:
-            lines.append(f"CHALLENGE Q: {r['challenge_prompt']}\nCHALLENGE A: {r['challenge_response']}")
-        if r["reflect_prompt"] and r["reflect_response"]:
-            lines.append(f"REFLECT Q: {r['reflect_prompt']}\nREFLECT A: {r['reflect_response']}")
-        verdict = r["assess_companion_verdict"]
-        if verdict and isinstance(verdict, dict) and verdict.get("summary"):
-            lines.append(f"COMPANION DISCUSSION: {verdict['summary']}")
-    transcript = "\n\n".join(lines).strip()
-    if not transcript:
-        return None
-
-    return f"""You write a short, warm "this week's growth" paragraph for {name}'s weekly learning-progress email, based on what they actually explored, wrote, and discussed this week on the Surfing the Frequencies platform.
-
-THIS WEEK'S SESSION CONTENT:
-{transcript}
-
-Write 2–4 sentences, second person ("you"), grounded in the specific substance above, not generic encouragement, and not a restatement of session titles or stats (those are shown elsewhere in the email). No preamble, no heading, just the paragraph itself."""
-
-
 def _as_dict(value) -> dict:
     """journey_entries.payload comes back as JSON text from a raw query."""
     if isinstance(value, (str, bytes)):
@@ -194,7 +157,7 @@ def _journey_story_prompt(name: str, entries) -> tuple[str | None, int]:
 THIS WEEK'S JOURNEY LOG. Each session shows its title, its Art, and the start of what {name} wrote in their own words (cut off at about 160 characters). Lines marked MILESTONE are moments worth noting.
 {transcript}
 
-Write 2–4 sentences, second person ("you"), grounded in the specific substance above, not generic encouragement, and not a restatement of session titles or stats (those are shown elsewhere in the email).
+Write 1–4 sentences, second person ("you"), grounded in the specific substance above, not generic encouragement, and not a restatement of session titles or stats (those are shown elsewhere in the email).
 - Mention a milestone in plain words, never with numbers, counts, points or levels.
 - Never say or imply that skills are how an Art grows, and never call an Art a skill.
 - Say only what the words above support. Do not infer feelings, confidence, intentions or habits the learner did not express, and do not predict what they will do next. If the excerpts say little, write fewer sentences rather than filling space.
@@ -224,10 +187,32 @@ async def _run_story_prompt(session_local, name: str, prompt: str | None) -> str
         return None
 
 
+async def _portfolio_ai_allowed(session_local) -> bool:
+    """Whether learner text may go to the AI provider for weekly stories: the
+    same ai_include_learner_portfolio setting that gates the portfolio block in
+    session generation, parsed the same way (a missing or empty row means the
+    default, which is on). Unlike ai_client.get_ai_settings, a failed read means
+    off, so a kill switch that cannot be read never lets learner text through."""
+    key = "ai_include_learner_portfolio"
+    try:
+        async with session_local() as db:
+            row = (await db.execute(
+                text("SELECT value FROM platform_settings WHERE key_name = :k"), {"k": key}
+            )).first()
+    except Exception as exc:
+        log.warning("Could not read %s, weekly stories skipped: %s", key, exc)
+        return False
+    value = str(row[0]).strip() if row and row[0] is not None else ""
+    return ai_client.bool_setting({key: value} if value else {}, key)
+
+
 async def main(only_learner_id: int | None = None, dry_run: bool = False) -> None:
     db_url = _load_db_url()
     engine = create_async_engine(db_url, pool_size=5)
     SessionLocal = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    story_ai_allowed = await _portfolio_ai_allowed(SessionLocal)
+    if not story_ai_allowed:
+        log.info("ai_include_learner_portfolio is off: no weekly stories will be written")
     # Shared by every row written in this run, so a re-run of the same
     # week upserts instead of duplicating (see UNIQUE(learner_id, week_start)
     # on weekly_stories).
@@ -280,57 +265,37 @@ async def main(only_learner_id: int | None = None, dry_run: bool = False) -> Non
             top_arts = ", ".join(r["slug"] for r in art_rows) or "-"
             name = row["display_name"] or row["username"]
 
-            # The journey log is the first source: a week with enough counted
-            # session entries is written from their excerpts and milestones, so
-            # the raw answers are not read at all. A learner who deleted their
-            # journey has no rows from before the delete, and the cleared
-            # filter keeps anything older out regardless.
-            entries = (await conn.execute(text("""
-                SELECT je.kind, je.milestone, je.title, je.excerpt, je.payload,
-                       a.name AS art_name
-                FROM journey_entries je
-                LEFT JOIN arts a ON a.id = je.art_id
-                WHERE je.learner_id = :lid
-                  AND je.created_at >= NOW() - INTERVAL :days DAY
-                  AND (:cleared IS NULL OR je.created_at > :cleared)
-                ORDER BY je.created_at ASC, je.id ASC
-            """), {"lid": lid, "days": WINDOW_DAYS,
-                    "cleared": row["journey_cleared_at"]})).mappings().all()
-            prompt, n_journey = _journey_story_prompt(name, entries)
-            source = "journey"
-
-            if n_journey < JOURNEY_MIN_ENTRIES:
-                # Too thin for the journey log: fall back to the raw answers.
-                # A learner who deleted their journey (journey_cleared_at) must
-                # not get a story written from sessions they finished before the
-                # delete, so this query only reads sessions completed after it.
-                story_rows = (await conn.execute(text("""
-                    SELECT s.title, s.challenge_prompt, s.challenge_response,
-                           s.reflect_prompt, s.reflect_response, s.assess_companion_verdict
-                    FROM sessions s
-                    WHERE s.learner_id = :lid
-                      AND s.status = 'completed'
-                      AND s.created_at >= NOW() - INTERVAL :days DAY
-                      AND (:cleared IS NULL OR s.completed_at > :cleared)
-                      AND (
-                            (s.challenge_response IS NOT NULL AND s.challenge_response != '')
-                         OR (s.reflect_response   IS NOT NULL AND s.reflect_response   != '')
-                         OR s.assess_companion_verdict IS NOT NULL
-                      )
-                    ORDER BY s.created_at ASC
+            # The weekly story is written only from the journey log: the week's
+            # counted sessions that carry an excerpt (the first 160 characters of
+            # what the learner wrote) plus milestones. No excerpt, no story; the
+            # raw answers are never read or sent. A learner who deleted their
+            # journey has no rows from before the delete, and the cleared filter
+            # keeps anything older out regardless.
+            prompt, n_journey = None, 0
+            if story_ai_allowed:
+                entries = (await conn.execute(text("""
+                    SELECT je.kind, je.milestone, je.title, je.excerpt, je.payload,
+                           a.name AS art_name
+                    FROM journey_entries je
+                    LEFT JOIN arts a ON a.id = je.art_id
+                    WHERE je.learner_id = :lid
+                      AND je.created_at >= NOW() - INTERVAL :days DAY
+                      AND (:cleared IS NULL OR je.created_at > :cleared)
+                    ORDER BY je.created_at ASC, je.id ASC
                 """), {"lid": lid, "days": WINDOW_DAYS,
                         "cleared": row["journey_cleared_at"]})).mappings().all()
-                prompt = _raw_story_prompt(name, story_rows)
-                source = "raw"
-
+                prompt, n_journey = _journey_story_prompt(name, entries)
             story_paragraph = await _run_story_prompt(SessionLocal, name, prompt)
-            log.info("Weekly story for learner %s: source=%s, journey sessions=%d, written=%s",
-                     lid, source if prompt else "none", n_journey, bool(story_paragraph))
+            source = "journey" if prompt else ("off" if not story_ai_allowed else "none")
+            log.info("Weekly story for learner %s: source=%s, journey sessions=%d, paragraph=%s",
+                     lid, source, n_journey, bool(story_paragraph))
 
             if dry_run:
-                print(f"\n===== learner {lid} ({name}) | source: {source if prompt else 'none'} "
+                print(f"\n===== learner {lid} ({name}) | source: {source} "
                       f"| journey sessions: {n_journey} =====")
-                print("--- PROMPT ---\n" + (prompt or "(none: nothing to write from)"))
+                print("--- PROMPT ---\n" + (prompt or (
+                    "(none: ai_include_learner_portfolio is off)" if not story_ai_allowed
+                    else "(none: nothing to write from)")))
                 print("--- PARAGRAPH ---\n" + (story_paragraph or "(none)"))
                 continue
 
